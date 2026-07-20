@@ -100,7 +100,7 @@ The PIN itself is not placed in `.env.local`; enter it on the portal screen.
 
 The PIN protects access through Firebase, but it is still a shared credential. Change it after trials, when a coach leaves, or if it is shared outside the intended group.
 
-## v0.2 interface update
+## v0.3 interface update
 
 This version separates the application into reusable pages and components:
 
@@ -112,3 +112,8 @@ This version separates the application into reusable pages and components:
 - Persistent sidebar navigation
 
 Firebase authentication and Realtime Database syncing remain unchanged.
+
+
+## CSV import (v0.3)
+
+Open **Players** and choose **Import players**. Upload a CSV from Google Forms or Sheets, confirm the automatic column matching, review duplicates/invalid rows, then import. Existing players are matched by email and skipped. Imported records sync to Firebase immediately.
