@@ -1,8 +1,8 @@
-# F6 Trials Manager v0.6
+# F6 Trials Manager v0.7
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.6 adds a live-synced Email Centre for reviewing, copying and tracking offers, alternative offers, waiting-list messages and rejections. It deliberately does not send email automatically: coaches retain the final review step in their normal email app.
+Version 0.7 makes the Players list easier to search during trials and adds optional individual coach accounts. The existing shared PIN, v0.6 Email Centre, live Firebase data, CSV import, assessments and team planner are preserved.
 
 ## How the PIN works
 
@@ -14,6 +14,17 @@ The portal uses one Firebase Email/Password user behind the scenes:
 - Firebase Authentication protects access to the shared database.
 
 Choose a PIN with at least 6 digits. Avoid obvious values such as `123456`, the club's founding year, or the venue postcode.
+
+## Individual coach accounts
+
+The sign-in screen now offers **Club PIN** and **Coach login**. Individual coach accounts use Firebase's existing Email/Password authentication:
+
+1. Open **Firebase → Authentication → Users**.
+2. Choose **Add user**.
+3. Enter the coach's email address and a strong temporary password.
+4. Send those details privately to the coach.
+
+No extra GitHub secrets or database-rule changes are required. Individual accounts identify the coach's email in player updates and communication history. All authenticated accounts currently have the same access; v0.7 does not add administrator or team-specific roles.
 
 ## 1. Create the Firebase login
 
@@ -151,6 +162,19 @@ Shared coach defaults and team training details are configured under **Settings*
 
 Older Firebase players receive safe email-draft, review-status and history defaults when loaded; no manual migration is required.
 
+## v0.7 player filters
+
+Open **Players** and select the filter icon to filter by:
+
+- one or several playing positions;
+- attended or not attended;
+- assessed or not assessed;
+- coach recommendation;
+- final decision;
+- minimum average rating.
+
+Filters combine with the existing name/bib search and team selector. The filter button shows the number of active filters, and **Clear all filters** restores the complete player list.
+
 
 ## CSV import (v0.3)
 
@@ -164,4 +188,4 @@ npm run lint
 npm run build
 ```
 
-See `RELEASE_NOTES_v0.6.md` for replacement and testing steps.
+See `RELEASE_NOTES_v0.7.md` for replacement and testing steps.
