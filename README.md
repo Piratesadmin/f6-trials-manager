@@ -1,8 +1,8 @@
-# F6 Trials Manager v0.8
+# F6 Trials Manager v0.9
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.8 introduces the official Flaming Six crest and a complete club-branded visual system. The existing shared PIN, individual coach accounts, player filters, Email Centre, Firebase data, CSV import, assessments and team planner are preserved.
+Version 0.9 introduces a 17-player minimum squad target and team-specific Team Planner permissions. Every authenticated coach can still see and edit all player profiles, assessments, notes, decisions and emails. Only an assigned coach or administrator can change a team's planner, targets or planned squad.
 
 ## How the PIN works
 
@@ -24,7 +24,7 @@ The sign-in screen now offers **Club PIN** and **Coach login**. Individual coach
 3. Enter the coach's email address and a strong temporary password.
 4. Send those details privately to the coach.
 
-No extra GitHub secrets or database-rule changes are required. Individual accounts identify the coach's email in player updates and communication history. All authenticated accounts currently have the same access; v0.7 does not add administrator or team-specific roles.
+No extra GitHub secrets are required. Individual accounts identify the coach's email in player updates and communication history. After a coach signs in once, use **Settings → Team permissions** while signed in with the shared PIN administrator account to assign one or more teams.
 
 ## 1. Create the Firebase login
 
@@ -42,16 +42,11 @@ Firebase passwords must be at least 6 characters, so use a PIN of 6–12 digits.
 2. Click **Create database**.
 3. Choose a nearby European location where available.
 4. Start in **Locked mode**.
-5. Open the **Rules** tab and publish:
+5. Open the **Rules** tab and publish the complete contents of `firebase-database-rules.json`.
 
-```json
-{
-  "rules": {
-    ".read": "auth != null",
-    ".write": "auth != null"
-  }
-}
-```
+The supplied rules allow every authenticated account to work with players and communications while restricting each team plan to that team's assigned coaches. They also enforce a minimum positional-target total of 17.
+
+The rules use `trials@flamingsix.co.uk` as the shared administrator email. If your `VITE_FIREBASE_LOGIN_EMAIL` is different, replace that email in `firebase-database-rules.json` before publishing it.
 
 ## 3. Register the web app
 
@@ -188,6 +183,18 @@ Filters combine with the existing name/bib search and team selector. The filter 
 
 The supplied logo is stored locally as `public/flaming-six-logo.png`; the application does not depend on an external image URL.
 
+## v0.9 squad sizes and coach access
+
+- Every team starts with positional targets totalling at least 17 players.
+- Older saved team plans below 17 are upgraded automatically when an administrator opens the app.
+- Targets cannot be reduced below a total squad size of 17.
+- The shared PIN account is the default administrator and can edit every team.
+- Individual coaches can see every Team Planner but can only change assigned teams.
+- All authenticated coaches retain full access to player profiles, assessments, notes, decisions and email workflow.
+- Coaches create their access profile automatically on first sign-in.
+- Administrators assign teams under **Settings → Team permissions**.
+- Firebase rules enforce Team Planner permissions on the database, not only in the interface.
+
 
 ## CSV import (v0.3)
 
@@ -201,4 +208,4 @@ npm run lint
 npm run build
 ```
 
-See `RELEASE_NOTES_v0.8.md` for replacement and testing steps.
+See `RELEASE_NOTES_v0.9.md` for replacement, Firebase and testing steps.

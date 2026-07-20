@@ -7,7 +7,13 @@ export const defaultPositionTargets: PositionTargets = {
   Middle: 4,
   Opposite: 2,
   Libero: 2,
-  'All-rounder': 0,
+  'All-rounder': 2,
+}
+
+export const minimumSquadSize = 17
+
+export function teamTargetTotal(targets: PositionTargets | undefined) {
+  return positions.reduce((total, position) => total + (targets?.[position] || 0), 0)
 }
 
 export function createDefaultTeamPlans(): TeamPlans {
@@ -21,9 +27,20 @@ export function normaliseTeamPlans(value: unknown): TeamPlans {
     const targets = Object.fromEntries(positions.map(position => {
       const number = Number(plan[position])
       return [position, Number.isFinite(number) ? Math.max(0, Math.min(99, Math.round(number))) : defaultPositionTargets[position] || 0]
-    }))
+    })) as PositionTargets
+    const deficit = Math.max(0, minimumSquadSize - teamTargetTotal(targets))
+    if (deficit) targets['All-rounder'] += deficit
     return [team, targets]
   }))
+}
+
+export function minimumTargetForPosition(targets: PositionTargets, position: string) {
+  const otherTargets = positions.reduce((total, item) => item === position ? total : total + (targets[item] || 0), 0)
+  return Math.max(0, minimumSquadSize - otherTargets)
+}
+
+export function teamPlansNeedMinimumUpgrade(value: TeamPlans) {
+  return teams.some(team => !value[team] || teamTargetTotal(value[team]) < minimumSquadSize)
 }
 
 export function offeredTeam(player: Player) {

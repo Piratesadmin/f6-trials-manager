@@ -1,6 +1,22 @@
 {
   "rules": {
     ".read": "auth != null",
-    ".write": "auth != null"
+    ".write": false,
+    "players": { ".write": "auth != null" },
+    "emailSettings": { ".write": "auth != null" },
+    "teamPlans": {
+      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$team": {
+        ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('coachProfiles').child(auth.uid).child('teams').child($team).val() == true)",
+        ".validate": "newData.hasChildren(['Setter','Outside','Middle','Opposite','Libero','All-rounder']) && newData.child('Setter').isNumber() && newData.child('Outside').isNumber() && newData.child('Middle').isNumber() && newData.child('Opposite').isNumber() && newData.child('Libero').isNumber() && newData.child('All-rounder').isNumber() && newData.child('Setter').val() + newData.child('Outside').val() + newData.child('Middle').val() + newData.child('Opposite').val() + newData.child('Libero').val() + newData.child('All-rounder').val() >= 17"
+      }
+    },
+    "coachProfiles": {
+      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$uid": {
+        ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || (auth.uid == $uid && !data.exists() && newData.child('role').val() == 'coach' && !newData.child('teams').exists()))",
+        ".validate": "newData.hasChildren(['uid','email','displayName','role']) && newData.child('uid').val() == $uid && (newData.child('role').val() == 'coach' || newData.child('role').val() == 'admin')"
+      }
+    }
   }
 }

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, Check, CheckCircle2, ClipboardList, MailPlus, Minus, Plus, Star, UserPlus, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, ClipboardList, Lock, MailPlus, Minus, Plus, Star, UserPlus, Users, X } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { positions, teams } from '../data/constants'
 import type { Player, TeamPlans } from '../types'
 import { averageRating } from '../utils/player'
-import { assignmentForTeam, isPlannedForTeam, offeredTeam, recommendationMatchesTeam } from '../utils/teamPlanner'
+import { assignmentForTeam, isPlannedForTeam, minimumSquadSize, minimumTargetForPosition, offeredTeam, recommendationMatchesTeam } from '../utils/teamPlanner'
 
 type Props = {
   players: Player[]
@@ -12,6 +12,8 @@ type Props = {
   savePlayer: (player: Player) => void
   saveTarget: (team: string, position: string, target: number) => void
   onOpenPlayer: (id: string) => void
+  canEditTeam: (team: string) => boolean
+  editableTeams: string[]
 }
 
 type CandidateGroup = {
@@ -21,12 +23,13 @@ type CandidateGroup = {
   tone: string
 }
 
-export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPlayer }: Props) {
+export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPlayer, canEditTeam, editableTeams }: Props) {
   const [selectedTeam, setSelectedTeam] = useState(teams[0])
   const targets = teamPlans[selectedTeam]
   const planned = useMemo(() => players.filter(player => isPlannedForTeam(player, selectedTeam)), [players, selectedTeam])
   const targetTotal = positions.reduce((total, position) => total + (targets?.[position] || 0), 0)
   const offered = planned.filter(player => offeredTeam(player) === selectedTeam)
+  const editable = canEditTeam(selectedTeam)
 
   const positionRows = positions.map(position => {
     const target = targets?.[position] || 0
@@ -49,19 +52,21 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
     { title: 'Other applicants', description: 'Unplanned applicants who selected this team.', players: take(player => player.appliedTeam === selectedTeam), tone: 'applicants' },
   ].filter(group => group.players.length)
 
-  const addToPlan = (player: Player) => savePlayer({ ...player, teamConsideration: { ...player.teamConsideration, [selectedTeam]: player.position } })
+  const addToPlan = (player: Player) => editable && savePlayer({ ...player, teamConsideration: { ...player.teamConsideration, [selectedTeam]: player.position } })
   const removeFromPlan = (player: Player) => {
+    if(!editable)return
     const teamConsideration = { ...player.teamConsideration }
     delete teamConsideration[selectedTeam]
     savePlayer({ ...player, teamConsideration })
   }
   const changePosition = (player: Player, position: string) => {
+    if(!editable)return
     const update: Player = { ...player, teamConsideration: { ...player.teamConsideration, [selectedTeam]: position } }
     if (offeredTeam(player) === selectedTeam) update.offeredPosition = position
     savePlayer(update)
   }
   const movePlayer = (player: Player, destination: string) => {
-    if (destination === selectedTeam) return
+    if (!editable || !editableTeams.includes(destination) || destination === selectedTeam) return
     const currentPosition = assignmentForTeam(player, selectedTeam) || player.position
     const teamConsideration = { ...player.teamConsideration }
     delete teamConsideration[selectedTeam]
@@ -75,6 +80,7 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
     savePlayer(update)
   }
   const prepareOffer = (player: Player) => {
+    if(!editable)return
     const position = assignmentForTeam(player, selectedTeam) || player.position
     savePlayer({
       ...player,
@@ -94,11 +100,13 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
         const teamTargets = teamPlans[team]
         const teamTarget = positions.reduce((total, position) => total + (teamTargets?.[position] || 0), 0)
         const teamPlanned = players.filter(player => isPlannedForTeam(player, team)).length
-        return <button key={team} className={selectedTeam === team ? 'active' : ''} onClick={() => setSelectedTeam(team)}>
-          <span>{team}</span><b>{teamPlanned}/{teamTarget}</b><small>{teamPlanned > teamTarget ? `${teamPlanned - teamTarget} over target` : `${Math.max(0, teamTarget - teamPlanned)} spaces`}</small>
+        return <button key={team} className={`${selectedTeam === team ? 'active' : ''} ${canEditTeam(team) ? '' : 'view-only'}`} onClick={() => setSelectedTeam(team)}>
+          <span>{team}{!canEditTeam(team)&&<Lock/>}</span><b>{teamPlanned}/{teamTarget}</b><small>{canEditTeam(team)?(teamPlanned > teamTarget ? `${teamPlanned - teamTarget} over target` : `${Math.max(0, teamTarget - teamPlanned)} spaces`):'View only'}</small>
         </button>
       })}
     </section>
+
+    {!editable&&<div className="team-access-banner"><Lock/><div><b>{selectedTeam} is view only</b><span>You can see this squad and open every player, but only its assigned coach or an administrator can change the plan.</span></div></div>}
 
     <section className="planner-heading-card">
       <div><span className="eyebrow">SELECTED TEAM</span><h2>{selectedTeam}</h2><p>{planned.length} planned · {offered.length} offers prepared · {Math.max(0, targetTotal - planned.length)} spaces remaining</p></div>
@@ -110,13 +118,13 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
     <section className="planner-grid">
       <div className="planner-main">
         <article className="planner-panel position-planner">
-          <div className="planner-panel-head"><div><span className="eyebrow">POSITION BALANCE</span><h3>Squad targets</h3><p>Adjust targets and see shortages before making offers.</p></div><span className="planner-total">{planned.length}/{targetTotal}</span></div>
-          <div className="position-table-wrap"><table className="position-table"><thead><tr><th>Position</th><th>Target</th><th>Recommended</th><th>Planned</th><th>Offered</th><th>Status</th></tr></thead><tbody>{positionRows.map(row => <tr key={row.position}><td><b>{row.position}</b></td><td><div className="target-stepper"><button aria-label={`Decrease ${row.position} target`} onClick={() => saveTarget(selectedTeam,row.position,Math.max(0,row.target-1))}><Minus/></button><input aria-label={`${row.position} target`} type="number" min="0" max="99" value={row.target} onChange={event => saveTarget(selectedTeam,row.position,Math.max(0,Math.min(99,Number(event.target.value)||0)))}/><button aria-label={`Increase ${row.position} target`} onClick={() => saveTarget(selectedTeam,row.position,Math.min(99,row.target+1))}><Plus/></button></div></td><td>{row.recommendedCount}</td><td><strong>{row.plannedCount}</strong></td><td>{row.offeredCount}</td><td><span className={`capacity-status ${row.remaining < 0 ? 'over' : row.remaining === 0 ? 'full' : 'short'}`}>{row.remaining < 0 ? `${Math.abs(row.remaining)} over` : row.remaining === 0 ? 'On target' : `Need ${row.remaining}`}</span></td></tr>)}</tbody></table></div>
+          <div className="planner-panel-head"><div><span className="eyebrow">POSITION BALANCE</span><h3>Squad targets</h3><p>{editable?'Adjust targets and see shortages before making offers.':'Targets are controlled by this team’s assigned coach.'} Club minimum: {minimumSquadSize} players.</p></div><span className="planner-total">{planned.length}/{targetTotal}</span></div>
+          <div className="position-table-wrap"><table className="position-table"><thead><tr><th>Position</th><th>Target</th><th>Recommended</th><th>Planned</th><th>Offered</th><th>Status</th></tr></thead><tbody>{positionRows.map(row => {const minimum=minimumTargetForPosition(targets,row.position);return <tr key={row.position}><td><b>{row.position}</b></td><td><div className="target-stepper"><button disabled={!editable||row.target<=minimum} aria-label={`Decrease ${row.position} target`} onClick={() => saveTarget(selectedTeam,row.position,row.target-1)}><Minus/></button><input disabled={!editable} aria-label={`${row.position} target`} type="number" min={minimum} max="99" value={row.target} onChange={event => saveTarget(selectedTeam,row.position,Number(event.target.value)||0)}/><button disabled={!editable} aria-label={`Increase ${row.position} target`} onClick={() => saveTarget(selectedTeam,row.position,row.target+1)}><Plus/></button></div></td><td>{row.recommendedCount}</td><td><strong>{row.plannedCount}</strong></td><td>{row.offeredCount}</td><td><span className={`capacity-status ${row.remaining < 0 ? 'over' : row.remaining === 0 ? 'full' : 'short'}`}>{row.remaining < 0 ? `${Math.abs(row.remaining)} over` : row.remaining === 0 ? 'On target' : `Need ${row.remaining}`}</span></td></tr>})}</tbody></table></div>
         </article>
 
         <article className="planner-panel">
           <div className="planner-panel-head"><div><span className="eyebrow">PLANNED SQUAD</span><h3>{planned.length} player{planned.length === 1 ? '' : 's'} in the plan</h3><p>Positions and team moves update the balance above immediately.</p></div></div>
-          {planned.length ? <div className="planned-player-list">{planned.sort((a,b)=>(assignmentForTeam(a,selectedTeam)||a.position).localeCompare(assignmentForTeam(b,selectedTeam)||b.position)).map(player => <PlannedPlayerCard key={player.id} player={player} team={selectedTeam} onOpen={onOpenPlayer} onPosition={changePosition} onMove={movePlayer} onPrepareOffer={prepareOffer} onRemove={removeFromPlan}/>)}</div> : <div className="planner-empty"><Users/><h4>No players planned yet</h4><p>Add recommended players or applicants from the sections below.</p></div>}
+          {planned.length ? <div className="planned-player-list">{planned.sort((a,b)=>(assignmentForTeam(a,selectedTeam)||a.position).localeCompare(assignmentForTeam(b,selectedTeam)||b.position)).map(player => <PlannedPlayerCard key={player.id} player={player} team={selectedTeam} editable={editable} moveTeams={editableTeams} onOpen={onOpenPlayer} onPosition={changePosition} onMove={movePlayer} onPrepareOffer={prepareOffer} onRemove={removeFromPlan}/>)}</div> : <div className="planner-empty"><Users/><h4>No players planned yet</h4><p>{editable?'Add recommended players or applicants from the sections below.':'This team does not have any planned players yet.'}</p></div>}
         </article>
       </div>
 
@@ -127,23 +135,23 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
     </section>
 
     <section className="candidate-sections">
-      {groups.length ? groups.map(group => <article className={`candidate-group ${group.tone}`} key={group.title}><div className="candidate-group-head"><div><span className="eyebrow">{group.title.toUpperCase()}</span><h3>{group.players.length} player{group.players.length === 1 ? '' : 's'}</h3><p>{group.description}</p></div></div><div className="candidate-grid">{group.players.map(player => <CandidateCard key={player.id} player={player} onAdd={() => addToPlan(player)} onOpen={() => onOpenPlayer(player.id)}/>)}</div></article>) : <article className="planner-panel planner-empty"><CheckCircle2/><h4>Everyone relevant is already planned</h4><p>No additional candidates currently match {selectedTeam}.</p></article>}
+      {groups.length ? groups.map(group => <article className={`candidate-group ${group.tone}`} key={group.title}><div className="candidate-group-head"><div><span className="eyebrow">{group.title.toUpperCase()}</span><h3>{group.players.length} player{group.players.length === 1 ? '' : 's'}</h3><p>{group.description}</p></div></div><div className="candidate-grid">{group.players.map(player => <CandidateCard key={player.id} player={player} editable={editable} onAdd={() => addToPlan(player)} onOpen={() => onOpenPlayer(player.id)}/>)}</div></article>) : <article className="planner-panel planner-empty"><CheckCircle2/><h4>Everyone relevant is already planned</h4><p>No additional candidates currently match {selectedTeam}.</p></article>}
     </section>
   </>
 }
 
-function PlannedPlayerCard({ player, team, onOpen, onPosition, onMove, onPrepareOffer, onRemove }: { player: Player; team: string; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onRemove:(player:Player)=>void }) {
+function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPosition, onMove, onPrepareOffer, onRemove }: { player: Player; team: string; editable:boolean; moveTeams:string[]; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onRemove:(player:Player)=>void }) {
   const rating = averageRating(player)
   const isOffered = offeredTeam(player) === team
   return <div className="planned-player-card">
     <button className="planner-player-identity" onClick={() => onOpen(player.id)}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</span></div><ArrowRight/></button>
-    <label>Position<select aria-label={`${player.name} planned position`} value={assignmentForTeam(player,team)||player.position} onChange={event => onPosition(player,event.target.value)}>{positions.map(position=><option key={position}>{position}</option>)}</select></label>
-    <label>Team<select aria-label={`Move ${player.name} to team`} value={team} onChange={event => onMove(player,event.target.value)}>{teams.map(item=><option key={item}>{item}</option>)}</select></label>
-    <div className="planned-actions">{isOffered ? <span className="offer-ready-chip"><Check/> {player.decision}</span> : <button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>}{!isOffered && <button className="remove-plan" aria-label={`Remove ${player.name} from plan`} title="Remove from plan" onClick={() => onRemove(player)}><X/></button>}</div>
+    <label>Position<select disabled={!editable} aria-label={`${player.name} planned position`} value={assignmentForTeam(player,team)||player.position} onChange={event => onPosition(player,event.target.value)}>{positions.map(position=><option key={position}>{position}</option>)}</select></label>
+    <label>Team<select disabled={!editable} aria-label={`Move ${player.name} to team`} value={team} onChange={event => onMove(player,event.target.value)}><option>{team}</option>{moveTeams.filter(item=>item!==team).map(item=><option key={item}>{item}</option>)}</select></label>
+    <div className="planned-actions">{isOffered ? <span className="offer-ready-chip"><Check/> {player.decision}</span> : editable?<button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>:<span className="view-only-chip"><Lock/>View only</span>}{!isOffered && editable && <button className="remove-plan" aria-label={`Remove ${player.name} from plan`} title="Remove from plan" onClick={() => onRemove(player)}><X/></button>}</div>
   </div>
 }
 
-function CandidateCard({ player, onAdd, onOpen }: { player: Player; onAdd:()=>void; onOpen:()=>void }) {
+function CandidateCard({ player, editable, onAdd, onOpen }: { player: Player; editable:boolean; onAdd:()=>void; onOpen:()=>void }) {
   const rating = averageRating(player)
-  return <div className="candidate-card"><button className="candidate-profile" onClick={onOpen}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{player.position} · {player.appliedTeam} applicant</span><small>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</small></div></button><button className="add-plan" onClick={onAdd}><UserPlus/>Add to plan</button></div>
+  return <div className="candidate-card"><button className="candidate-profile" onClick={onOpen}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{player.position} · {player.appliedTeam} applicant</span><small>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</small></div></button>{editable?<button className="add-plan" onClick={onAdd}><UserPlus/>Add to plan</button>:<button className="add-plan" onClick={onOpen}><ArrowRight/>Open player</button>}</div>
 }

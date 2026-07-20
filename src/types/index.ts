@@ -96,3 +96,13 @@ export type PlayerTab = 'overview' | 'assessment' | 'decision' | 'email'
 export type SyncState = 'live' | 'saving' | 'offline'
 export type PositionTargets = Record<string, number>
 export type TeamPlans = Record<string, PositionTargets>
+
+export type CoachRole = 'admin' | 'coach'
+
+export type CoachProfile = {
+  uid: string
+  displayName: string
+  email: string
+  role: CoachRole
+  teams: Record<string, boolean>
+}
