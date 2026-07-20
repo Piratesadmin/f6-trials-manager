@@ -1,4 +1,5 @@
 import type { Player } from '../types'
+import { emptyAssessment } from './player'
 
 export type CsvField = 'name' | 'firstName' | 'lastName' | 'email' | 'appliedTeam' | 'position' | 'trialDate'
 export type CsvMapping = Record<CsvField, string>
@@ -86,6 +87,12 @@ export function rowsToPlayers(rows: Record<string, string>[], mapping: CsvMappin
       attended: false,
       decision: 'Awaiting decision',
       notes: '',
+      assessment: emptyAssessment(),
+      recommendation: '',
+      strengths: '',
+      developmentAreas: '',
+      suitableTeams: [],
+      bibNumber: '',
     }
   })
 }

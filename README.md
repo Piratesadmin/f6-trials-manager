@@ -1,6 +1,8 @@
-# F6 Trials Manager — Live PIN Version
+# F6 Trials Manager v0.4
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
+
+Version 0.4 adds tabbed player profiles, shared assessments, automatic ratings, coach recommendations, suitable-team selection, bib numbers and assessment-focused dashboard metrics. Existing Firebase player records remain compatible without a manual migration.
 
 ## How the PIN works
 
@@ -100,20 +102,30 @@ The PIN itself is not placed in `.env.local`; enter it on the portal screen.
 
 The PIN protects access through Firebase, but it is still a shared credential. Change it after trials, when a coach leaves, or if it is shared outside the intended group.
 
-## v0.3 interface update
+## v0.4 player profiles and assessment
 
-This version separates the application into reusable pages and components:
+Open a player to use four focused tabs:
 
-- Dashboard overview and recent activity
-- Players workspace
-- Email centre
-- Team squad overview
-- Settings screen
-- Persistent sidebar navigation
+- **Overview:** player details, bib number, team, position, attendance and general notes.
+- **Assessment:** ten 1–5 skill ratings, automatic average, recommendation, suitable teams, strengths and development areas.
+- **Decision:** offer, alternative offer and rejection options.
+- **Email:** preview, copy and sent tracking.
 
 Firebase authentication and Realtime Database syncing remain unchanged.
+
+Older Firebase records are normalised in the app with empty v0.4 assessment fields, so no database migration is required.
 
 
 ## CSV import (v0.3)
 
 Open **Players** and choose **Import players**. Upload a CSV from Google Forms or Sheets, confirm the automatic column matching, review duplicates/invalid rows, then import. Existing players are matched by email and skipped. Imported records sync to Firebase immediately.
+
+## Build verification
+
+```bash
+npm install
+npm run lint
+npm run build
+```
+
+See `RELEASE_NOTES_v0.4.md` for replacement and testing steps.

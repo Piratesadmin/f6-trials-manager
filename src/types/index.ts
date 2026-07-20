@@ -6,6 +6,29 @@ export type Decision =
   | 'Offer sent'
   | 'Rejection sent'
 
+export type AssessmentKey =
+  | 'serving'
+  | 'passing'
+  | 'setting'
+  | 'attacking'
+  | 'blocking'
+  | 'defence'
+  | 'movement'
+  | 'communication'
+  | 'attitude'
+  | 'overallLevel'
+
+export type Assessment = Record<AssessmentKey, number>
+
+export type Recommendation =
+  | ''
+  | 'Strong offer'
+  | 'Offer'
+  | 'Waiting list'
+  | 'Refer to another team'
+  | 'Needs discussion'
+  | 'Not suitable'
+
 export type Player = {
   id: string
   name: string
@@ -19,9 +42,16 @@ export type Player = {
   offeredPosition?: string
   rejectionReason?: string
   notes: string
+  assessment: Assessment
+  recommendation: Recommendation
+  strengths: string
+  developmentAreas: string
+  suitableTeams: string[]
+  bibNumber: string
   updatedAt?: number
   updatedBy?: string
 }
 
 export type PageKey = 'dashboard' | 'players' | 'emails' | 'teams' | 'settings'
+export type PlayerTab = 'overview' | 'assessment' | 'decision' | 'email'
 export type SyncState = 'live' | 'saving' | 'offline'

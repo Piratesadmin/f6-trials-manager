@@ -1,11 +1,18 @@
-import { Clock3, UserCheck, UserX, Users } from 'lucide-react'
+import { ClipboardCheck, ListChecks, Star, ThumbsUp } from 'lucide-react'
 import type { Player } from '../types'
-export function StatsCards({players}:{players:Player[]}){
-  const stats=[
-    {label:'Total sign-ups',value:players.length,icon:Users},
-    {label:'Awaiting decision',value:players.filter(p=>p.decision==='Awaiting decision').length,icon:Clock3},
-    {label:'Offers',value:players.filter(p=>p.decision.includes('Offer')).length,icon:UserCheck},
-    {label:'Rejections',value:players.filter(p=>p.decision.includes('Rejection')).length,icon:UserX},
+import { averageRating, isAssessed } from '../utils/player'
+
+export function StatsCards({ players }: { players: Player[] }) {
+  const assessed = players.filter(isAssessed)
+  const clubAverage = assessed.length ? assessed.reduce((total, player) => total + averageRating(player), 0) / assessed.length : 0
+  const offersReady = players.filter(player => player.decision === 'Offer planned' || player.decision === 'Alternative offer').length
+  const waitingList = players.filter(player => player.recommendation === 'Waiting list').length
+  const stats = [
+    { label: 'Assessed players', value: `${assessed.length}/${players.length}`, detail: 'With at least one rating', icon: ClipboardCheck },
+    { label: 'Average rating', value: clubAverage ? clubAverage.toFixed(1) : '—', detail: 'Across assessed players', icon: Star },
+    { label: 'Offers ready', value: offersReady, detail: 'Planned or alternative', icon: ThumbsUp },
+    { label: 'Waiting list', value: waitingList, detail: 'Coach recommendations', icon: ListChecks },
   ]
-  return <section className="stats">{stats.map(({label,value,icon:Icon})=><div key={label}><Icon/><span>{label}</span><b>{value}</b></div>)}</section>
+
+  return <section className="stats dashboard-stats">{stats.map(({ label, value, detail, icon: Icon }) => <div key={label}><Icon/><span>{label}</span><b>{value}</b><small>{detail}</small></div>)}</section>
 }

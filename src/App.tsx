@@ -3,7 +3,8 @@ import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { onValue, ref, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured } from './firebase'
 import { initialPlayers } from './data/constants'
-import type { PageKey, Player, SyncState } from './types'
+import type { PageKey, Player, PlayerTab, SyncState } from './types'
+import { normalisePlayer } from './utils/player'
 import { Login } from './components/Login'
 import { CsvImportModal } from './components/CsvImportModal'
 import { Sidebar } from './components/Sidebar'
@@ -19,17 +20,21 @@ export default function App(){
   const [authLoading,setAuthLoading]=useState(firebaseConfigured)
   const [demo,setDemo]=useState(!firebaseConfigured)
   const [page,setPage]=useState<PageKey>('dashboard')
-  const [players,setPlayers]=useState<Player[]>(()=>JSON.parse(localStorage.getItem('f6players')||'null')||initialPlayers)
+  const [players,setPlayers]=useState<Player[]>(()=>{
+    const stored = JSON.parse(localStorage.getItem('f6players') || 'null') as Player[] | null
+    return (stored || initialPlayers).map(normalisePlayer)
+  })
   const [selectedId,setSelectedId]=useState(players[0]?.id||'')
   const [query,setQuery]=useState('')
   const [teamFilter,setTeamFilter]=useState('All teams')
   const [syncState,setSyncState]=useState<SyncState>(firebaseConfigured?'saving':'offline')
   const [importOpen,setImportOpen]=useState(false)
+  const [playerTab,setPlayerTab]=useState<PlayerTab>('overview')
 
   useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setUser(u);setAuthLoading(false)})},[])
-  useEffect(()=>{if(!database||!user||demo)return;const playersRef=ref(database,'players');return onValue(playersRef,snapshot=>{const value=snapshot.val() as Record<string,Omit<Player,'id'>>|null;if(!value){const seed=Object.fromEntries(initialPlayers.map(({id,...p})=>[id,p]));set(playersRef,seed);return}const next=Object.entries(value).map(([id,p])=>({id,...p}));setPlayers(next);setSelectedId(current=>next.some(p=>p.id===current)?current:(next[0]?.id||''));setSyncState('live')},()=>setSyncState('offline'))},[user,demo])
+  useEffect(()=>{if(!database||!user||demo)return;const playersRef=ref(database,'players');return onValue(playersRef,snapshot=>{const value=snapshot.val() as Record<string,Omit<Player,'id'>>|null;if(!value){const seed=Object.fromEntries(initialPlayers.map(({id,...p})=>[id,p]));set(playersRef,seed);return}const next=Object.entries(value).map(([id,p])=>normalisePlayer({id,...p} as Player));setPlayers(next);setSelectedId(current=>next.some(p=>p.id===current)?current:(next[0]?.id||''));setSyncState('live')},()=>setSyncState('offline'))},[user,demo])
 
-  const save=async(updated:Player)=>{const stamped={...updated,updatedAt:Date.now(),updatedBy:user?.email||'Local demo'};if(database&&user&&!demo){setSyncState('saving');const{id,...data}=stamped;await update(ref(database,`players/${id}`),data)}else{const next=players.map(p=>p.id===stamped.id?stamped:p);setPlayers(next);localStorage.setItem('f6players',JSON.stringify(next))}}
+  const save=async(updated:Player)=>{const stamped={...normalisePlayer(updated),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'};if(database&&user&&!demo){setSyncState('saving');const{id,...data}=stamped;await update(ref(database,`players/${id}`),data)}else{const next=players.map(p=>p.id===stamped.id?stamped:p);setPlayers(next);localStorage.setItem('f6players',JSON.stringify(next))}}
   const importPlayers=async(newPlayers:Omit<Player,'id'>[])=>{
     const stamped=newPlayers.map(player=>({...player,id:crypto.randomUUID(),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}))
     if(database&&user&&!demo){
@@ -42,12 +47,13 @@ export default function App(){
       localStorage.setItem('f6players',JSON.stringify(next))
     }
     if(stamped[0])setSelectedId(stamped[0].id)
+    setPlayerTab('overview')
     setPage('players')
   }
-  const openPlayer=(id:string)=>{setSelectedId(id);setPage('players')}
+  const openPlayer=(id:string)=>{setSelectedId(id);setPlayerTab('email');setPage('players')}
 
   if(authLoading)return <div className="loading-page">Loading F6 Trials Manager…</div>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
 
-  return <div className="app"><Sidebar page={page} setPage={setPage} players={players} teamFilter={teamFilter} setTeamFilter={setTeamFilter} syncState={syncState} signedIn={Boolean(user)} onSignOut={()=>auth&&signOut(auth)}/><main>{page==='dashboard'&&<DashboardPage players={players} setPage={setPage}/>} {page==='players'&&<PlayersPage players={players} selectedId={selectedId} setSelectedId={setSelectedId} query={query} setQuery={setQuery} teamFilter={teamFilter} setTeamFilter={setTeamFilter} save={save} onImport={()=>setImportOpen(true)}/>} {page==='emails'&&<EmailsPage players={players} onOpen={openPlayer}/>} {page==='teams'&&<TeamsPage players={players}/>} {page==='settings'&&<SettingsPage/>}</main>{importOpen&&<CsvImportModal existingPlayers={players} onClose={()=>setImportOpen(false)} onImport={importPlayers}/>}</div>
+  return <div className="app"><Sidebar page={page} setPage={setPage} players={players} teamFilter={teamFilter} setTeamFilter={setTeamFilter} syncState={syncState} signedIn={Boolean(user)} onSignOut={()=>auth&&signOut(auth)}/><main>{page==='dashboard'&&<DashboardPage players={players} setPage={setPage}/>} {page==='players'&&<PlayersPage players={players} selectedId={selectedId} setSelectedId={setSelectedId} query={query} setQuery={setQuery} teamFilter={teamFilter} setTeamFilter={setTeamFilter} save={save} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={setPlayerTab}/>} {page==='emails'&&<EmailsPage players={players} onOpen={openPlayer}/>} {page==='teams'&&<TeamsPage players={players}/>} {page==='settings'&&<SettingsPage/>}</main>{importOpen&&<CsvImportModal existingPlayers={players} onClose={()=>setImportOpen(false)} onImport={importPlayers}/>}</div>
 }
