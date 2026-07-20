@@ -13,6 +13,7 @@ const assessmentDefaults = () => ({
   developmentAreas: '',
   suitableTeams: [] as string[],
   bibNumber: '',
+  teamConsideration: {} as Record<string, string>,
 })
 
 export const initialPlayers: Player[] = [

@@ -93,6 +93,7 @@ export function rowsToPlayers(rows: Record<string, string>[], mapping: CsvMappin
       developmentAreas: '',
       suitableTeams: [],
       bibNumber: '',
+      teamConsideration: {},
     }
   })
 }

@@ -1,8 +1,8 @@
-# F6 Trials Manager v0.4
+# F6 Trials Manager v0.5
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.4 adds tabbed player profiles, shared assessments, automatic ratings, coach recommendations, suitable-team selection, bib numbers and assessment-focused dashboard metrics. Existing Firebase player records remain compatible without a manual migration.
+Version 0.5 adds an interactive, live-synced team planner on top of the v0.4 player profiles and assessments. Coaches can configure squad targets, balance positions, plan players, move them between teams and prepare offers without a manual database migration.
 
 ## How the PIN works
 
@@ -115,6 +115,22 @@ Firebase authentication and Realtime Database syncing remain unchanged.
 
 Older Firebase records are normalised in the app with empty v0.4 assessment fields, so no database migration is required.
 
+## v0.5 team planner
+
+Open **Teams** to:
+
+- configure positional targets for every squad;
+- compare recommended, planned and offered totals;
+- see shortages and over-capacity warnings;
+- add recommended players, referrals and applicants to the plan;
+- change a planned position or move a player to another team;
+- prepare standard and alternative-team offers;
+- open the player's assessment from the planner.
+
+Team targets are stored in Firebase under `teamPlans`. The existing authentication rules already protect this path because database access requires an authenticated user.
+
+Existing offer records are automatically included in the appropriate team plan. Existing players receive an empty `teamConsideration` value in the app until they are planned or next saved.
+
 
 ## CSV import (v0.3)
 
@@ -128,4 +144,4 @@ npm run lint
 npm run build
 ```
 
-See `RELEASE_NOTES_v0.4.md` for replacement and testing steps.
+See `RELEASE_NOTES_v0.5.md` for replacement and testing steps.

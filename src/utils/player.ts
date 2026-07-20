@@ -40,6 +40,14 @@ export function normalisePlayer(player: Player): Player {
     assessment[key] = normaliseScore(incoming?.[key])
   })
 
+  const consideration = player.teamConsideration && typeof player.teamConsideration === 'object'
+    ? Object.fromEntries(Object.entries(player.teamConsideration).filter(([team, position]) => Boolean(team) && typeof position === 'string' && Boolean(position)))
+    : {}
+  if ((player.decision?.includes('Offer') || player.decision === 'Alternative offer')) {
+    const offeredTeam = player.offeredTeam || player.appliedTeam
+    if (offeredTeam && !consideration[offeredTeam]) consideration[offeredTeam] = player.offeredPosition || player.position
+  }
+
   return {
     ...player,
     attended: Boolean(player.attended),
@@ -50,6 +58,7 @@ export function normalisePlayer(player: Player): Player {
     developmentAreas: player.developmentAreas || '',
     suitableTeams: Array.isArray(player.suitableTeams) ? player.suitableTeams.filter(Boolean) : [],
     bibNumber: player.bibNumber == null ? '' : String(player.bibNumber),
+    teamConsideration: consideration,
   }
 }
 

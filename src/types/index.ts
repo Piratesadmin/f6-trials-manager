@@ -48,6 +48,7 @@ export type Player = {
   developmentAreas: string
   suitableTeams: string[]
   bibNumber: string
+  teamConsideration: Record<string, string>
   updatedAt?: number
   updatedBy?: string
 }
@@ -55,3 +56,5 @@ export type Player = {
 export type PageKey = 'dashboard' | 'players' | 'emails' | 'teams' | 'settings'
 export type PlayerTab = 'overview' | 'assessment' | 'decision' | 'email'
 export type SyncState = 'live' | 'saving' | 'offline'
+export type PositionTargets = Record<string, number>
+export type TeamPlans = Record<string, PositionTargets>
