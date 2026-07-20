@@ -1,0 +1,10 @@
+import { useState } from 'react'
+import type { FormEvent } from 'react'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { auth, firebaseConfigured, sharedLoginEmail } from '../firebase'
+
+export function Login({onDemo}:{onDemo:()=>void}){
+  const [pin,setPin]=useState(''); const [error,setError]=useState(''); const [busy,setBusy]=useState(false)
+  const submit=async(e:FormEvent)=>{e.preventDefault();setError('');setBusy(true);try{if(!auth||!firebaseConfigured)throw new Error('Firebase has not been configured yet.');if(!sharedLoginEmail)throw new Error('The shared club login email has not been configured.');await signInWithEmailAndPassword(auth,sharedLoginEmail,pin);setPin('')}catch(err){const message=err instanceof Error?err.message:'';if(message.includes('invalid-credential')||message.includes('wrong-password')||message.includes('invalid-login-credentials'))setError('That PIN is incorrect. Please try again.');else if(message.includes('too-many-requests'))setError('Too many attempts. Wait a few minutes and try again.');else setError(message.replace('Firebase: ','')||'Unable to unlock the portal.')}finally{setBusy(false)}}
+  return <div className="login-page"><form className="login-card pin-card" onSubmit={submit}><div className="logo login-logo">F6</div><h1>Coach Trials Portal</h1><p>Enter the Flaming Six club PIN to continue.</p><label>Club PIN<input className="pin-input" type="password" inputMode="numeric" pattern="[0-9]*" value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,''))} required autoComplete="current-password" maxLength={12} autoFocus placeholder="••••••"/></label>{error&&<div className="login-error">{error}</div>}<button className="primary login-button" disabled={busy||pin.length<4}>{busy?'Unlocking…':'Open trials manager'}</button><p className="pin-help">Use the shared PIN provided by the club committee.</p>{!firebaseConfigured&&<><div className="setup-warning">Firebase is not configured.</div><button type="button" className="demo-button" onClick={onDemo}>Open local demo</button></>}</form></div>
+}

@@ -99,3 +99,16 @@ The PIN itself is not placed in `.env.local`; enter it on the portal screen.
 ## Important privacy note
 
 The PIN protects access through Firebase, but it is still a shared credential. Change it after trials, when a coach leaves, or if it is shared outside the intended group.
+
+## v0.2 interface update
+
+This version separates the application into reusable pages and components:
+
+- Dashboard overview and recent activity
+- Players workspace
+- Email centre
+- Team squad overview
+- Settings screen
+- Persistent sidebar navigation
+
+Firebase authentication and Realtime Database syncing remain unchanged.
