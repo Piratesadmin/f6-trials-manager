@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { KeyRound, Mail, Users } from 'lucide-react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth, firebaseConfigured, sharedLoginEmail } from '../firebase'
+import { ClubLogo } from './ClubLogo'
 
 type LoginMode = 'pin' | 'coach'
 
@@ -41,7 +42,7 @@ export function Login({ onDemo }: { onDemo: () => void }) {
   }
 
   return <div className="login-page"><form className="login-card account-login-card" onSubmit={submit}>
-    <div className="logo login-logo">F6</div><h1>Coach Trials Portal</h1><p>Use the shared club PIN or your individual coach account.</p>
+    <ClubLogo variant="login"/><span className="login-club-name">FLAMING SIX VOLLEYBALL CLUB</span><h1>Coach Trials Portal</h1><p>Use the shared club PIN or your individual coach account.</p>
     <div className="login-mode-tabs" role="tablist" aria-label="Sign-in method"><button type="button" role="tab" aria-selected={mode === 'pin'} className={mode === 'pin' ? 'active' : ''} onClick={() => changeMode('pin')}><KeyRound/>Club PIN</button><button type="button" role="tab" aria-selected={mode === 'coach'} className={mode === 'coach' ? 'active' : ''} onClick={() => changeMode('coach')}><Users/>Coach login</button></div>
     {mode === 'pin' ? <label>Club PIN<input className="pin-input" type="password" inputMode="numeric" pattern="[0-9]*" value={pin} onChange={event => setPin(event.target.value.replace(/\D/g, ''))} required autoComplete="current-password" maxLength={12} autoFocus placeholder="••••••"/></label> : <div className="coach-login-fields"><label>Email address<div className="login-input-with-icon"><Mail/><input type="email" value={email} onChange={event => setEmail(event.target.value)} required autoComplete="username" placeholder="coach@flamingsix.co.uk" autoFocus/></div></label><label>Password<div className="login-input-with-icon"><KeyRound/><input type="password" value={password} onChange={event => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Your password"/></div></label></div>}
     {error && <div className="login-error">{error}</div>}

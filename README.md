@@ -1,8 +1,8 @@
-# F6 Trials Manager v0.7
+# F6 Trials Manager v0.8
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.7 makes the Players list easier to search during trials and adds optional individual coach accounts. The existing shared PIN, v0.6 Email Centre, live Firebase data, CSV import, assessments and team planner are preserved.
+Version 0.8 introduces the official Flaming Six crest and a complete club-branded visual system. The existing shared PIN, individual coach accounts, player filters, Email Centre, Firebase data, CSV import, assessments and team planner are preserved.
 
 ## How the PIN works
 
@@ -175,6 +175,19 @@ Open **Players** and select the filter icon to filter by:
 
 Filters combine with the existing name/bib search and team selector. The filter button shows the number of active filters, and **Clear all filters** restores the complete player list.
 
+## v0.8 Flaming Six design
+
+- Official Flaming Six crest in the sidebar and sign-in screen.
+- Charcoal navigation based on the logo background.
+- Yellow primary actions and flame-orange interactive accents.
+- Branded page labels, active navigation and card highlights.
+- Warmer application background and refined panel shadows.
+- Branded assessment, filter, team-planner and Email Centre states.
+- Status colours remain distinct: offers, warnings and rejections retain their semantic green, amber and red treatments.
+- Updated application title, theme colour and favicon.
+
+The supplied logo is stored locally as `public/flaming-six-logo.png`; the application does not depend on an external image URL.
+
 
 ## CSV import (v0.3)
 
@@ -188,4 +201,4 @@ npm run lint
 npm run build
 ```
 
-See `RELEASE_NOTES_v0.7.md` for replacement and testing steps.
+See `RELEASE_NOTES_v0.8.md` for replacement and testing steps.

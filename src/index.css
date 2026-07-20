@@ -5,9 +5,13 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --purple: #7c3aed;
-  --purple-dark: #5b21b6;
-  --purple-soft: #f3efff;
+  --purple: #e85f16;
+  --purple-dark: #a83b08;
+  --purple-soft: #fff5df;
+  --brand-yellow: #fff200;
+  --brand-orange: #ed6a1b;
+  --brand-charcoal: #231f20;
+  --brand-warm: #fffaf0;
   --ink: #18202b;
   --muted: #667085;
   --line: #e5e7eb;
