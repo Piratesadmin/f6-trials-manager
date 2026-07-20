@@ -70,6 +70,7 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
     if (offeredTeam(player) === selectedTeam) {
       update.offeredTeam = destination
       update.decision = player.appliedTeam === destination ? 'Offer planned' : 'Alternative offer'
+      update.emailReviewStatus = 'draft'
     }
     savePlayer(update)
   }
@@ -80,6 +81,7 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
       decision: player.appliedTeam === selectedTeam ? 'Offer planned' : 'Alternative offer',
       offeredTeam: selectedTeam,
       offeredPosition: position,
+      emailReviewStatus: 'draft',
       teamConsideration: { ...player.teamConsideration, [selectedTeam]: position },
     })
   }

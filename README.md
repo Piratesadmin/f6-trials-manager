@@ -1,8 +1,8 @@
-# F6 Trials Manager v0.5
+# F6 Trials Manager v0.6
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.5 adds an interactive, live-synced team planner on top of the v0.4 player profiles and assessments. Coaches can configure squad targets, balance positions, plan players, move them between teams and prepare offers without a manual database migration.
+Version 0.6 adds a live-synced Email Centre for reviewing, copying and tracking offers, alternative offers, waiting-list messages and rejections. It deliberately does not send email automatically: coaches retain the final review step in their normal email app.
 
 ## How the PIN works
 
@@ -131,6 +131,26 @@ Team targets are stored in Firebase under `teamPlans`. The existing authenticati
 
 Existing offer records are automatically included in the appropriate team plan. Existing players receive an empty `teamConsideration` value in the app until they are planned or next saved.
 
+## v0.6 Email Centre
+
+Open **Emails** to:
+
+- filter the shared queue by Needs info, Ready, Reviewed and Sent;
+- review offers, alternative offers, waiting-list messages and rejections;
+- catch missing recipient, coach, deadline, offer or rejection details;
+- see team-detail and squad-capacity warnings before contacting a player;
+- add a player-specific coach name, deadline and personal message;
+- copy the subject or body, or open a populated draft in the default email app;
+- mark messages as reviewed and record them as sent;
+- retain the exact subject, body, recipient, time and portal user in communication history;
+- select several messages, mark them reviewed and export a CSV handover list.
+
+Shared coach defaults and team training details are configured under **Settings** and sync through Firebase under `emailSettings`.
+
+“Mark as sent” is tracking only. It shows a confirmation and must be used after the coach sends the message from their email app. No provider key, automatic delivery or paid email service is included.
+
+Older Firebase players receive safe email-draft, review-status and history defaults when loaded; no manual migration is required.
+
 
 ## CSV import (v0.3)
 
@@ -144,4 +164,4 @@ npm run lint
 npm run build
 ```
 
-See `RELEASE_NOTES_v0.5.md` for replacement and testing steps.
+See `RELEASE_NOTES_v0.6.md` for replacement and testing steps.

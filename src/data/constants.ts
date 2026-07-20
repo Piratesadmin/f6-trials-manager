@@ -1,10 +1,17 @@
-import type { Player, Recommendation } from '../types'
+import type { EmailSettings, Player, Recommendation } from '../types'
 import { emptyAssessment } from '../utils/player'
 
 export const teams = ['Aces','Ravens','Cobras','Coyotes','Llamas','Meerkats','Leopards','Pirates']
 export const positions = ['Setter','Outside','Middle','Opposite','Libero','All-rounder']
 export const reasons = ['Very high number of applicants','Limited squad spaces','Position already filled','Team level or profile fit','Training availability does not match','No suitable team currently available']
 export const recommendations: Exclude<Recommendation, ''>[] = ['Strong offer','Offer','Waiting list','Refer to another team','Needs discussion','Not suitable']
+
+export const defaultEmailSettings: EmailSettings = {
+  clubName: 'Flaming Six Volleyball Club',
+  defaultCoachName: '',
+  defaultResponseDeadline: '',
+  teamDetails: Object.fromEntries(teams.map(team => [team, { trainingDay: '', trainingTime: '', venue: '', competition: '' }])),
+}
 
 const assessmentDefaults = () => ({
   assessment: emptyAssessment(),
@@ -14,6 +21,9 @@ const assessmentDefaults = () => ({
   suitableTeams: [] as string[],
   bibNumber: '',
   teamConsideration: {} as Record<string, string>,
+  emailReviewStatus: 'draft' as const,
+  emailDraft: { responseDeadline: '', coachName: '', personalMessage: '' },
+  communicationHistory: {},
 })
 
 export const initialPlayers: Player[] = [

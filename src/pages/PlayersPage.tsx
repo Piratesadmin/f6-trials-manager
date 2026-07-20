@@ -1,5 +1,5 @@
 import { ChevronRight, Filter, Search, Star } from 'lucide-react'
-import type { Player, PlayerTab } from '../types'
+import type { EmailSettings, Player, PlayerTab, TeamPlans } from '../types'
 import { teams } from '../data/constants'
 import { averageRating } from '../utils/player'
 import { PageHeader } from '../components/PageHeader'
@@ -17,11 +17,14 @@ type Props = {
   onImport: () => void
   activeTab: PlayerTab
   setActiveTab: (tab: PlayerTab) => void
+  emailSettings: EmailSettings
+  teamPlans: TeamPlans
+  markSent: (player: Player) => void | Promise<void>
 }
 
 const recommendationClass = (recommendation: Player['recommendation']) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayersPage({ players, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, onImport, activeTab, setActiveTab }: Props) {
+export function PlayersPage({ players, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent }: Props) {
   const search = query.trim().toLowerCase()
   const filtered = players.filter(player => {
     const matchesTeam = teamFilter === 'All teams' || player.appliedTeam === teamFilter
@@ -59,7 +62,7 @@ export function PlayersPage({ players, selectedId, setSelectedId, query, setQuer
           {!filtered.length && <div className="empty-state compact">No players match these filters.</div>}
         </div>
       </div>
-      <PlayerProfile player={selected} activeTab={activeTab} setActiveTab={setActiveTab} save={save}/>
+      <PlayerProfile player={selected} players={players} activeTab={activeTab} setActiveTab={setActiveTab} save={save} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent}/>
     </section>
   </>
 }

@@ -48,6 +48,12 @@ export function normalisePlayer(player: Player): Player {
     if (offeredTeam && !consideration[offeredTeam]) consideration[offeredTeam] = player.offeredPosition || player.position
   }
 
+  const history = player.communicationHistory && typeof player.communicationHistory === 'object'
+    ? player.communicationHistory
+    : {}
+  const sentDecision = player.decision === 'Offer sent' || player.decision === 'Rejection sent' || player.decision === 'Waiting list sent'
+  const reviewStatus = sentDecision ? 'sent' : player.emailReviewStatus === 'reviewed' ? 'reviewed' : 'draft'
+
   return {
     ...player,
     attended: Boolean(player.attended),
@@ -59,6 +65,13 @@ export function normalisePlayer(player: Player): Player {
     suitableTeams: Array.isArray(player.suitableTeams) ? player.suitableTeams.filter(Boolean) : [],
     bibNumber: player.bibNumber == null ? '' : String(player.bibNumber),
     teamConsideration: consideration,
+    emailReviewStatus: reviewStatus,
+    emailDraft: {
+      responseDeadline: player.emailDraft?.responseDeadline || '',
+      coachName: player.emailDraft?.coachName || '',
+      personalMessage: player.emailDraft?.personalMessage || '',
+    },
+    communicationHistory: history,
   }
 }
 

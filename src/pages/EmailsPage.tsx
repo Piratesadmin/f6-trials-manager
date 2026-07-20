@@ -1,8 +1,151 @@
-import { Mail, Send } from 'lucide-react'
-import type { Player } from '../types'
+import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, Check, CheckCircle2, ClipboardCheck, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
+import type { EmailSettings, Player, TeamPlans } from '../types'
 import { PageHeader } from '../components/PageHeader'
-export function EmailsPage({players,onOpen}:{players:Player[];onOpen:(id:string)=>void}){
-  const ready=players.filter(p=>p.decision==='Offer planned'||p.decision==='Alternative offer'||p.decision==='Rejection planned')
-  const sent=players.filter(p=>p.decision==='Offer sent'||p.decision==='Rejection sent')
-  return <><PageHeader title="Email centre" subtitle="See which player emails are ready and which have already been sent."/><section className="email-overview"><div className="panel"><div className="panel-head"><div><span className="eyebrow">READY TO SEND</span><h2>{ready.length} emails prepared</h2></div><Mail/></div><div className="email-list">{ready.length?ready.map(p=><button key={p.id} onClick={()=>onOpen(p.id)}><div className="avatar">{p.name.split(' ').map(x=>x[0]).join('')}</div><div><b>{p.name}</b><span>{p.decision} · {p.appliedTeam}</span></div><Send/></button>):<div className="empty-state compact">No emails are currently waiting.</div>}</div></div><div className="panel"><div className="panel-head"><div><span className="eyebrow">SENT</span><h2>{sent.length} completed emails</h2></div></div><div className="email-list">{sent.map(p=><button key={p.id} onClick={()=>onOpen(p.id)}><div className="avatar">{p.name.split(' ').map(x=>x[0]).join('')}</div><div><b>{p.name}</b><span>{p.decision}</span></div></button>)}</div></div></section></>
+import { effectiveEmailFields, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
+
+type Props = {
+  players: Player[]
+  settings: EmailSettings
+  teamPlans: TeamPlans
+  save: (player: Player) => void | Promise<void>
+  markSent: (player: Player) => void | Promise<void>
+  onOpen: (id: string) => void
+}
+
+const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'needs-info', label: 'Needs info' },
+  { value: 'ready', label: 'Ready' },
+  { value: 'reviewed', label: 'Reviewed' },
+  { value: 'sent', label: 'Sent' },
+]
+
+const statusLabel: Record<EmailQueueStatus, string> = { 'needs-info': 'Needs info', ready: 'Ready to review', reviewed: 'Reviewed', sent: 'Sent' }
+
+export function EmailsPage({ players, settings, teamPlans, save, markSent, onOpen }: Props) {
+  const queue = useMemo(() => players.filter(player => emailTypeFor(player) || latestCommunication(player)), [players])
+  const [statusFilter, setStatusFilter] = useState<'all' | EmailQueueStatus>('all')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [query, setQuery] = useState('')
+  const [selectedId, setSelectedId] = useState(queue[0]?.id || '')
+  const [checked, setChecked] = useState<string[]>([])
+
+  const filtered = queue.filter(player => {
+    const status = emailQueueStatus(player, settings, players, teamPlans)
+    const type = emailTypeFor(player)
+    const search = `${player.name} ${player.email} ${player.appliedTeam} ${type || ''}`.toLowerCase()
+    return (statusFilter === 'all' || status === statusFilter) && (typeFilter === 'all' || type === typeFilter) && search.includes(query.trim().toLowerCase())
+  })
+
+  useEffect(() => {
+    if (!queue.some(player => player.id === selectedId)) setSelectedId(queue[0]?.id || '')
+  }, [queue, selectedId])
+
+  const selected = queue.find(player => player.id === selectedId) || filtered[0]
+  const counts = Object.fromEntries(['needs-info','ready','reviewed','sent'].map(status => [status, queue.filter(player => emailQueueStatus(player, settings, players, teamPlans) === status).length])) as Record<EmailQueueStatus, number>
+
+  const toggleChecked = (id: string) => setChecked(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
+  const markSelectedReviewed = () => {
+    queue.filter(player => checked.includes(player.id) && emailQueueStatus(player, settings, players, teamPlans) !== 'sent').forEach(player => save({ ...player, emailReviewStatus: 'reviewed' }))
+    setChecked([])
+  }
+  const exportList = () => {
+    const exportPlayers = checked.length ? queue.filter(player => checked.includes(player.id)) : filtered
+    const escape = (value: string) => `"${value.replaceAll('"', '""')}"`
+    const rows = [['Name','Email','Email type','Status','Team','Decision'], ...exportPlayers.map(player => [player.name,player.email,emailTypeLabel(emailTypeFor(player)),statusLabel[emailQueueStatus(player,settings,players,teamPlans)],player.offeredTeam||player.appliedTeam,player.decision])]
+    const csv = rows.map(row => row.map(escape).join(',')).join('\n')
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    link.download = 'f6-email-centre.csv'
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
+  return <>
+    <PageHeader title="Email centre" subtitle="Review every message, resolve missing details and keep an accurate contact history." action={<button className="secondary email-export" onClick={exportList}><Download/>Export {checked.length ? `${checked.length} selected` : 'current list'}</button>}/>
+
+    <section className="communication-stats">
+      <div className="needs-info"><FileWarning/><span>Needs information</span><b>{counts['needs-info']}</b></div>
+      <div className="ready"><Mail/><span>Ready to review</span><b>{counts.ready}</b></div>
+      <div className="reviewed"><ClipboardCheck/><span>Reviewed</span><b>{counts.reviewed}</b></div>
+      <div className="sent"><CheckCircle2/><span>Recorded sent</span><b>{counts.sent}</b></div>
+    </section>
+
+    {checked.length > 0 && <div className="bulk-email-bar"><b>{checked.length} selected</b><span>Mark drafts as reviewed or export a handover list.</span><button onClick={markSelectedReviewed}><UserRoundCheck/>Mark reviewed</button><button onClick={() => setChecked([])}>Clear</button></div>}
+
+    <section className="email-centre-layout">
+      <aside className="email-queue-panel">
+        <div className="email-queue-tools">
+          <label><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search emails"/></label>
+          <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)} aria-label="Filter by email type"><option value="all">All types</option><option value="offer">Offers</option><option value="alternative">Alternative offers</option><option value="waiting-list">Waiting list</option><option value="rejection">Rejections</option></select>
+        </div>
+        <nav className="email-status-tabs" aria-label="Email status filters">{statuses.map(status => <button key={status.value} className={statusFilter === status.value ? 'active' : ''} onClick={() => setStatusFilter(status.value)}>{status.label}{status.value !== 'all' && <span>{counts[status.value]}</span>}</button>)}</nav>
+        <div className="email-queue-summary"><span>{filtered.length} message{filtered.length === 1 ? '' : 's'}</span><button onClick={() => setChecked(checked.length === filtered.length ? [] : filtered.map(player => player.id))}>{checked.length === filtered.length && filtered.length ? 'Clear all' : 'Select all'}</button></div>
+        <div className="email-queue-list">
+          {filtered.map(player => {
+            const status = emailQueueStatus(player, settings, players, teamPlans)
+            return <div className={`email-queue-item ${selected?.id === player.id ? 'selected' : ''}`} key={player.id}>
+              <input type="checkbox" checked={checked.includes(player.id)} onChange={() => toggleChecked(player.id)} aria-label={`Select ${player.name}`}/>
+              <button onClick={() => setSelectedId(player.id)}><div className="email-avatar">{player.name.split(' ').map(part => part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{emailTypeLabel(emailTypeFor(player))} · {player.offeredTeam || player.appliedTeam}</span><small className={`email-status ${status}`}>{statusLabel[status]}</small></div></button>
+            </div>
+          })}
+          {!filtered.length && <div className="email-centre-empty"><Mail/><b>No messages match</b><span>Try another status, type or search.</span></div>}
+        </div>
+      </aside>
+      {selected ? <EmailReview player={selected} settings={settings} players={players} teamPlans={teamPlans} save={save} markSent={markSent} onOpen={onOpen}/> : <div className="email-review-empty"><Mail/><h2>No email selected</h2><p>Prepare an offer, waiting-list or rejection decision from a player profile first.</p></div>}
+    </section>
+  </>
+}
+
+function EmailReview({ player, settings, players, teamPlans, save, markSent, onOpen }: Props & { player: Player }) {
+  const [copied, setCopied] = useState<'subject' | 'body' | ''>('')
+  const status = emailQueueStatus(player, settings, players, teamPlans)
+  const issues = emailValidation(player, settings, players, teamPlans)
+  const blockers = issues.filter(issue => issue.level === 'blocker')
+  const subject = emailSubjectFor(player, settings)
+  const body = emailFor(player, settings)
+  const fields = effectiveEmailFields(player, settings)
+  const history = Object.values(player.communicationHistory || {}).sort((a,b) => b.sentAt - a.sentAt)
+
+  const copy = async (kind: 'subject' | 'body') => {
+    await navigator.clipboard.writeText(kind === 'subject' ? subject : body)
+    setCopied(kind)
+    window.setTimeout(() => setCopied(''), 1600)
+  }
+  const updateDraft = (field: keyof Player['emailDraft'], value: string) => save({ ...player, emailReviewStatus: player.emailReviewStatus === 'sent' ? 'sent' : 'draft', emailDraft: { ...player.emailDraft, [field]: value } })
+  const confirmSent = () => {
+    if (blockers.length || !window.confirm('This records the email as sent but does not send it. Continue only after sending from your email app.')) return
+    markSent(player)
+  }
+
+  return <article className="email-review-panel">
+    <header className="email-review-header"><div><span className="eyebrow">{emailTypeLabel(emailTypeFor(player)).toUpperCase()}</span><h2>{player.name}</h2><p>{player.email}</p></div><div><span className={`email-status large ${status}`}>{statusLabel[status]}</span><button className="text-button" onClick={() => onOpen(player.id)}>Open player profile</button></div></header>
+
+    <div className="email-review-body">
+      <section className="email-draft-settings">
+        <label>Response deadline<input value={player.emailDraft.responseDeadline} placeholder={settings.defaultResponseDeadline || 'e.g. 30 August 2026'} onChange={event => updateDraft('responseDeadline', event.target.value)}/><small>{!player.emailDraft.responseDeadline && fields.deadline ? 'Using shared default' : 'Used in this email'}</small></label>
+        <label>Coach name<input value={player.emailDraft.coachName} placeholder={settings.defaultCoachName || 'Set in Email settings'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using shared default' : 'Signs this email'}</small></label>
+        <label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label>
+      </section>
+
+      {issues.length > 0 && <section className="email-checks"><div className="email-checks-title"><AlertTriangle/><div><b>Pre-send checks</b><span>{blockers.length ? `${blockers.length} item${blockers.length === 1 ? '' : 's'} must be fixed` : 'Warnings to review'}</span></div></div>{issues.map(issue => <div className={issue.level} key={issue.message}>{issue.level === 'blocker' ? <FileWarning/> : <AlertTriangle/>}<span>{issue.message}</span></div>)}</section>}
+
+      <section className="email-message-card">
+        <div className="email-field"><span>To</span><b>{player.email || 'No recipient email'}</b></div>
+        <div className="email-field subject"><span>Subject</span><b>{subject}</b><button onClick={() => copy('subject')}><Copy/>{copied === 'subject' ? 'Copied' : 'Copy'}</button></div>
+        <pre>{body}</pre>
+      </section>
+
+      <div className="email-review-actions">
+        <button className="secondary" onClick={() => copy('body')}><Copy/>{copied === 'body' ? 'Copied' : 'Copy body'}</button>
+        <a className={`secondary ${blockers.length ? 'disabled' : ''}`} href={blockers.length ? undefined : mailtoFor(player, settings)}><ExternalLink/>Open in email app</a>
+        {status !== 'sent' && <button className="review-button" disabled={Boolean(blockers.length)} onClick={() => save({ ...player, emailReviewStatus: 'reviewed' })}><Check/>Mark reviewed</button>}
+        <button className="primary" disabled={Boolean(blockers.length) || status === 'sent'} onClick={confirmSent}><Send/>{status === 'sent' ? 'Sent recorded' : 'Mark as sent'}</button>
+      </div>
+      <p className="manual-send-note"><AlertTriangle/>“Open in email app” creates a draft. “Mark as sent” only records your completed action; this portal does not send email automatically.</p>
+
+      <section className="communication-history"><div className="history-title"><History/><div><span className="eyebrow">COMMUNICATION HISTORY</span><h3>{history.length ? `${history.length} recorded message${history.length === 1 ? '' : 's'}` : 'No sent messages yet'}</h3></div></div>{history.map(entry => <details key={entry.id}><summary><span><b>{emailTypeLabel(entry.type)}</b><small>{new Date(entry.sentAt).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})} · {entry.recipient}</small></span><CheckCircle2/></summary><div><strong>{entry.subject}</strong><pre>{entry.body}</pre><small>Recorded by {entry.sentBy}</small></div></details>)}</section>
+    </div>
+  </article>
 }
