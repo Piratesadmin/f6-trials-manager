@@ -34,6 +34,18 @@ function normaliseScore(value: unknown) {
 }
 
 export function normalisePlayer(player: Player): Player {
+  const unsafePlayer = player as Player & Record<string, unknown>
+  const {
+    cell: _cell,
+    phone: _phone,
+    phoneNumber: _phoneNumber,
+    streetAddress: _streetAddress,
+    address: _address,
+    city: _city,
+    postalCode: _postalCode,
+    postcode: _postcode,
+    ...safePlayer
+  } = unsafePlayer
   const assessment = emptyAssessment()
   const incoming = player.assessment as Partial<Assessment> | undefined
   assessmentFields.forEach(({ key }) => {
@@ -55,7 +67,13 @@ export function normalisePlayer(player: Player): Player {
   const reviewStatus = sentDecision ? 'sent' : player.emailReviewStatus === 'reviewed' ? 'reviewed' : 'draft'
 
   return {
-    ...player,
+    ...safePlayer,
+    dateOfBirth: player.dateOfBirth || '',
+    interestedDivisions: player.interestedDivisions || '',
+    secondaryPosition: player.secondaryPosition || '',
+    playingExperience: player.playingExperience || '',
+    highestLevelPlayed: player.highestLevelPlayed || '',
+    photoUrl: player.photoUrl || '',
     attended: Boolean(player.attended),
     notes: player.notes || '',
     assessment,

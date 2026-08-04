@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronRight, Filter, Search, Star } from 'lucide-react'
-import type { EmailSettings, Player, PlayerTab, TeamPlans } from '../types'
+import type { EmailSettings, Player, PlayerStars, PlayerTab, TeamPlans } from '../types'
 import { teams } from '../data/constants'
 import { averageRating } from '../utils/player'
 import { PageHeader } from '../components/PageHeader'
@@ -22,16 +22,23 @@ type Props = {
   emailSettings: EmailSettings
   teamPlans: TeamPlans
   markSent: (player: Player) => void | Promise<void>
+  playerStars: PlayerStars
+  currentCoachId: string
+  toggleStar: (playerId: string) => void | Promise<void>
+  selectedPhoto: string
+  uploadPhoto: (player: Player, file: File) => Promise<void>
+  removePhoto: (player: Player) => Promise<void>
 }
 
 const recommendationClass = (recommendation: Player['recommendation']) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayersPage({ players, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent }: Props) {
+export function PlayersPage({ players, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState<PlayerFilterValues>(emptyPlayerFilters)
   const search = query.trim().toLowerCase()
   const filtered = players.filter(player => {
     const matchesTeam = teamFilter === 'All teams' || player.appliedTeam === teamFilter
+    const matchesStarred = !filters.starredOnly || Boolean(playerStars[player.id])
     const matchesPosition = !filters.positions.length || filters.positions.includes(player.position)
     const matchesAttendance = filters.attendance === 'all' || (filters.attendance === 'attended' ? player.attended : !player.attended)
     const rating = averageRating(player)
@@ -39,8 +46,8 @@ export function PlayersPage({ players, selectedId, setSelectedId, query, setQuer
     const matchesRecommendation = filters.recommendation === 'all' || player.recommendation === filters.recommendation
     const matchesDecision = filters.decision === 'all' || player.decision === filters.decision
     const matchesRating = !filters.minimumRating || rating >= filters.minimumRating
-    const searchable = `${player.name} ${player.email} ${player.position} ${player.bibNumber} ${player.recommendation}`.toLowerCase()
-    return matchesTeam && matchesPosition && matchesAttendance && matchesAssessment && matchesRecommendation && matchesDecision && matchesRating && searchable.includes(search)
+    const searchable = `${player.name} ${player.email} ${player.position} ${player.secondaryPosition} ${player.bibNumber} ${player.recommendation} ${player.interestedDivisions} ${player.playingExperience} ${player.highestLevelPlayed}`.toLowerCase()
+    return matchesTeam && matchesStarred && matchesPosition && matchesAttendance && matchesAssessment && matchesRecommendation && matchesDecision && matchesRating && searchable.includes(search)
   })
   const selected = filtered.find(player => player.id === selectedId) || filtered[0] || players.find(player => player.id === selectedId) || players[0]
   const extraFilterCount = activeFilterCount(filters)
@@ -66,16 +73,20 @@ export function PlayersPage({ players, selectedId, setSelectedId, query, setQuer
         <div className="rows player-cards">
           {filtered.map(player => {
             const rating = averageRating(player)
-            return <button key={player.id} className={`player-row player-card ${selected.id === player.id ? 'selected' : ''}`} onClick={() => selectPlayer(player.id)}>
-              <div className="player-rating"><Star/><b>{rating ? rating.toFixed(1) : '—'}</b></div>
-              <div className="player-main"><div><b>{player.name}</b>{player.bibNumber && <span className="list-bib">#{player.bibNumber}</span>}</div><span>{player.appliedTeam} · {player.position}</span><small className={`recommendation-badge ${recommendationClass(player.recommendation)}`}>{player.recommendation || player.decision}</small></div>
-              <ChevronRight/>
-            </button>
+            const starred=Boolean(playerStars[player.id])
+            return <div key={player.id} className={`player-row player-card ${selected.id === player.id ? 'selected' : ''}`}>
+              <button className={`player-star-toggle ${starred?'starred':''}`} aria-label={`${starred?'Remove':'Add'} ${player.name} ${currentCoachId==='local-demo'?'from the demo shortlist':'from my starred players'}`} title={starred?'Remove from my starred players':'Add to my starred players'} onClick={()=>toggleStar(player.id)}><Star/></button>
+              <button className="player-card-open" onClick={() => selectPlayer(player.id)}>
+                <div className="player-rating"><Star/><b>{rating ? rating.toFixed(1) : '—'}</b></div>
+                <div className="player-main"><div><b>{player.name}</b>{player.bibNumber && <span className="list-bib">#{player.bibNumber}</span>}</div><span>{player.appliedTeam} · {player.position}{player.secondaryPosition?` / ${player.secondaryPosition}`:''}</span><small className={`recommendation-badge ${recommendationClass(player.recommendation)}`}>{player.recommendation || player.decision}</small></div>
+                <ChevronRight/>
+              </button>
+            </div>
           })}
           {!filtered.length && <div className="empty-state compact">No players match these filters.</div>}
         </div>
       </div>
-      <PlayerProfile player={selected} players={players} activeTab={activeTab} setActiveTab={setActiveTab} save={save} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent}/>
+      <PlayerProfile player={selected} players={players} activeTab={activeTab} setActiveTab={setActiveTab} save={save} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto}/>
     </section>
   </>
 }

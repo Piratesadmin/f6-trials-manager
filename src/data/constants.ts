@@ -14,6 +14,12 @@ export const defaultEmailSettings: EmailSettings = {
 }
 
 const assessmentDefaults = () => ({
+  dateOfBirth: '',
+  interestedDivisions: '',
+  secondaryPosition: '',
+  playingExperience: '',
+  highestLevelPlayed: '',
+  photoUrl: '',
   assessment: emptyAssessment(),
   recommendation: '' as const,
   strengths: '',

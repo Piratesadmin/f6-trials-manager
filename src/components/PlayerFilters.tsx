@@ -1,4 +1,4 @@
-import { Check, RotateCcw, SlidersHorizontal, X } from 'lucide-react'
+import { Check, RotateCcw, SlidersHorizontal, Star, X } from 'lucide-react'
 import { positions, recommendations } from '../data/constants'
 import type { Decision, Recommendation } from '../types'
 
@@ -6,6 +6,7 @@ export type AttendanceFilter = 'all' | 'attended' | 'not-attended'
 export type AssessmentFilter = 'all' | 'assessed' | 'not-assessed'
 
 export type PlayerFilterValues = {
+  starredOnly: boolean
   positions: string[]
   attendance: AttendanceFilter
   assessment: AssessmentFilter
@@ -15,6 +16,7 @@ export type PlayerFilterValues = {
 }
 
 export const emptyPlayerFilters: PlayerFilterValues = {
+  starredOnly: false,
   positions: [],
   attendance: 'all',
   assessment: 'all',
@@ -24,7 +26,7 @@ export const emptyPlayerFilters: PlayerFilterValues = {
 }
 
 export function activeFilterCount(filters: PlayerFilterValues) {
-  return filters.positions.length + Number(filters.attendance !== 'all') + Number(filters.assessment !== 'all') + Number(filters.recommendation !== 'all') + Number(filters.decision !== 'all') + Number(filters.minimumRating > 0)
+  return Number(filters.starredOnly) + filters.positions.length + Number(filters.attendance !== 'all') + Number(filters.assessment !== 'all') + Number(filters.recommendation !== 'all') + Number(filters.decision !== 'all') + Number(filters.minimumRating > 0)
 }
 
 type Props = {
@@ -41,6 +43,7 @@ export function PlayerFilters({ filters, setFilters, onClose }: Props) {
 
   return <section className="player-filter-panel" aria-label="Player filters">
     <header><div><SlidersHorizontal/><div><b>Filter players</b><span>Narrow the list without changing any records.</span></div></div><button onClick={onClose} aria-label="Close player filters"><X/></button></header>
+    <div className="filter-section starred-filter"><b>Personal shortlist</b><button className={filters.starredOnly?'selected':''} onClick={()=>setFilters({...filters,starredOnly:!filters.starredOnly})}><Star/>{filters.starredOnly?'Showing my starred players':'Show only my starred players'}{filters.starredOnly&&<Check/>}</button><small>Stars are private to your signed-in coach account.</small></div>
     <div className="filter-section"><b>Playing position</b><div className="position-filter-options">{positions.map(position => <button key={position} className={filters.positions.includes(position) ? 'selected' : ''} onClick={() => togglePosition(position)}>{filters.positions.includes(position) && <Check/>}{position}</button>)}</div></div>
     <div className="filter-grid">
       <label>Attendance<select value={filters.attendance} onChange={event => setFilters({ ...filters, attendance: event.target.value as AttendanceFilter })}><option value="all">Any attendance</option><option value="attended">Attended</option><option value="not-attended">Not attended</option></select></label>

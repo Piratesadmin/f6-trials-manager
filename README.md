@@ -1,8 +1,8 @@
-# F6 Trials Manager v0.9
+# F6 Trials Manager v0.10
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.9 introduces a 17-player minimum squad target and team-specific Team Planner permissions. Every authenticated coach can still see and edit all player profiles, assessments, notes, decisions and emails. Only an assigned coach or administrator can change a team's planner, targets or planned squad.
+Version 0.10 expands player profiles and CSV import with date of birth, division interest, second position, playing experience and highest level played. Phone numbers and home addresses are deliberately excluded. Coaches also receive a personal starred-player shortlist, and each player can have an optional resized profile photo.
 
 ## How the PIN works
 
@@ -44,7 +44,7 @@ Firebase passwords must be at least 6 characters, so use a PIN of 6–12 digits.
 4. Start in **Locked mode**.
 5. Open the **Rules** tab and publish the complete contents of `firebase-database-rules.json`.
 
-The supplied rules allow every authenticated account to work with players and communications while restricting each team plan to that team's assigned coaches. They also enforce a minimum positional-target total of 17.
+The supplied rules allow every authenticated account to work with players and communications while restricting each team plan to that team's assigned coaches. They also enforce a minimum positional-target total of 17, keep each coach's starred-player list private to their Firebase account and protect player photos behind authentication.
 
 The rules use `trials@flamingsix.co.uk` as the shared administrator email. If your `VITE_FIREBASE_LOGIN_EMAIL` is different, replace that email in `firebase-database-rules.json` before publishing it.
 
@@ -107,6 +107,26 @@ The PIN itself is not placed in `.env.local`; enter it on the portal screen.
 ## Important privacy note
 
 The PIN protects access through Firebase, but it is still a shared credential. Change it after trials, when a coach leaves, or if it is shared outside the intended group.
+
+Dates of birth and photos are personal data. Only collect them when needed, limit portal access to current coaches and remove trial records in line with the club's retention policy.
+
+## v0.10 player information, personal stars and photos
+
+The player overview and CSV importer now support:
+
+- full name and email;
+- date of birth;
+- interested division or divisions;
+- primary and second position;
+- past playing experience;
+- highest level played in England or internationally;
+- an optional player photo.
+
+Phone numbers, street addresses, city and postal-code fields are not available in the player profile or CSV mapping. Common legacy phone and address properties are also stripped whenever an older player is normalised and next saved. Remove those questions separately from the club's public Google Form if they are still present there.
+
+Each coach can select the star beside a player and use **Filters → Show only my starred players** to open their personal shortlist. Stars belong to the signed-in Firebase account. Coaches using separate logins therefore receive separate lists; everyone using the shared club PIN shares the one PIN-account list.
+
+Photos are reduced in the browser to a small JPEG thumbnail before upload and stored in the authenticated Realtime Database under `playerPhotos`. The original file is not retained. This avoids requiring Firebase Cloud Storage or an additional GitHub secret. Publish the supplied `firebase-database-rules.json` before using stars or photos on the live site.
 
 ## v0.4 player profiles and assessment
 
@@ -208,4 +228,4 @@ npm run lint
 npm run build
 ```
 
-See `RELEASE_NOTES_v0.9.md` for replacement, Firebase and testing steps.
+See `RELEASE_NOTES_v0.10.md` for replacement, Firebase and testing steps.

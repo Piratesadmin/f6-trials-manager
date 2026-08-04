@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Check, CheckCircle2, ClipboardList, Copy, ExternalLink, Mail, Star, UserRound } from 'lucide-react'
+import { Camera, Check, CheckCircle2, ClipboardList, Copy, ExternalLink, LoaderCircle, Mail, Star, Trash2, UserRound } from 'lucide-react'
 import type { AssessmentKey, Decision, EmailSettings, Player, PlayerTab, Recommendation, TeamPlans } from '../types'
 import { positions, reasons, recommendations, teams } from '../data/constants'
 import { assessmentCompletion, assessmentFields, averageRating } from '../utils/player'
@@ -16,6 +16,11 @@ type Props = {
   emailSettings: EmailSettings
   teamPlans: TeamPlans
   markSent: (player: Player) => void | Promise<void>
+  starred: boolean
+  toggleStar: () => void | Promise<void>
+  photo: string
+  uploadPhoto: (player: Player, file: File) => Promise<void>
+  removePhoto: (player: Player) => Promise<void>
 }
 
 const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
@@ -27,7 +32,7 @@ const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
 
 const recommendationClass = (recommendation: Recommendation) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayerProfile({ player, players, activeTab, setActiveTab, save, emailSettings, teamPlans, markSent }: Props) {
+export function PlayerProfile({ player, players, activeTab, setActiveTab, save, emailSettings, teamPlans, markSent, starred, toggleStar, photo, uploadPhoto, removePhoto }: Props) {
   const average = averageRating(player)
   const completion = assessmentCompletion(player)
   const initials = player.name.split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2)
@@ -44,17 +49,17 @@ export function PlayerProfile({ player, players, activeTab, setActiveTab, save, 
   return <article className="player-profile">
     <header className="profile-hero">
       <div className="profile-identity">
-        <div className="avatar profile-avatar">{initials}</div>
+        <div className={`avatar profile-avatar ${photo?'has-photo':''}`}>{photo?<img src={photo} alt={`${player.name} profile`}/>:initials}</div>
         <div>
           <div className="profile-title-row"><h2>{player.name}</h2>{player.bibNumber && <span className="bib-badge">#{player.bibNumber}</span>}</div>
           <p>{player.position} · {player.appliedTeam} applicant</p>
           <span className={`recommendation-badge ${recommendationClass(player.recommendation)}`}>{player.recommendation || 'No recommendation yet'}</span>
         </div>
       </div>
-      <div className="profile-score" aria-label={average ? `Average rating ${average.toFixed(1)} out of 5` : 'Not yet rated'}>
+      <div className="profile-hero-actions"><button className={`profile-star ${starred?'starred':''}`} onClick={toggleStar} aria-label={starred?'Remove from my starred players':'Add to my starred players'} title={starred?'Remove from my starred players':'Add to my starred players'}><Star/></button><div className="profile-score" aria-label={average ? `Average rating ${average.toFixed(1)} out of 5` : 'Not yet rated'}>
         <div><Star/><strong>{average ? average.toFixed(1) : '—'}</strong><span>/ 5</span></div>
         <p>{completion}% assessed</p>
-      </div>
+      </div></div>
     </header>
 
     <nav className="profile-tabs" aria-label="Player profile sections">
@@ -62,7 +67,7 @@ export function PlayerProfile({ player, players, activeTab, setActiveTab, save, 
     </nav>
 
     <div className="profile-content">
-      {activeTab === 'overview' && <Overview player={player} save={save}/>} 
+      {activeTab === 'overview' && <Overview player={player} save={save} photo={photo} uploadPhoto={uploadPhoto} removePhoto={removePhoto}/>} 
       {activeTab === 'assessment' && <Assessment player={player} save={save} updateRating={updateRating} toggleTeam={toggleTeam}/>} 
       {activeTab === 'decision' && <DecisionPanel player={player} save={save}/>} 
       {activeTab === 'email' && <EmailPanel player={player} players={players} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent}/>} 
@@ -70,17 +75,36 @@ export function PlayerProfile({ player, players, activeTab, setActiveTab, save, 
   </article>
 }
 
-function Overview({ player, save }: Pick<Props, 'player' | 'save'>) {
+function Overview({ player, save, photo, uploadPhoto, removePhoto }: Pick<Props, 'player' | 'save' | 'photo' | 'uploadPhoto' | 'removePhoto'>) {
+  const photoInput=useRef<HTMLInputElement>(null)
+  const [photoBusy,setPhotoBusy]=useState(false)
+  const [photoError,setPhotoError]=useState('')
+  const choosePhoto=async(file?:File)=>{
+    if(!file)return
+    setPhotoBusy(true);setPhotoError('')
+    try{await uploadPhoto(player,file)}catch(error){setPhotoError(error instanceof Error?error.message:'The photo could not be uploaded.')}finally{setPhotoBusy(false);if(photoInput.current)photoInput.current.value=''}
+  }
+  const remove=async()=>{
+    if(!window.confirm('Remove this player photo? The uploaded image will be deleted.'))return
+    setPhotoBusy(true);setPhotoError('')
+    try{await removePhoto(player)}catch(error){setPhotoError(error instanceof Error?error.message:'The photo could not be removed.')}finally{setPhotoBusy(false)}
+  }
   return <div className="profile-section">
-    <div className="section-heading"><div><span className="eyebrow">PLAYER DETAILS</span><h3>Trial overview</h3><p>Keep identification and attendance details together.</p></div></div>
+    <div className="section-heading"><div><span className="eyebrow">PLAYER DETAILS</span><h3>Trial overview</h3><p>Playing information only—phone numbers and home addresses are not stored.</p></div></div>
+    <div className="player-photo-card"><div className={`player-photo-preview ${photo?'has-photo':''}`}>{photo?<img src={photo} alt={`${player.name} profile`}/>:<UserRound/>}</div><div><b>Player photo</b><span>Optional. Only a small resized thumbnail is stored; the original file is not retained.</span>{photoError&&<small>{photoError}</small>}</div><input ref={photoInput} hidden type="file" accept="image/*" onChange={event=>choosePhoto(event.target.files?.[0])}/><button className="secondary" disabled={photoBusy} onClick={()=>photoInput.current?.click()}>{photoBusy?<LoaderCircle className="spin"/>:<Camera/>}{photo?'Change photo':'Add photo'}</button>{photo&&<button className="photo-remove" disabled={photoBusy} onClick={remove} aria-label={`Remove ${player.name} photo`}><Trash2/></button>}</div>
     <div className="form-card profile-form-grid">
       <label>Full name<input value={player.name} onChange={event => save({ ...player, name: event.target.value })}/></label>
       <label>Email address<input type="email" value={player.email} onChange={event => save({ ...player, email: event.target.value })}/></label>
+      <label>Date of birth<input value={player.dateOfBirth} onChange={event => save({ ...player, dateOfBirth: event.target.value })} placeholder="e.g. 14/03/2002"/></label>
+      <label>Interested division(s)<input value={player.interestedDivisions} onChange={event => save({ ...player, interestedDivisions: event.target.value })} placeholder="As entered on the registration form"/></label>
       <label>Trial / bib number<input inputMode="numeric" value={player.bibNumber} onChange={event => save({ ...player, bibNumber: event.target.value.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 12) })} placeholder="e.g. 17"/></label>
       <label>Trial date or session<input value={player.trialDate} onChange={event => save({ ...player, trialDate: event.target.value })}/></label>
       <label>Applied team<select value={player.appliedTeam} onChange={event => save({ ...player, appliedTeam: event.target.value })}>{['Unassigned', ...teams].map(team => <option key={team}>{team}</option>)}</select></label>
       <label>Primary position<select value={player.position} onChange={event => save({ ...player, position: event.target.value })}>{['Unassigned', ...positions].map(position => <option key={position}>{position}</option>)}</select></label>
+      <label>Second position<select value={player.secondaryPosition} onChange={event => save({ ...player, secondaryPosition: event.target.value })}>{['', ...positions].map(position => <option key={position||'none'} value={position}>{position||'None specified'}</option>)}</select></label>
+      <label>Highest level played<input value={player.highestLevelPlayed} onChange={event => save({ ...player, highestLevelPlayed: event.target.value })} placeholder="England or international level"/></label>
       <label className="attendance-field">Attendance<div className="segmented-control"><button type="button" className={player.attended ? 'active' : ''} onClick={() => save({ ...player, attended: true })}><Check/> Attended</button><button type="button" className={!player.attended ? 'active' : ''} onClick={() => save({ ...player, attended: false })}>Not attended</button></div></label>
+      <label className="full-width">Past playing experience<textarea value={player.playingExperience} onChange={event => save({ ...player, playingExperience: event.target.value })} placeholder="Previous clubs, leagues, years played and relevant experience…"/></label>
       <label className="full-width">Coach notes<textarea value={player.notes} onChange={event => save({ ...player, notes: event.target.value })} placeholder="General notes that do not fit the assessment categories…"/></label>
     </div>
   </div>

@@ -1,7 +1,7 @@
 import type { Player } from '../types'
 import { emptyAssessment } from './player'
 
-export type CsvField = 'name' | 'firstName' | 'lastName' | 'email' | 'appliedTeam' | 'position' | 'trialDate'
+export type CsvField = 'name' | 'firstName' | 'lastName' | 'email' | 'dateOfBirth' | 'interestedDivisions' | 'appliedTeam' | 'position' | 'secondaryPosition' | 'playingExperience' | 'highestLevelPlayed' | 'photoUrl' | 'trialDate'
 export type CsvMapping = Record<CsvField, string>
 
 export type ParsedCsv = {
@@ -51,21 +51,37 @@ const aliases: Record<CsvField, string[]> = {
   firstName: ['first name', 'firstname', 'given name'],
   lastName: ['last name', 'lastname', 'surname', 'family name'],
   email: ['email', 'email address', 'e-mail'],
+  dateOfBirth: ['date of birth', 'dob', 'birth date'],
+  interestedDivisions: ['what division(s) are you interested in playing for?', 'divisions interested', 'interested divisions', 'division(s)', 'divisions'],
   appliedTeam: ['team', 'team preference', 'preferred team', 'team applied for', 'which team'],
-  position: ['position', 'primary position', 'preferred position', 'playing position'],
+  position: ['what position do you primarily play?', 'position', 'primary position', 'preferred position', 'playing position'],
+  secondaryPosition: ["do you have a second position you'd like you play?", "do you have a second position you'd like to play?", 'second position', 'secondary position'],
+  playingExperience: ['what is your past playing experience?', 'past playing experience', 'playing experience', 'experience'],
+  highestLevelPlayed: ['highest level played in england/internationally', 'highest level played', 'highest playing level', 'playing level'],
+  photoUrl: ['player photo', 'photo url', 'photograph', 'photo'],
   trialDate: ['trial date', 'trial session', 'session', 'preferred trial date', 'date'],
 }
 
 export function suggestMapping(headers: string[]): CsvMapping {
   const normalised = headers.map(header => ({ header, value: header.toLowerCase().trim() }))
-  const find = (field: CsvField) => normalised.find(item => aliases[field].some(alias => item.value === alias || item.value.includes(alias)))?.header || ''
+  const find = (field: CsvField) => {
+    const exact = normalised.find(item => aliases[field].some(alias => item.value === alias))
+    if (exact) return exact.header
+    return normalised.find(item => aliases[field].some(alias => alias.length > 4 && item.value.includes(alias)))?.header || ''
+  }
   return {
     name: find('name'),
     firstName: find('firstName'),
     lastName: find('lastName'),
     email: find('email'),
+    dateOfBirth: find('dateOfBirth'),
+    interestedDivisions: find('interestedDivisions'),
     appliedTeam: find('appliedTeam'),
     position: find('position'),
+    secondaryPosition: find('secondaryPosition'),
+    playingExperience: find('playingExperience'),
+    highestLevelPlayed: find('highestLevelPlayed'),
+    photoUrl: find('photoUrl'),
     trialDate: find('trialDate'),
   }
 }
@@ -78,11 +94,19 @@ export function rowsToPlayers(rows: Record<string, string>[], mapping: CsvMappin
   return rows.map(row => {
     const fullName = value(row, mapping.name)
     const combinedName = [value(row, mapping.firstName), value(row, mapping.lastName)].filter(Boolean).join(' ')
+    const interestedDivisions = value(row, mapping.interestedDivisions)
+    const matchedTeam = interestedDivisions.split(/[,;/|]/).map(item => item.trim()).find(item => ['Aces','Ravens','Cobras','Coyotes','Llamas','Meerkats','Leopards','Pirates'].includes(item))
     return {
       name: fullName || combinedName,
       email: value(row, mapping.email).toLowerCase(),
-      appliedTeam: value(row, mapping.appliedTeam) || 'Unassigned',
+      dateOfBirth: value(row, mapping.dateOfBirth),
+      interestedDivisions,
+      appliedTeam: value(row, mapping.appliedTeam) || matchedTeam || 'Unassigned',
       position: value(row, mapping.position) || 'Unassigned',
+      secondaryPosition: value(row, mapping.secondaryPosition),
+      playingExperience: value(row, mapping.playingExperience),
+      highestLevelPlayed: value(row, mapping.highestLevelPlayed),
+      photoUrl: value(row, mapping.photoUrl),
       trialDate: value(row, mapping.trialDate) || 'Not assigned',
       attended: false,
       decision: 'Awaiting decision',

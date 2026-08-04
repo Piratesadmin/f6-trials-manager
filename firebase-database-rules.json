@@ -1,10 +1,23 @@
 {
   "rules": {
-    ".read": "auth != null",
+    ".read": false,
     ".write": false,
-    "players": { ".write": "auth != null" },
-    "emailSettings": { ".write": "auth != null" },
+    "players": { ".read": "auth != null", ".write": "auth != null" },
+    "emailSettings": { ".read": "auth != null", ".write": "auth != null" },
+    "playerStars": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        "$playerId": { ".validate": "newData.val() == true || !newData.exists()" }
+      }
+    },
+    "playerPhotos": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$playerId": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 150000)" }
+    },
     "teamPlans": {
+      ".read": "auth != null",
       ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$team": {
         ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('coachProfiles').child(auth.uid).child('teams').child($team).val() == true)",
@@ -12,8 +25,10 @@
       }
     },
     "coachProfiles": {
+      ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
         ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || (auth.uid == $uid && !data.exists() && newData.child('role').val() == 'coach' && !newData.child('teams').exists()))",
         ".validate": "newData.hasChildren(['uid','email','displayName','role']) && newData.child('uid').val() == $uid && (newData.child('role').val() == 'coach' || newData.child('role').val() == 'admin')"
       }

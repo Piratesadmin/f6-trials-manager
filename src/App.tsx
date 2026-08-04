@@ -3,11 +3,12 @@ import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { onValue, ref, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers } from './data/constants'
-import type { CoachProfile, EmailSettings, PageKey, Player, PlayerTab, SyncState, TeamPlans } from './types'
+import type { CoachProfile, EmailSettings, PageKey, Player, PlayerPhotos, PlayerStars, PlayerTab, SyncState, TeamPlans } from './types'
 import { normalisePlayer } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
 import { buildCommunication, normaliseEmailSettings, sentDecisionFor } from './utils/email'
+import { blobToDataUrl, preparePlayerPhoto } from './utils/photo'
 import { Login } from './components/Login'
 import { CsvImportModal } from './components/CsvImportModal'
 import { Sidebar } from './components/Sidebar'
@@ -43,10 +44,13 @@ export default function App(){
   })
   const [coachProfile,setCoachProfile]=useState<CoachProfile|null>(null)
   const [coachProfiles,setCoachProfiles]=useState<CoachProfile[]>([])
+  const [playerStars,setPlayerStars]=useState<PlayerStars>(()=>JSON.parse(localStorage.getItem('f6playerstars')||'{}') as PlayerStars)
+  const [playerPhotos,setPlayerPhotos]=useState<PlayerPhotos>(()=>JSON.parse(localStorage.getItem('f6playerphotos')||'{}') as PlayerPhotos)
   const isAdmin=demo||Boolean(user?.email&&user.email===sharedLoginEmail)||coachProfile?.role==='admin'
   const editableTeams=isAdmin?Object.keys(teamPlans):assignedTeamNames(coachProfile)
+  const currentCoachId=user?.uid||'local-demo'
 
-  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setUser(u);setAuthLoading(false)})},[])
+  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setUser(u);setAuthLoading(false)})},[])
   useEffect(()=>{if(!database||!user||demo)return;const playersRef=ref(database,'players');return onValue(playersRef,snapshot=>{const value=snapshot.val() as Record<string,Omit<Player,'id'>>|null;if(!value){const seed=Object.fromEntries(initialPlayers.map(({id,...p})=>[id,p]));set(playersRef,seed);return}const next=Object.entries(value).map(([id,p])=>normalisePlayer({id,...p} as Player));setPlayers(next);setSelectedId(current=>next.some(p=>p.id===current)?current:(next[0]?.id||''));setSyncState('live')},()=>setSyncState('offline'))},[user,demo])
   useEffect(()=>{if(!database||!user||demo)return;const plansRef=ref(database,'teamPlans');return onValue(plansRef,snapshot=>{const value=snapshot.val() as TeamPlans|null;if(!value){if(isAdmin)set(plansRef,createDefaultTeamPlans());return}const normalised=normaliseTeamPlans(value);setTeamPlans(normalised);if(isAdmin&&teamPlansNeedMinimumUpgrade(value))set(plansRef,normalised);setSyncState('live')},()=>setSyncState('offline'))},[user,demo,isAdmin])
   useEffect(()=>{if(!database||!user||demo)return;const settingsRef=ref(database,'emailSettings');return onValue(settingsRef,snapshot=>{const value=snapshot.val() as EmailSettings|null;if(!value){set(settingsRef,defaultEmailSettings);return}setEmailSettings(normaliseEmailSettings(value));setSyncState('live')},()=>setSyncState('offline'))},[user,demo])
@@ -65,12 +69,29 @@ export default function App(){
   },[user,demo])
 
   useEffect(()=>{
+    if(!selectedId)return
+    if(!database||!user||demo)return
+    return onValue(ref(database,`playerPhotos/${selectedId}`),snapshot=>setPlayerPhotos(current=>{
+      const next={...current}
+      const value=snapshot.val()
+      if(typeof value==='string'&&value)next[selectedId]=value
+      else delete next[selectedId]
+      return next
+    }))
+  },[selectedId,user,demo])
+
+  useEffect(()=>{
     if(!database||!user||demo||!isAdmin)return
     return onValue(ref(database,'coachProfiles'),snapshot=>{
       const value=snapshot.val() as Record<string,unknown>|null
       setCoachProfiles(value?Object.entries(value).map(([uid,profile])=>normaliseCoachProfile(uid,profile)):[])
     })
   },[user,demo,isAdmin])
+
+  useEffect(()=>{
+    if(!database||!user||demo)return
+    return onValue(ref(database,`playerStars/${user.uid}`),snapshot=>setPlayerStars((snapshot.val() as PlayerStars|null)||{}))
+  },[user,demo])
 
   const save=async(updated:Player)=>{const stamped={...normalisePlayer(updated),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'};if(database&&user&&!demo){setSyncState('saving');const{id,...data}=stamped;await update(ref(database,`players/${id}`),data)}else{const next=players.map(p=>p.id===stamped.id?stamped:p);setPlayers(next);localStorage.setItem('f6players',JSON.stringify(next))}}
   const importPlayers=async(newPlayers:Omit<Player,'id'>[])=>{
@@ -104,6 +125,30 @@ export default function App(){
     const entry=buildCommunication(player,emailSettings,user?.email||'Local demo')
     await save({ ...player, decision: sentDecisionFor(player), emailReviewStatus: 'sent', communicationHistory: { ...player.communicationHistory, [entry.id]: entry } })
   }
+  const togglePlayerStar=async(playerId:string)=>{
+    const next={...playerStars}
+    if(next[playerId])delete next[playerId]
+    else next[playerId]=true
+    setPlayerStars(next)
+    if(database&&user&&!demo)await set(ref(database,`playerStars/${user.uid}/${playerId}`),next[playerId]||null)
+    else localStorage.setItem('f6playerstars',JSON.stringify(next))
+  }
+  const uploadPlayerPhoto=async(player:Player,file:File)=>{
+    const prepared=await preparePlayerPhoto(file)
+    const photo=await blobToDataUrl(prepared)
+    if(photo.length>150000)throw new Error('This photo is still too detailed after resizing. Try a simpler or more tightly cropped image.')
+    const next={...playerPhotos,[player.id]:photo}
+    setPlayerPhotos(next)
+    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`playerPhotos/${player.id}`),photo)}
+    else localStorage.setItem('f6playerphotos',JSON.stringify(next))
+    if(player.photoUrl)await save({...player,photoUrl:''})
+  }
+  const removePlayerPhoto=async(player:Player)=>{
+    const next={...playerPhotos};delete next[player.id];setPlayerPhotos(next)
+    if(database&&user&&!demo)await set(ref(database,`playerPhotos/${player.id}`),null)
+    else localStorage.setItem('f6playerphotos',JSON.stringify(next))
+    if(player.photoUrl)await save({...player,photoUrl:''})
+  }
   const saveCoachProfile=async(profile:CoachProfile)=>{
     if(!isAdmin)return
     const next=normaliseCoachProfile(profile.uid,profile,profile.email)
@@ -114,5 +159,5 @@ export default function App(){
   if(authLoading)return <div className="loading-page">Loading F6 Trials Manager…</div>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
 
-  return <div className="app"><Sidebar page={page} setPage={setPage} players={players} teamFilter={teamFilter} setTeamFilter={setTeamFilter} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} sharedAccount={Boolean(user?.email && user.email === sharedLoginEmail)} assignedTeams={editableTeams} isAdmin={isAdmin} onSignOut={()=>auth&&signOut(auth)}/><main>{page==='dashboard'&&<DashboardPage players={players} settings={emailSettings} teamPlans={teamPlans} setPage={setPage}/>} {page==='players'&&<PlayersPage players={players} selectedId={selectedId} setSelectedId={setSelectedId} query={query} setQuery={setQuery} teamFilter={teamFilter} setTeamFilter={setTeamFilter} save={save} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={setPlayerTab} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markEmailSent}/>} {page==='emails'&&<EmailsPage players={players} settings={emailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} onOpen={id=>openPlayer(id,'email')}/>} {page==='teams'&&<TeamsPage players={players} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} onOpenPlayer={id=>openPlayer(id,'assessment')} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams}/>} {page==='settings'&&<SettingsPage settings={emailSettings} save={saveEmailSettings} coachProfiles={coachProfiles} isAdmin={isAdmin} currentUid={user?.uid||'demo'} saveCoachProfile={saveCoachProfile}/>}</main>{importOpen&&<CsvImportModal existingPlayers={players} onClose={()=>setImportOpen(false)} onImport={importPlayers}/>}</div>
+  return <div className="app"><Sidebar page={page} setPage={setPage} players={players} teamFilter={teamFilter} setTeamFilter={setTeamFilter} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} sharedAccount={Boolean(user?.email && user.email === sharedLoginEmail)} assignedTeams={editableTeams} isAdmin={isAdmin} onSignOut={()=>auth&&signOut(auth)}/><main>{page==='dashboard'&&<DashboardPage players={players} settings={emailSettings} teamPlans={teamPlans} setPage={setPage}/>} {page==='players'&&<PlayersPage players={players} selectedId={selectedId} setSelectedId={setSelectedId} query={query} setQuery={setQuery} teamFilter={teamFilter} setTeamFilter={setTeamFilter} save={save} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={setPlayerTab} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markEmailSent} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto}/>} {page==='emails'&&<EmailsPage players={players} settings={emailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} onOpen={id=>openPlayer(id,'email')}/>} {page==='teams'&&<TeamsPage players={players} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} onOpenPlayer={id=>openPlayer(id,'assessment')} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams}/>} {page==='settings'&&<SettingsPage settings={emailSettings} save={saveEmailSettings} coachProfiles={coachProfiles} isAdmin={isAdmin} currentUid={user?.uid||'demo'} saveCoachProfile={saveCoachProfile}/>}</main>{importOpen&&<CsvImportModal existingPlayers={players} onClose={()=>setImportOpen(false)} onImport={importPlayers}/>}</div>
 }

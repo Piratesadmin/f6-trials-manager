@@ -68,8 +68,14 @@ export type Player = {
   id: string
   name: string
   email: string
+  dateOfBirth: string
+  interestedDivisions: string
   appliedTeam: string
   position: string
+  secondaryPosition: string
+  playingExperience: string
+  highestLevelPlayed: string
+  photoUrl: string
   trialDate: string
   attended: boolean
   decision: Decision
@@ -96,6 +102,8 @@ export type PlayerTab = 'overview' | 'assessment' | 'decision' | 'email'
 export type SyncState = 'live' | 'saving' | 'offline'
 export type PositionTargets = Record<string, number>
 export type TeamPlans = Record<string, PositionTargets>
+export type PlayerStars = Record<string, boolean>
+export type PlayerPhotos = Record<string, string>
 
 export type CoachRole = 'admin' | 'coach'
 
