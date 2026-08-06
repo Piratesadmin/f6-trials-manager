@@ -1,8 +1,8 @@
-# F6 Trials Manager v0.10
+# F6 Club Manager v0.15.1
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.10 expands player profiles and CSV import with date of birth, division interest, second position, playing experience and highest level played. Phone numbers and home addresses are deliberately excluded. Coaches also receive a personal starred-player shortlist, and each player can have an optional resized profile photo.
+Version 0.15.1 introduces the Team administrator role, renames the application F6 Club Manager and includes Firebase Realtime Database-compatible one-team validation.
 
 ## How the PIN works
 
@@ -15,16 +15,16 @@ The portal uses one Firebase Email/Password user behind the scenes:
 
 Choose a PIN with at least 6 digits. Avoid obvious values such as `123456`, the club's founding year, or the venue postcode.
 
-## Individual coach accounts
+## Individual club accounts
 
-The sign-in screen now offers **Club PIN** and **Coach login**. Individual coach accounts use Firebase's existing Email/Password authentication:
+The sign-in screen offers **Club PIN** and **Individual login**. Coach and Team administrator accounts use Firebase's existing Email/Password authentication:
 
 1. Open **Firebase → Authentication → Users**.
 2. Choose **Add user**.
 3. Enter the coach's email address and a strong temporary password.
 4. Send those details privately to the coach.
 
-No extra GitHub secrets are required. Individual accounts identify the coach's email in player updates and communication history. After a coach signs in once, use **Settings → Team permissions** while signed in with the shared PIN administrator account to assign one or more teams.
+No extra GitHub secrets are required. Individual accounts identify the person's email in player updates and communication history. After they sign in once, use **Settings → Team permissions** while signed in with a full administrator account to choose their role and team access.
 
 ## 1. Create the Firebase login
 
@@ -44,9 +44,11 @@ Firebase passwords must be at least 6 characters, so use a PIN of 6–12 digits.
 4. Start in **Locked mode**.
 5. Open the **Rules** tab and publish the complete contents of `firebase-database-rules.json`.
 
-The supplied rules allow every authenticated account to work with players and communications while restricting each team plan to that team's assigned coaches. They also enforce a minimum positional-target total of 17, keep each coach's starred-player list private to their Firebase account and protect player photos behind authentication.
+The supplied rules allow every authenticated account to work with players, trial sessions and communications while restricting each team plan to that team's assigned coaches. They enforce a minimum positional-target total of 17, keep each coach's starred-player list private, protect player photos behind authentication and restrict `playerFinance` and `financeSettings` to administrators at database level.
 
 The rules use `trials@flamingsix.co.uk` as the shared administrator email. If your `VITE_FIREBASE_LOGIN_EMAIL` is different, replace that email in `firebase-database-rules.json` before publishing it.
+
+Publishing the v0.15 rules is required before assigning Team administrators. The rules also prevent Coach and Team administrator accounts from reading or writing season fee records and standard fees.
 
 ## 3. Register the web app
 
@@ -127,6 +129,77 @@ Phone numbers, street addresses, city and postal-code fields are not available i
 Each coach can select the star beside a player and use **Filters → Show only my starred players** to open their personal shortlist. Stars belong to the signed-in Firebase account. Coaches using separate logins therefore receive separate lists; everyone using the shared club PIN shares the one PIN-account list.
 
 Photos are reduced in the browser to a small JPEG thumbnail before upload and stored in the authenticated Realtime Database under `playerPhotos`. The original file is not retained. This avoids requiring Firebase Cloud Storage or an additional GitHub secret. Publish the supplied `firebase-database-rules.json` before using stars or photos on the live site.
+
+## v0.11 schedule, payment and attendance
+
+Open **Schedule** to:
+
+- view all twelve months of the selected year;
+- move between years or return to the current year;
+- select an empty day to create a trial session;
+- add a session name, date, time, venue and notes;
+- run more than one session on the same day;
+- assign or unassign players from the session roster;
+- mark assigned players **Paid / Not paid** and **Attended / Not attended**;
+- see live assigned, paid and attended totals;
+- open a player's full profile directly from the roster.
+
+The player Overview tab also contains the assigned session, payment status and attendance status. The Players filter panel can filter by a specific session, unassigned players, payment status and attendance.
+
+Sessions sync through Firebase under `trialSessions`. Existing player records receive empty `trialSessionId` and unpaid defaults automatically. An older free-text trial date remains visible until the player is assigned to one of the new scheduled sessions; it is not guessed or automatically matched.
+
+## v0.12 Excel player and schedule importer
+
+The import window now accepts both `.csv` and `.xlsx` files. For Excel workbooks matching the Flaming Six attendance export, it automatically:
+
+- reads the session name from the first row;
+- reads the date and start/end times from the second row;
+- reads the venue from the third row;
+- combines detailed player information from **For print** with RSVP status from **For import**;
+- imports name, email, date of birth, divisions, primary/second position, experience and highest level;
+- ignores the Phone column completely;
+- identifies Going, Not answered and Can’t go players;
+- creates the calendar session at the same time as importing players;
+- assigns Going and Not answered players to the session;
+- imports Can’t go players without placing them on the session roster;
+- updates an existing player profile when the email already exists, instead of creating a duplicate;
+- shows invalid or repeated rows before import.
+
+The detected session name, date, times and venue remain editable in the preview. If the workbook omits a year, the importer assumes the current year and asks the coach to confirm the date.
+
+Trial response status is visible in the schedule roster and player Overview. It is also available as a player filter.
+
+## v0.13 confirmed squads and finance
+
+- Set a player's Decision to **Offer accepted** to place them in the confirmed squad for their offered team (or applied team when no offered team is set).
+- Each Team Planner has a separate **Confirmed squad** section. All authenticated coaches can see confirmed names and positions.
+- Administrators receive a **Finance** navigation item and dashboard summary; coach accounts do not.
+- Administrators can set the amount owed, record the amount paid, choose **Fully paid**, **2 instalments** or **Direct debit**, and add a short payment note.
+- The treasurer view totals billed, collected and outstanding amounts and exports a CSV.
+- Finance data is stored separately under `playerFinance`, not in player profiles, and Firebase rules restrict it to the shared PIN administrator and accounts with the admin role.
+- Existing players and Firebase records remain compatible. Missing finance records start with no fee, no payment arrangement and £0 paid.
+
+## v0.14 standard fees and financial insights
+
+- Administrators can set the **NVL standard fee** and **LVA standard fee** under Settings.
+- Aces and Ravens inherit the NVL standard; Cobras, Coyotes, Llamas, Meerkats, Leopards and Pirates inherit the LVA standard.
+- Confirmed players use their team's standard fee automatically.
+- The treasurer can switch an individual player from **Standard** to **Custom amount** for discounts, waivers or other exceptions.
+- Existing v0.13 records with a manually entered amount remain custom, so the upgrade does not overwrite them.
+- The Finance page contains a pull-out **Financial insights** panel with collection progress, outstanding balance by team, payment-arrangement breakdowns and team-by-team progress bars.
+- Dashboard, Team Planner, CSV export and Finance totals all use the effective standard or custom fee consistently.
+- `financeSettings` and `playerFinance` are both protected by administrator-only Firebase rules. Publish the updated rules before using this release.
+
+## v0.15 Club Manager and Team administrators
+
+- The application is now named **F6 Club Manager** in the sign-in screen, sidebar, browser title and deployment workflow.
+- The GitHub repository and existing Pages address do not need to change.
+- Administrators can assign **Coach**, **Team administrator** or **Administrator** under Settings.
+- A Team administrator can view and edit player records like a coach and can edit exactly one assigned team in the Team Planner.
+- Selecting a different team for a Team administrator replaces their previous team assignment.
+- Team administrators cannot see Finance, financial insights or administrator-only fee settings.
+- Existing coach and administrator profiles remain compatible without migration.
+- The updated Firebase rules recognise `team-admin` and enforce a maximum of one team assignment for that role.
 
 ## v0.4 player profiles and assessment
 
@@ -228,4 +301,4 @@ npm run lint
 npm run build
 ```
 
-See `RELEASE_NOTES_v0.10.md` for replacement, Firebase and testing steps.
+See `RELEASE_NOTES_v0.12.md` for replacement and testing steps.

@@ -5,6 +5,7 @@ export type Decision =
   | 'Rejection planned'
   | 'Waiting list planned'
   | 'Offer sent'
+  | 'Offer accepted'
   | 'Rejection sent'
   | 'Waiting list sent'
 
@@ -33,6 +34,7 @@ export type Recommendation =
 
 export type EmailReviewStatus = 'draft' | 'reviewed' | 'sent'
 export type EmailType = 'offer' | 'alternative' | 'rejection' | 'waiting-list'
+export type TrialResponseStatus = '' | 'Going' | 'Not answered' | "Can't go"
 
 export type PlayerEmailDraft = {
   responseDeadline: string
@@ -77,6 +79,9 @@ export type Player = {
   highestLevelPlayed: string
   photoUrl: string
   trialDate: string
+  trialSessionId: string
+  trialResponseStatus: TrialResponseStatus
+  paid: boolean
   attended: boolean
   decision: Decision
   offeredTeam?: string
@@ -97,7 +102,7 @@ export type Player = {
   updatedBy?: string
 }
 
-export type PageKey = 'dashboard' | 'players' | 'emails' | 'teams' | 'settings'
+export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'finance' | 'settings'
 export type PlayerTab = 'overview' | 'assessment' | 'decision' | 'email'
 export type SyncState = 'live' | 'saving' | 'offline'
 export type PositionTargets = Record<string, number>
@@ -105,7 +110,42 @@ export type TeamPlans = Record<string, PositionTargets>
 export type PlayerStars = Record<string, boolean>
 export type PlayerPhotos = Record<string, string>
 
-export type CoachRole = 'admin' | 'coach'
+export type PaymentPlan = '' | 'Fully paid' | '2 instalments' | 'Direct debit'
+
+export type PlayerFinance = {
+  playerId: string
+  amountOwed: number
+  usesStandardFee: boolean
+  amountPaid: number
+  paymentPlan: PaymentPlan
+  notes: string
+  updatedAt?: number
+  updatedBy?: string
+}
+
+export type PlayerFinanceMap = Record<string, PlayerFinance>
+
+export type FinanceSettings = {
+  nvlFee: number
+  lvaFee: number
+  updatedAt?: number
+  updatedBy?: string
+}
+
+export type TrialSession = {
+  id: string
+  title: string
+  date: string
+  startTime: string
+  endTime: string
+  venue: string
+  notes: string
+  createdAt?: number
+  updatedAt?: number
+  updatedBy?: string
+}
+
+export type CoachRole = 'admin' | 'team-admin' | 'coach'
 
 export type CoachProfile = {
   uid: string

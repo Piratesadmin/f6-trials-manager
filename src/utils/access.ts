@@ -14,12 +14,14 @@ export function createCoachProfile(uid: string, email: string, admin = false): C
 export function normaliseCoachProfile(uid: string, value: unknown, fallbackEmail = ''): CoachProfile {
   const incoming = value && typeof value === 'object' ? value as Partial<CoachProfile> : {}
   const assigned = incoming.teams && typeof incoming.teams === 'object' ? incoming.teams : {}
+  const role = incoming.role === 'admin' ? 'admin' : incoming.role === 'team-admin' ? 'team-admin' : 'coach'
+  const assignedTeams = teams.filter(team => assigned[team] === true)
   return {
     uid,
     email: typeof incoming.email === 'string' ? incoming.email : fallbackEmail,
     displayName: typeof incoming.displayName === 'string' && incoming.displayName.trim() ? incoming.displayName : createCoachProfile(uid, fallbackEmail).displayName,
-    role: incoming.role === 'admin' ? 'admin' : 'coach',
-    teams: Object.fromEntries(teams.filter(team => assigned[team] === true).map(team => [team, true])),
+    role,
+    teams: Object.fromEntries((role === 'team-admin' ? assignedTeams.slice(0,1) : assignedTeams).map(team => [team, true])),
   }
 }
 

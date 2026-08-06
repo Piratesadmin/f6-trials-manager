@@ -122,7 +122,7 @@ export function emailValidation(player: Player, settings: EmailSettings, players
     const team = player.offeredTeam || player.appliedTeam
     const position = player.offeredPosition || player.position
     const target = teamPlans[team]?.[position] || 0
-    const offered = players.filter(item => item.id !== player.id && (item.decision === 'Offer planned' || item.decision === 'Offer sent' || item.decision === 'Alternative offer') && (item.offeredTeam || item.appliedTeam) === team && (item.offeredPosition || item.position) === position).length
+    const offered = players.filter(item => item.id !== player.id && (item.decision === 'Offer planned' || item.decision === 'Offer sent' || item.decision === 'Offer accepted' || item.decision === 'Alternative offer') && (item.offeredTeam || item.appliedTeam) === team && (item.offeredPosition || item.position) === position).length
     if (target > 0 && offered + 1 > target) issues.push({ level: 'warning', message: `${team} would have ${offered + 1} ${position} offers against a target of ${target}.` })
     const details = settings.teamDetails[team]
     if (!details?.trainingDay || !details?.trainingTime || !details?.venue) issues.push({ level: 'warning', message: `${team} training details are incomplete, so they will not all appear in the email.` })

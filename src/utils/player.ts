@@ -63,7 +63,7 @@ export function normalisePlayer(player: Player): Player {
   const history = player.communicationHistory && typeof player.communicationHistory === 'object'
     ? player.communicationHistory
     : {}
-  const sentDecision = player.decision === 'Offer sent' || player.decision === 'Rejection sent' || player.decision === 'Waiting list sent'
+  const sentDecision = player.decision === 'Offer sent' || player.decision === 'Offer accepted' || player.decision === 'Rejection sent' || player.decision === 'Waiting list sent'
   const reviewStatus = sentDecision ? 'sent' : player.emailReviewStatus === 'reviewed' ? 'reviewed' : 'draft'
 
   return {
@@ -74,6 +74,10 @@ export function normalisePlayer(player: Player): Player {
     playingExperience: player.playingExperience || '',
     highestLevelPlayed: player.highestLevelPlayed || '',
     photoUrl: player.photoUrl || '',
+    trialDate: player.trialDate || 'Not assigned',
+    trialSessionId: player.trialSessionId || '',
+    trialResponseStatus: player.trialResponseStatus === 'Going' || player.trialResponseStatus === 'Not answered' || player.trialResponseStatus === "Can't go" ? player.trialResponseStatus : '',
+    paid: Boolean(player.paid),
     attended: Boolean(player.attended),
     notes: player.notes || '',
     assessment,
