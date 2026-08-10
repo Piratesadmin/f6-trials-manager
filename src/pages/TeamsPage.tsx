@@ -4,8 +4,9 @@ import { PageHeader } from '../components/PageHeader'
 import { positions, teams } from '../data/constants'
 import type { FinanceSettings, Player, PlayerFinanceMap, TeamPlans } from '../types'
 import { averageRating } from '../utils/player'
-import { assignmentForTeam, isPlannedForTeam, minimumSquadSize, minimumTargetForPosition, offeredTeam, recommendationMatchesTeam } from '../utils/teamPlanner'
+import { assignmentForTeam, isPlannedForTeam, minimumSquadSize, minimumTargetForPosition, recommendationMatchesTeam } from '../utils/teamPlanner'
 import { confirmedPosition, confirmedTeam, effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount, paymentStatus } from '../utils/finance'
+import { defaultSquadRole, offerForTeam, primaryOffer } from '../utils/offers'
 
 type Props = {
   players: Player[]
@@ -34,14 +35,14 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
   const confirmed = useMemo(() => players.filter(player => confirmedTeam(player) === selectedTeam), [players, selectedTeam])
   const activePlan = planned.filter(player => player.decision !== 'Offer accepted')
   const targetTotal = positions.reduce((total, position) => total + (targets?.[position] || 0), 0)
-  const offered = planned.filter(player => player.decision !== 'Offer accepted' && offeredTeam(player) === selectedTeam)
+  const offered = planned.filter(player => player.decision !== 'Offer accepted' && Boolean(offerForTeam(player, selectedTeam)))
   const editable = canEditTeam(selectedTeam)
 
   const positionRows = positions.map(position => {
     const target = targets?.[position] || 0
     const positionFor = (player: Player) => assignmentForTeam(player, selectedTeam) || player.position
     const plannedCount = planned.filter(player => positionFor(player) === position).length
-    const offeredCount = offered.filter(player => (player.offeredPosition || positionFor(player)) === position).length
+    const offeredCount = offered.filter(player => (offerForTeam(player, selectedTeam)?.position || positionFor(player)) === position).length
     const recommendedCount = players.filter(player => ['Strong offer','Offer'].includes(player.recommendation) && recommendationMatchesTeam(player, selectedTeam) && positionFor(player) === position).length
     const remaining = target - plannedCount
     return { position, target, plannedCount, offeredCount, recommendedCount, remaining }
@@ -67,8 +68,9 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
   }
   const changePosition = (player: Player, position: string) => {
     if(!editable)return
-    const update: Player = { ...player, teamConsideration: { ...player.teamConsideration, [selectedTeam]: position } }
-    if (offeredTeam(player) === selectedTeam) update.offeredPosition = position
+    const offers = player.offers.map(offer => offer.team === selectedTeam ? { ...offer, position } : offer)
+    const update: Player = { ...player, offers, teamConsideration: { ...player.teamConsideration, [selectedTeam]: position } }
+    if (primaryOffer(player)?.team === selectedTeam) update.offeredPosition = position
     savePlayer(update)
   }
   const movePlayer = (player: Player, destination: string) => {
@@ -77,10 +79,17 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
     const teamConsideration = { ...player.teamConsideration }
     delete teamConsideration[selectedTeam]
     teamConsideration[destination] = currentPosition
-    const update: Player = { ...player, teamConsideration }
-    if (offeredTeam(player) === selectedTeam) {
-      update.offeredTeam = destination
-      update.decision = player.appliedTeam === destination ? 'Offer planned' : 'Alternative offer'
+    const currentOffer = offerForTeam(player, selectedTeam)
+    const destinationOffer = offerForTeam(player, destination)
+    const offers = currentOffer
+      ? player.offers.flatMap(offer => offer.team === selectedTeam ? (destinationOffer ? [] : [{ ...offer, team: destination }]) : [offer])
+      : player.offers
+    const update: Player = { ...player, offers, teamConsideration }
+    if (currentOffer) {
+      const primary = player.offeredTeam === selectedTeam ? offers.find(offer => offer.team === destination) || offers[0] : primaryOffer(update)
+      update.offeredTeam = primary?.team || ''
+      update.offeredPosition = primary?.position || ''
+      update.decision = offers.some(offer => offer.team === player.appliedTeam) ? 'Offer planned' : 'Alternative offer'
       update.emailReviewStatus = 'draft'
     }
     savePlayer(update)
@@ -88,11 +97,15 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
   const prepareOffer = (player: Player) => {
     if(!editable)return
     const position = assignmentForTeam(player, selectedTeam) || player.position
+    const existing = offerForTeam(player, selectedTeam)
+    const offers = existing ? player.offers : [...player.offers, { team: selectedTeam, position, squadRole: defaultSquadRole }]
+    const primary = primaryOffer(player) || offers[0]
     savePlayer({
       ...player,
-      decision: player.appliedTeam === selectedTeam ? 'Offer planned' : 'Alternative offer',
-      offeredTeam: selectedTeam,
-      offeredPosition: position,
+      decision: offers.some(offer => offer.team === player.appliedTeam) ? 'Offer planned' : 'Alternative offer',
+      offers,
+      offeredTeam: primary?.team || selectedTeam,
+      offeredPosition: primary?.position || position,
       emailReviewStatus: 'draft',
       teamConsideration: { ...player.teamConsideration, [selectedTeam]: position },
     })
@@ -160,7 +173,7 @@ function ConfirmedPlayerCard({player,isAdmin,finance,financeSettings,onOpen}:{pl
 
 function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPosition, onMove, onPrepareOffer, onRemove }: { player: Player; team: string; editable:boolean; moveTeams:string[]; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onRemove:(player:Player)=>void }) {
   const rating = averageRating(player)
-  const isOffered = offeredTeam(player) === team
+  const isOffered = Boolean(offerForTeam(player, team))
   return <div className="planned-player-card">
     <button className="planner-player-identity" onClick={() => onOpen(player.id)}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</span></div><ArrowRight/></button>
     <label>Position<select disabled={!editable} aria-label={`${player.name} planned position`} value={assignmentForTeam(player,team)||player.position} onChange={event => onPosition(player,event.target.value)}>{positions.map(position=><option key={position}>{position}</option>)}</select></label>

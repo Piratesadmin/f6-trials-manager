@@ -1,5 +1,6 @@
 import { positions, teams } from '../data/constants'
 import type { Player, PositionTargets, TeamPlans } from '../types'
+import { offerForTeam, primaryOffer } from './offers'
 
 export const defaultPositionTargets: PositionTargets = {
   Setter: 2,
@@ -45,12 +46,14 @@ export function teamPlansNeedMinimumUpgrade(value: TeamPlans) {
 
 export function offeredTeam(player: Player) {
   if (!player.decision.includes('Offer') && player.decision !== 'Alternative offer') return ''
-  return player.offeredTeam || player.appliedTeam
+  return primaryOffer(player)?.team || player.offeredTeam || player.appliedTeam
 }
 
 export function assignmentForTeam(player: Player, team: string) {
-  if (player.teamConsideration[team]) return player.teamConsideration[team]
-  return offeredTeam(player) === team ? player.offeredPosition || player.position : ''
+  const offer = offerForTeam(player, team)
+  if (offer) return offer.position
+  if (player.decision === 'Offer accepted') return ''
+  return player.teamConsideration[team] || ''
 }
 
 export function isPlannedForTeam(player: Player, team: string) {

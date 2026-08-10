@@ -10,6 +10,8 @@
       "$sessionId": { ".validate": "!newData.exists() || (newData.hasChildren(['title','date']) && newData.child('title').isString() && newData.child('title').val().length <= 100 && newData.child('date').isString())" }
     },
     "playerStars": {
+      ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
         ".write": "auth != null && auth.uid == $uid",
@@ -51,6 +53,26 @@
         "teams": {
           "$team": { ".validate": "($team == 'Aces' || $team == 'Ravens' || $team == 'Cobras' || $team == 'Coyotes' || $team == 'Llamas' || $team == 'Meerkats' || $team == 'Leopards' || $team == 'Pirates') && newData.val() == true" }
         }
+      }
+    },
+    "seasonSettings": {
+      ".read": "auth != null",
+      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".validate": "newData.hasChildren(['currentSeason']) && newData.child('currentSeason').isString() && newData.child('currentSeason').val().length > 0 && newData.child('currentSeason').val().length <= 60"
+    },
+    "seasonArchives": {
+      ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$archiveId": {
+        ".validate": "!newData.exists() || (newData.hasChildren(['id','seasonName','nextSeasonName','archivedAt','archivedBy','summary','snapshot']) && newData.child('id').val() == $archiveId && newData.child('seasonName').isString() && newData.child('seasonName').val().length <= 60 && newData.child('archivedAt').isNumber())"
+      }
+    },
+    "auditLog": {
+      ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".indexOn": ["timestamp"],
+      "$entryId": {
+        ".write": "auth != null && !data.exists() && newData.exists() && newData.child('actorUid').val() == auth.uid",
+        ".validate": "newData.hasChildren(['id','timestamp','actorUid','actorName','actorEmail','category','action','summary','detail','team','entityType','entityId','season']) && newData.child('id').val() == $entryId && newData.child('timestamp').isNumber() && newData.child('actorUid').isString() && newData.child('actorName').isString() && newData.child('actorName').val().length <= 120 && newData.child('actorEmail').isString() && newData.child('category').isString() && newData.child('action').isString() && newData.child('summary').isString() && newData.child('summary').val().length <= 240 && newData.child('detail').isString() && newData.child('detail').val().length <= 500 && newData.child('team').isString() && newData.child('entityType').isString() && newData.child('entityId').isString() && newData.child('season').isString()"
       }
     }
   }

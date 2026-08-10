@@ -145,6 +145,7 @@ function parsePlayers(rows: Row[], responseLookup: Map<string, TrialResponseStat
       suitableTeams: [],
       bibNumber: '',
       teamConsideration: {},
+      offers: [],
       emailReviewStatus: 'draft',
       emailDraft: { responseDeadline: '', coachName: '', personalMessage: '' },
       communicationHistory: {},
@@ -178,11 +179,18 @@ export async function parseTrialWorkbook(file: File): Promise<ParsedTrialWorkboo
 
   return {
     session: {
+      eventType: 'trial',
       title: metadata[0] || 'Trial session',
       date: timing.date,
       startTime: timing.startTime,
       endTime: timing.endTime,
       venue: metadata[2],
+      teams: [],
+      opponent: '',
+      competition: '',
+      gameLocation: '',
+      recurrenceRule: '',
+      recurrenceGroupId: '',
       notes: `Imported from ${file.name}`,
     },
     players,

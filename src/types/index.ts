@@ -35,6 +35,13 @@ export type Recommendation =
 export type EmailReviewStatus = 'draft' | 'reviewed' | 'sent'
 export type EmailType = 'offer' | 'alternative' | 'rejection' | 'waiting-list'
 export type TrialResponseStatus = '' | 'Going' | 'Not answered' | "Can't go"
+export type SquadRole = 'Starting six' | 'Frequent player' | 'Rotational player' | 'Development / improvement role' | 'Training squad' | 'Role to be discussed'
+
+export type PlayerOffer = {
+  team: string
+  position: string
+  squadRole: SquadRole
+}
 
 export type PlayerEmailDraft = {
   responseDeadline: string
@@ -57,6 +64,7 @@ export type TeamEmailDetails = {
   trainingTime: string
   venue: string
   competition: string
+  calendarColor: string
 }
 
 export type EmailSettings = {
@@ -86,6 +94,7 @@ export type Player = {
   decision: Decision
   offeredTeam?: string
   offeredPosition?: string
+  offers: PlayerOffer[]
   rejectionReason?: string
   notes: string
   assessment: Assessment
@@ -102,7 +111,7 @@ export type Player = {
   updatedBy?: string
 }
 
-export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'finance' | 'settings'
+export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'finance' | 'activity' | 'archive' | 'settings'
 export type PlayerTab = 'overview' | 'assessment' | 'decision' | 'email'
 export type SyncState = 'live' | 'saving' | 'offline'
 export type PositionTargets = Record<string, number>
@@ -132,13 +141,24 @@ export type FinanceSettings = {
   updatedBy?: string
 }
 
+export type ClubEventType = 'trial' | 'training' | 'game'
+export type GameLocation = '' | 'Home' | 'Away'
+export type RecurrenceRule = '' | 'weekly' | 'fortnightly' | 'monthly'
+
 export type TrialSession = {
   id: string
+  eventType: ClubEventType
   title: string
   date: string
   startTime: string
   endTime: string
   venue: string
+  teams: string[]
+  opponent: string
+  competition: string
+  gameLocation: GameLocation
+  recurrenceRule: RecurrenceRule
+  recurrenceGroupId: string
   notes: string
   createdAt?: number
   updatedAt?: number
@@ -153,4 +173,59 @@ export type CoachProfile = {
   email: string
   role: CoachRole
   teams: Record<string, boolean>
+}
+
+export type ActivityCategory = 'player' | 'schedule' | 'email' | 'team' | 'finance' | 'settings' | 'access' | 'import' | 'season'
+export type ActivityEntityType = 'player' | 'session' | 'team' | 'season' | 'settings'
+
+export type ActivityLogEntry = {
+  id: string
+  timestamp: number
+  actorUid: string
+  actorName: string
+  actorEmail: string
+  category: ActivityCategory
+  action: string
+  summary: string
+  detail: string
+  team: string
+  entityType: ActivityEntityType
+  entityId: string
+  season: string
+}
+
+export type ActivityDraft = Omit<ActivityLogEntry, 'id' | 'timestamp' | 'actorUid' | 'actorName' | 'actorEmail' | 'season'>
+
+export type SeasonSettings = {
+  currentSeason: string
+  updatedAt?: number
+  updatedBy?: string
+}
+
+export type SeasonArchiveSummary = {
+  players: number
+  confirmedPlayers: number
+  sessions: number
+  communicationsSent: number
+  amountBilled: number
+  amountPaid: number
+}
+
+export type SeasonArchiveSnapshot = {
+  players: Record<string, Player>
+  trialSessions: Record<string, TrialSession>
+  teamPlans: TeamPlans
+  playerFinance: PlayerFinanceMap
+  financeSettings: FinanceSettings
+  emailSettings: EmailSettings
+}
+
+export type SeasonArchive = {
+  id: string
+  seasonName: string
+  nextSeasonName: string
+  archivedAt: number
+  archivedBy: string
+  summary: SeasonArchiveSummary
+  snapshot: SeasonArchiveSnapshot
 }

@@ -1,4 +1,5 @@
 import type { Assessment, AssessmentKey, Player } from '../types'
+import { normaliseOffers } from './offers'
 
 export const assessmentFields: { key: AssessmentKey; label: string; hint: string }[] = [
   { key: 'serving', label: 'Serving', hint: 'Consistency, control and pressure' },
@@ -55,10 +56,9 @@ export function normalisePlayer(player: Player): Player {
   const consideration = player.teamConsideration && typeof player.teamConsideration === 'object'
     ? Object.fromEntries(Object.entries(player.teamConsideration).filter(([team, position]) => Boolean(team) && typeof position === 'string' && Boolean(position)))
     : {}
-  if ((player.decision?.includes('Offer') || player.decision === 'Alternative offer')) {
-    const offeredTeam = player.offeredTeam || player.appliedTeam
-    if (offeredTeam && !consideration[offeredTeam]) consideration[offeredTeam] = player.offeredPosition || player.position
-  }
+  const offers = normaliseOffers(player)
+  if ((player.decision?.includes('Offer') || player.decision === 'Alternative offer')) offers.forEach(offer=>{if(!consideration[offer.team])consideration[offer.team]=offer.position})
+  const primary = offers.find(offer=>offer.team===player.offeredTeam)||offers[0]
 
   const history = player.communicationHistory && typeof player.communicationHistory === 'object'
     ? player.communicationHistory
@@ -80,6 +80,9 @@ export function normalisePlayer(player: Player): Player {
     paid: Boolean(player.paid),
     attended: Boolean(player.attended),
     notes: player.notes || '',
+    offers,
+    offeredTeam: player.offeredTeam || primary?.team || '',
+    offeredPosition: player.offeredPosition || primary?.position || '',
     assessment,
     recommendation: player.recommendation || '',
     strengths: player.strengths || '',

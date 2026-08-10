@@ -6,6 +6,7 @@ import { averageRating } from '../utils/player'
 import { PageHeader } from '../components/PageHeader'
 import { PlayerProfile } from '../components/PlayerProfile'
 import { activeFilterCount, emptyPlayerFilters, PlayerFilters, type PlayerFilterValues } from '../components/PlayerFilters'
+import { decisionReminderDetailText, decisionReminderDetails } from '../utils/deadline'
 
 type Props = {
   players: Player[]
@@ -78,11 +79,12 @@ export function PlayersPage({ players, sessions, selectedId, setSelectedId, quer
           {filtered.map(player => {
             const rating = averageRating(player)
             const starred=Boolean(playerStars[player.id])
+            const decisionReminder=decisionReminderDetails(player,sessions)
             return <div key={player.id} className={`player-row player-card ${selected.id === player.id ? 'selected' : ''}`}>
               <button className={`player-star-toggle ${starred?'starred':''}`} aria-label={`${starred?'Remove':'Add'} ${player.name} ${currentCoachId==='local-demo'?'from the demo shortlist':'from my starred players'}`} title={starred?'Remove from my starred players':'Add to my starred players'} onClick={()=>toggleStar(player.id)}><Star/></button>
               <button className="player-card-open" onClick={() => selectPlayer(player.id)}>
                 <div className="player-rating"><Star/><b>{rating ? rating.toFixed(1) : '—'}</b></div>
-                <div className="player-main"><div><b>{player.name}</b>{player.bibNumber && <span className="list-bib">#{player.bibNumber}</span>}</div><span>{player.appliedTeam} · {player.position}{player.secondaryPosition?` / ${player.secondaryPosition}`:''}{player.trialResponseStatus?` · ${player.trialResponseStatus}`:''}</span><small className={`recommendation-badge ${player.decision==='Offer accepted'?'recommendation-offer-accepted':recommendationClass(player.recommendation)}`}>{player.decision==='Offer accepted'?'Offer accepted':player.recommendation || player.decision}</small></div>
+                <div className="player-main"><div><b>{player.name}</b>{player.bibNumber && <span className="list-bib">#{player.bibNumber}</span>}</div><span>{player.appliedTeam} · {player.position}{player.secondaryPosition?` / ${player.secondaryPosition}`:''}{player.trialResponseStatus?` · ${player.trialResponseStatus}`:''}</span>{decisionReminder.state!=='none'?<small className={`decision-reminder-badge ${decisionReminder.state}`} title={decisionReminderDetailText(decisionReminder)}>{decisionReminder.label}</small>:<small className={`recommendation-badge ${player.decision==='Offer accepted'?'recommendation-offer-accepted':recommendationClass(player.recommendation)}`}>{player.decision==='Offer accepted'?'Offer accepted':player.recommendation || player.decision}</small>}</div>
                 <ChevronRight/>
               </button>
             </div>

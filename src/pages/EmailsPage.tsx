@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, CheckCircle2, ClipboardCheck, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
-import type { EmailSettings, Player, TeamPlans } from '../types'
+import { AlertTriangle, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
+import type { EmailSettings, Player, TeamPlans, TrialSession } from '../types'
 import { PageHeader } from '../components/PageHeader'
 import { effectiveEmailFields, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
+import { deadlineStateLabel, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
+import { offerTeamsLabel } from '../utils/offers'
+import { OfferOptionsEditor } from '../components/OfferOptionsEditor'
 
 type Props = {
   players: Player[]
+  sessions: TrialSession[]
   settings: EmailSettings
   teamPlans: TeamPlans
   save: (player: Player) => void | Promise<void>
@@ -23,8 +27,9 @@ const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
 
 const statusLabel: Record<EmailQueueStatus, string> = { 'needs-info': 'Needs info', ready: 'Ready to review', reviewed: 'Reviewed', sent: 'Sent' }
 
-export function EmailsPage({ players, settings, teamPlans, save, markSent, onOpen }: Props) {
+export function EmailsPage({ players, sessions, settings, teamPlans, save, markSent, onOpen }: Props) {
   const queue = useMemo(() => players.filter(player => emailTypeFor(player) || latestCommunication(player)), [players])
+  const deadlineFor = (player: Player) => responseDeadlineDetails(player, sessions, settings.defaultResponseDeadline)
   const [statusFilter, setStatusFilter] = useState<'all' | EmailQueueStatus>('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [query, setQuery] = useState('')
@@ -32,9 +37,9 @@ export function EmailsPage({ players, settings, teamPlans, save, markSent, onOpe
   const [checked, setChecked] = useState<string[]>([])
 
   const filtered = queue.filter(player => {
-    const status = emailQueueStatus(player, settings, players, teamPlans)
+    const status = emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player))
     const type = emailTypeFor(player)
-    const search = `${player.name} ${player.email} ${player.appliedTeam} ${type || ''}`.toLowerCase()
+    const search = `${player.name} ${player.email} ${player.appliedTeam} ${offerTeamsLabel(player)} ${type || ''}`.toLowerCase()
     return (statusFilter === 'all' || status === statusFilter) && (typeFilter === 'all' || type === typeFilter) && search.includes(query.trim().toLowerCase())
   })
 
@@ -43,17 +48,18 @@ export function EmailsPage({ players, settings, teamPlans, save, markSent, onOpe
   }, [queue, selectedId])
 
   const selected = queue.find(player => player.id === selectedId) || filtered[0]
-  const counts = Object.fromEntries(['needs-info','ready','reviewed','sent'].map(status => [status, queue.filter(player => emailQueueStatus(player, settings, players, teamPlans) === status).length])) as Record<EmailQueueStatus, number>
+  const counts = Object.fromEntries(['needs-info','ready','reviewed','sent'].map(status => [status, queue.filter(player => emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player)) === status).length])) as Record<EmailQueueStatus, number>
+  const deadlineWarnings=queue.filter(player=>emailTypeFor(player)!=='rejection'&&emailQueueStatus(player,settings,players,teamPlans,deadlineFor(player))!=='sent'&&['overdue','due-soon','approaching'].includes(deadlineFor(player).state)).length
 
   const toggleChecked = (id: string) => setChecked(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   const markSelectedReviewed = () => {
-    queue.filter(player => checked.includes(player.id) && emailQueueStatus(player, settings, players, teamPlans) !== 'sent').forEach(player => save({ ...player, emailReviewStatus: 'reviewed' }))
+    queue.filter(player => checked.includes(player.id) && emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player)) !== 'sent').forEach(player => save({ ...player, emailReviewStatus: 'reviewed' }))
     setChecked([])
   }
   const exportList = () => {
     const exportPlayers = checked.length ? queue.filter(player => checked.includes(player.id)) : filtered
     const escape = (value: string) => `"${value.replaceAll('"', '""')}"`
-    const rows = [['Name','Email','Email type','Status','Team','Decision'], ...exportPlayers.map(player => [player.name,player.email,emailTypeLabel(emailTypeFor(player)),statusLabel[emailQueueStatus(player,settings,players,teamPlans)],player.offeredTeam||player.appliedTeam,player.decision])]
+    const rows = [['Name','Email','Email type','Status','Team option(s)','Decision','Response deadline'], ...exportPlayers.map(player => [player.name,player.email,emailTypeLabel(emailTypeFor(player)),statusLabel[emailQueueStatus(player,settings,players,teamPlans,deadlineFor(player))],offerTeamsLabel(player),player.decision,deadlineFor(player).effectiveDeadline])]
     const csv = rows.map(row => row.map(escape).join(',')).join('\n')
     const link = document.createElement('a')
     link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
@@ -71,6 +77,7 @@ export function EmailsPage({ players, settings, teamPlans, save, markSent, onOpe
       <div className="reviewed"><ClipboardCheck/><span>Reviewed</span><b>{counts.reviewed}</b></div>
       <div className="sent"><CheckCircle2/><span>Recorded sent</span><b>{counts.sent}</b></div>
     </section>
+    {deadlineWarnings>0&&<div className="email-deadline-banner"><CalendarClock/><div><b>{deadlineWarnings} response deadline{deadlineWarnings===1?' needs':'s need'} attention</b><span>Warnings begin 48 hours before the deadline calculated from each trial session.</span></div></div>}
 
     {checked.length > 0 && <div className="bulk-email-bar"><b>{checked.length} selected</b><span>Mark drafts as reviewed or export a handover list.</span><button onClick={markSelectedReviewed}><UserRoundCheck/>Mark reviewed</button><button onClick={() => setChecked([])}>Clear</button></div>}
 
@@ -84,28 +91,30 @@ export function EmailsPage({ players, settings, teamPlans, save, markSent, onOpe
         <div className="email-queue-summary"><span>{filtered.length} message{filtered.length === 1 ? '' : 's'}</span><button onClick={() => setChecked(checked.length === filtered.length ? [] : filtered.map(player => player.id))}>{checked.length === filtered.length && filtered.length ? 'Clear all' : 'Select all'}</button></div>
         <div className="email-queue-list">
           {filtered.map(player => {
-            const status = emailQueueStatus(player, settings, players, teamPlans)
+            const deadline=deadlineFor(player)
+            const status = emailQueueStatus(player, settings, players, teamPlans, deadline)
             return <div className={`email-queue-item ${selected?.id === player.id ? 'selected' : ''}`} key={player.id}>
               <input type="checkbox" checked={checked.includes(player.id)} onChange={() => toggleChecked(player.id)} aria-label={`Select ${player.name}`}/>
-              <button onClick={() => setSelectedId(player.id)}><div className="email-avatar">{player.name.split(' ').map(part => part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{emailTypeLabel(emailTypeFor(player))} · {player.offeredTeam || player.appliedTeam}</span><small className={`email-status ${status}`}>{statusLabel[status]}</small></div></button>
+              <button onClick={() => setSelectedId(player.id)}><div className="email-avatar">{player.name.split(' ').map(part => part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{emailTypeLabel(emailTypeFor(player))} · {offerTeamsLabel(player)}</span><small className={`email-status ${status}`}>{statusLabel[status]}</small>{emailTypeFor(player)!=='rejection'&&status!=='sent'&&deadline.state!=='none'&&<small className={`deadline-badge ${deadline.state}`}>{deadlineStateLabel(deadline.state)}</small>}</div></button>
             </div>
           })}
           {!filtered.length && <div className="email-centre-empty"><Mail/><b>No messages match</b><span>Try another status, type or search.</span></div>}
         </div>
       </aside>
-      {selected ? <EmailReview player={selected} settings={settings} players={players} teamPlans={teamPlans} save={save} markSent={markSent} onOpen={onOpen}/> : <div className="email-review-empty"><Mail/><h2>No email selected</h2><p>Prepare an offer, waiting-list or rejection decision from a player profile first.</p></div>}
+      {selected ? <EmailReview player={selected} sessions={sessions} settings={settings} players={players} teamPlans={teamPlans} save={save} markSent={markSent} onOpen={onOpen}/> : <div className="email-review-empty"><Mail/><h2>No email selected</h2><p>Prepare an offer, waiting-list or rejection decision from a player profile first.</p></div>}
     </section>
   </>
 }
 
-function EmailReview({ player, settings, players, teamPlans, save, markSent, onOpen }: Props & { player: Player }) {
+function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen }: Props & { player: Player }) {
   const [copied, setCopied] = useState<'subject' | 'body' | ''>('')
-  const status = emailQueueStatus(player, settings, players, teamPlans)
-  const issues = emailValidation(player, settings, players, teamPlans)
+  const deadline=responseDeadlineDetails(player,sessions,settings.defaultResponseDeadline)
+  const status = emailQueueStatus(player, settings, players, teamPlans, deadline)
+  const issues = emailValidation(player, settings, players, teamPlans, deadline)
   const blockers = issues.filter(issue => issue.level === 'blocker')
   const subject = emailSubjectFor(player, settings)
-  const body = emailFor(player, settings)
-  const fields = effectiveEmailFields(player, settings)
+  const body = emailFor(player, settings, deadline)
+  const fields = effectiveEmailFields(player, settings, deadline)
   const history = Object.values(player.communicationHistory || {}).sort((a,b) => b.sentAt - a.sentAt)
 
   const copy = async (kind: 'subject' | 'body') => {
@@ -123,8 +132,10 @@ function EmailReview({ player, settings, players, teamPlans, save, markSent, onO
     <header className="email-review-header"><div><span className="eyebrow">{emailTypeLabel(emailTypeFor(player)).toUpperCase()}</span><h2>{player.name}</h2><p>{player.email}</p></div><div><span className={`email-status large ${status}`}>{statusLabel[status]}</span><button className="text-button" onClick={() => onOpen(player.id)}>Open player profile</button></div></header>
 
     <div className="email-review-body">
+      {emailTypeFor(player)!=='rejection'&&deadline.effectiveDeadline&&<section className={`deadline-summary ${deadline.state}`}><CalendarClock/><div><b>{deadlineStateLabel(deadline.state)}</b><span>{formatDeadline(deadline.effectiveDeadline)}{deadline.source==='schedule'?' · automatically set 72 hours after the scheduled session':''}</span></div></section>}
+      {(emailTypeFor(player)==='offer'||emailTypeFor(player)==='alternative')&&<OfferOptionsEditor player={player} save={save} compact/>}
       <section className="email-draft-settings">
-        <label>Response deadline<input value={player.emailDraft.responseDeadline} placeholder={settings.defaultResponseDeadline || 'e.g. 30 August 2026'} onChange={event => updateDraft('responseDeadline', event.target.value)}/><small>{!player.emailDraft.responseDeadline && fields.deadline ? 'Using shared default' : 'Used in this email'}</small></label>
+        <label>Response deadline<input type="datetime-local" value={player.emailDraft.responseDeadline} placeholder={deadline.scheduledDeadline?formatDeadline(deadline.scheduledDeadline):settings.defaultResponseDeadline||'Assign a trial session'} onChange={event => updateDraft('responseDeadline', event.target.value)}/><small>{player.emailDraft.responseDeadline?'Player-specific override (cannot exceed the scheduled limit)':deadline.source==='schedule'?'Automatically using 72 hours after the trial session':fields.deadline?'Using the fallback deadline':'Assign a trial session to calculate this'}</small></label>
         <label>Coach name<input value={player.emailDraft.coachName} placeholder={settings.defaultCoachName || 'Set in Email settings'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using shared default' : 'Signs this email'}</small></label>
         <label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label>
       </section>
@@ -139,7 +150,7 @@ function EmailReview({ player, settings, players, teamPlans, save, markSent, onO
 
       <div className="email-review-actions">
         <button className="secondary" onClick={() => copy('body')}><Copy/>{copied === 'body' ? 'Copied' : 'Copy body'}</button>
-        <a className={`secondary ${blockers.length ? 'disabled' : ''}`} href={blockers.length ? undefined : mailtoFor(player, settings)}><ExternalLink/>Open in email app</a>
+        <a className={`secondary ${blockers.length ? 'disabled' : ''}`} href={blockers.length ? undefined : mailtoFor(player, settings, deadline)}><ExternalLink/>Open in email app</a>
         {status !== 'sent' && <button className="review-button" disabled={Boolean(blockers.length)} onClick={() => save({ ...player, emailReviewStatus: 'reviewed' })}><Check/>Mark reviewed</button>}
         <button className="primary" disabled={Boolean(blockers.length) || status === 'sent'} onClick={confirmSent}><Send/>{status === 'sent' ? 'Sent recorded' : 'Mark as sent'}</button>
       </div>

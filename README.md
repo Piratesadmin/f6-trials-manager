@@ -1,8 +1,62 @@
-# F6 Club Manager v0.15.1
+# F6 Club Manager v0.21
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.15.1 introduces the Team administrator role, renames the application F6 Club Manager and includes Firebase Realtime Database-compatible one-team validation.
+Version 0.21 adds multi-team offers, a separate position and squad role for every option, and clearer 72-hour response wording.
+
+## v0.21 multi-team offer options
+
+- Player decisions and the Email Centre can now offer one player several teams in one message.
+- Coaches tick the teams being offered and choose a playing position for every option.
+- Every team option records an expected squad role: Starting six, Frequent player, Rotational player, Development / improvement role, Training squad or Role to be discussed.
+- Offer and alternative-offer templates list every option and include the relevant training, venue and competition details for each team.
+- The generated response paragraph asks for a reply within 72 hours of the trial session and invites the player to contact the club if that timing is not possible.
+- Pre-send checks validate every selected option and warn against each team and positional target independently.
+- The Email Centre queue, search and CSV handover export show all offered teams.
+- The Team Planner counts each option against its own team while an accepted player is confirmed only in the option they choose.
+- Existing Firebase records with a single legacy offer are upgraded safely in memory, so no database migration is required.
+- No Firebase rule change or new GitHub secret is required.
+
+## v0.20.1 trialist cleanup
+
+- The administrator **Seasons** page now includes **Remove trialists from live records**.
+- **Final rejections only** removes players whose rejection email is marked sent.
+- **Everyone outside confirmed squads** removes every player whose decision is not **Offer accepted**.
+- A live preview shows confirmed players protected, final rejections, open offers and waiting-list players.
+- The broader option warns explicitly when unresolved offers or waiting-list players are included.
+- Typing `REMOVE` is required before any live records can be deleted.
+- Cleanup removes the selected player profiles, player photos, player finance records and every coach's personal star reference.
+- Confirmed players, schedules, team settings and coach accounts are unaffected.
+- The cleanup is recorded in the administrator activity history.
+- Existing season archives and prior audit entries remain unchanged; this is a live-workspace cleanup rather than a complete historic erasure.
+- Publish the supplied v0.20.1 Firebase rules before using cleanup so administrators can remove stale star references safely.
+
+## v0.20 season rollover and activity history
+
+- Administrators have new **Activity** and **Seasons** sections in the main navigation.
+- Important player decisions, recommendations, team-plan changes, attendance, trial payments, schedules, imports, emails, account permissions, fees and club settings are attributed to the signed-in account.
+- Activity records are append-only, visible only to full administrators and exportable as CSV.
+- The Activity page supports search plus category, team and person filters.
+- A season rollover creates a read-only snapshot before changing any live records.
+- Archives retain player profiles, assessments, decisions, communication history, schedules, team targets and finance records.
+- Each archived season shows final totals and confirmed squads and can be downloaded as structured JSON.
+- Rollover clears live players, events, player payments, personal stars and photos for the new season.
+- Coach accounts, permissions, team targets, email templates, team details, standard fees and the activity history continue into the new season.
+- The live season name now appears in the sidebar and updates automatically after rollover.
+- An explicit `ARCHIVE` confirmation is required before rollover can run.
+- Empty live Firebase player data now remains empty instead of recreating sample players after rollover.
+- Publish the supplied v0.20 Firebase rules before using either feature.
+
+## v0.19 dashboard notifications
+
+- The dashboard bell shows a live count of active player and schedule reminders.
+- Coaches and Team administrators only receive player notifications for their assigned teams.
+- Full administrators and the shared PIN account see club-wide notifications.
+- Recommended and referred players link directly to their Decision tab.
+- Trial reminders are available club-wide, while training and game reminders are matched to the account's assigned teams.
+- Relevant events appear during the next seven days and open directly in the Schedule.
+- Player alerts clear automatically when the player is added to the relevant team plan or reaches a final outcome.
+- No Firebase migration, rule update or new GitHub secret is required.
 
 ## How the PIN works
 
@@ -25,6 +79,65 @@ The sign-in screen offers **Club PIN** and **Individual login**. Coach and Team 
 4. Send those details privately to the coach.
 
 No extra GitHub secrets are required. Individual accounts identify the person's email in player updates and communication history. After they sign in once, use **Settings → Team permissions** while signed in with a full administrator account to choose their role and team access.
+
+Administrators can also edit the person's **Coach name** in that permissions row. The saved name appears automatically in offer, alternative-offer, waiting-list and rejection templates whenever that individual account is signed in. The shared PIN account continues to use the fallback name configured under **Settings → Club communication** because a shared login cannot identify which person is using it.
+
+## v0.16 coach names and 72-hour response deadlines
+
+- Individual coach and Team administrator accounts automatically sign email templates using the display name saved in their account profile.
+- Administrators can correct or update coach names under **Settings → Team permissions**.
+- A scheduled player's response deadline is calculated exactly 72 hours after the trial session end time.
+- When no end time exists, the session start time is used; when neither time exists, the session date ends at 23:59 before the 72 hours are added.
+- A player-specific deadline can be earlier, but the pre-send check blocks an override later than the scheduled 72-hour limit.
+- A shared fallback deadline remains available for older players who have no assigned scheduled session.
+- Warnings appear 48 hours before a deadline, become more prominent inside 24 hours, and show as overdue after the deadline passes.
+- Deadline warnings appear on the dashboard, in the Email Centre queue, in the email review panel and on the player's Email tab.
+- Sent communication history stores the exact generated wording, calculated deadline and coach name used at the time.
+- Existing Firebase players, sessions, accounts, email drafts and security rules remain compatible; no database migration or new GitHub secret is required.
+
+## v0.16.1 post-trial decision reminders
+
+- Attended players with an **Awaiting decision** status receive a reminder as soon as their scheduled session finishes.
+- During the first 24 hours the player is marked **Decision needed**.
+- From 24 to 72 hours the reminder changes to **Decision pending**.
+- After 72 hours it changes to **Decision overdue**.
+- The dashboard shows live totals and the five most urgent players; selecting one opens that player's Decision tab.
+- The same reminder appears on the player list and beside the player in the Schedule roster.
+- Recording any offer, waiting-list or rejection decision removes the decision reminder automatically.
+- Only players marked as attended receive these reminders, so non-attendees do not create false alerts.
+- The shared PIN account now has an explicit logout icon in the mobile navigation as well as the existing desktop logout button.
+- No Firebase migration, rule update or new secret is required.
+
+## v0.17 club schedule
+
+- Schedule entries can now be created as **Trial**, **Training** or **Game / fixture** events.
+- Calendar days use coloured event markers: orange for trials, blue for training and green for games.
+- Multiple events can still run on the same day and are clearly labelled by type and time.
+- Training and game events can be assigned to one or several club teams.
+- Games can record the opponent, home/away status, competition, venue and timings.
+- Training and games show the confirmed squad for every assigned team, with direct links to player profiles.
+- Trial events retain player assignment, RSVP information, payment status, attendance and post-trial decision reminders.
+- Excel attendance imports always create Trial events.
+- Players can only be assigned to Trial events, protecting email deadlines and decision reminders from training or game entries.
+- Existing schedule records automatically become Trial events, so no migration is required.
+- The Firebase path and rules remain unchanged; no new GitHub secret is required.
+
+## v0.18 recurring training and calendar views
+
+- New Training events can repeat every week, every two weeks or every month until a selected end date.
+- Before saving, the event editor shows how many training sessions will be created.
+- Each generated occurrence is saved as a real shared calendar event and can be edited or removed individually.
+- Recurring sessions carry a recurrence badge in their event details.
+- The Schedule can switch between **Week**, **Month** and **Year** views.
+- Week view provides a seven-day agenda with full event cards and quick Add buttons.
+- Month view shows event names and times directly inside a larger monthly grid.
+- Year view retains the compact twelve-month overview.
+- Navigation adapts to the selected view: previous/next week, month or year plus a Today button.
+- Every team has a custom calendar colour under **Settings → Team details**.
+- Training and game events automatically use the colour of their first selected team; multi-team events retain the additional teams in their details.
+- Changing a team colour updates its existing schedule entries automatically.
+- Existing email/team settings receive safe default colours without migration.
+- No Firebase rule change or new GitHub secret is required.
 
 ## 1. Create the Firebase login
 

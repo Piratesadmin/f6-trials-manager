@@ -121,6 +121,7 @@ export function rowsToPlayers(rows: Record<string, string>[], mapping: CsvMappin
       suitableTeams: [],
       bibNumber: '',
       teamConsideration: {},
+      offers: [],
       emailReviewStatus: 'draft',
       emailDraft: { responseDeadline: '', coachName: '', personalMessage: '' },
       communicationHistory: {},
