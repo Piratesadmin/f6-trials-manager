@@ -92,6 +92,7 @@ export default function App(){
   })
   const isAdmin=demo||Boolean(user?.email&&user.email===sharedLoginEmail)||coachProfile?.role==='admin'
   const editableTeams=isAdmin?Object.keys(teamPlans):assignedTeamNames(coachProfile)
+  const defaultTeam=editableTeams[0]||teams[0]
   const currentCoachId=user?.uid||'local-demo'
   const signedInCoachName=user?.email&&user.email!==sharedLoginEmail?coachProfile?.displayName.trim()||'':''
   const teamCoachNames=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,assignedCoachNameForTeam(coachProfiles,team,emailSettings.teamDetails[team]?.adminEmail)]))
@@ -106,8 +107,8 @@ export default function App(){
       setPlayerTabState(route.playerTab||'decision')
     }
     if(route.page==='schedule')setRequestedSessionId(route.sessionId||'')
-    if(route.page==='teams')setSelectedTeamState(route.team&&teams.includes(route.team)?route.team:teams[0])
-  },[])
+    if(route.page==='teams')setSelectedTeamState(route.team&&teams.includes(route.team)?route.team:defaultTeam)
+  },[defaultTeam])
 
   const navigate=useCallback((route:AppRoute,replace=false)=>{
     applyRoute(route)
@@ -121,9 +122,9 @@ export default function App(){
     if(nextPage==='players')navigate({page:nextPage,playerId:selectedId||undefined,playerTab})
     else if(nextPage==='emails')navigate({page:nextPage,playerId:selectedId||undefined})
     else if(nextPage==='schedule')navigate({page:nextPage})
-    else if(nextPage==='teams')navigate({page:nextPage,team:selectedTeam})
+    else if(nextPage==='teams')navigate({page:nextPage})
     else navigate({page:nextPage})
-  },[navigate,playerTab,selectedId,selectedTeam])
+  },[navigate,playerTab,selectedId])
 
   useEffect(()=>{
     const handleHashChange=()=>applyRoute(parseAppHash(window.location.hash))
