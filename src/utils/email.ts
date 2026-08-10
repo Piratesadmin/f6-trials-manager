@@ -35,16 +35,19 @@ export function latestCommunication(player: Player) {
 
 export function emailTypeFor(player: Player): EmailType | null {
   if (player.decision === 'Offer accepted') return latestCommunication(player)?.type || null
-  if (player.decision === 'Offer planned' || player.decision === 'Offer sent') return latestCommunication(player)?.type || 'offer'
-  if (player.decision === 'Alternative offer') return 'alternative'
-  if (player.decision === 'Rejection planned' || player.decision === 'Rejection sent') return 'rejection'
-  if (player.decision === 'Waiting list planned' || player.decision === 'Waiting list sent') return 'waiting-list'
-  if (player.decision === 'Awaiting decision' && player.suitableTeams.length) {
-    if (player.recommendation === 'Strong offer' || player.recommendation === 'Offer') return 'offer'
-    if (player.recommendation === 'Refer to another team') return 'alternative'
+  if (player.decision === 'Offer sent') return latestCommunication(player)?.type || 'offer'
+  if (player.decision === 'Rejection sent') return 'rejection'
+  if (player.decision === 'Waiting list sent') return 'waiting-list'
+  if (player.suitableTeams.length) {
     if (player.recommendation === 'Waiting list') return 'waiting-list'
     if (player.recommendation === 'Not suitable') return 'rejection'
+    if (player.recommendation === 'Refer to another team') return 'alternative'
+    if (player.recommendation === 'Strong offer' || player.recommendation === 'Offer') return player.decision === 'Alternative offer' ? 'alternative' : 'offer'
   }
+  if (player.decision === 'Offer planned') return 'offer'
+  if (player.decision === 'Alternative offer') return 'alternative'
+  if (player.decision === 'Rejection planned') return 'rejection'
+  if (player.decision === 'Waiting list planned') return 'waiting-list'
   return null
 }
 
@@ -177,7 +180,6 @@ export function emailValidation(player: Player, settings: EmailSettings, players
   if ((type === 'offer' || type === 'alternative') && !offers.length) issues.push({ level: 'blocker', message: 'Choose at least one team option.' })
   if ((type === 'offer' || type === 'alternative') && offers.some(offer => !offer.position)) issues.push({ level: 'blocker', message: 'Choose a playing position for every team option.' })
   if ((type === 'offer' || type === 'alternative') && offers.some(offer => !offer.squadRole)) issues.push({ level: 'blocker', message: 'Choose a squad role for every team option.' })
-  if (type === 'rejection' && !player.rejectionReason) issues.push({ level: 'blocker', message: 'Choose a constructive rejection reason.' })
   if ((type === 'offer' || type === 'alternative')) {
     offers.forEach(offer => {
       const target = teamPlans[offer.team]?.[offer.position] || 0
