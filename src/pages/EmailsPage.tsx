@@ -9,11 +9,14 @@ import { OfferOptionsEditor } from '../components/OfferOptionsEditor'
 
 type Props = {
   players: Player[]
+  playersReady: boolean
   sessions: TrialSession[]
   settings: EmailSettings
   teamPlans: TeamPlans
   save: (player: Player) => void | Promise<void>
   markSent: (player: Player) => void | Promise<void>
+  selectedId: string
+  setSelectedId: (id: string) => void
   onOpen: (id: string) => void
 }
 
@@ -27,13 +30,12 @@ const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
 
 const statusLabel: Record<EmailQueueStatus, string> = { 'needs-info': 'Needs info', ready: 'Ready to review', reviewed: 'Reviewed', sent: 'Sent' }
 
-export function EmailsPage({ players, sessions, settings, teamPlans, save, markSent, onOpen }: Props) {
+export function EmailsPage({ players, playersReady, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen }: Props) {
   const queue = useMemo(() => players.filter(player => emailTypeFor(player) || latestCommunication(player)), [players])
   const deadlineFor = (player: Player) => responseDeadlineDetails(player, sessions, settings.defaultResponseDeadline)
   const [statusFilter, setStatusFilter] = useState<'all' | EmailQueueStatus>('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState(queue[0]?.id || '')
   const [checked, setChecked] = useState<string[]>([])
 
   const filtered = queue.filter(player => {
@@ -44,8 +46,9 @@ export function EmailsPage({ players, sessions, settings, teamPlans, save, markS
   })
 
   useEffect(() => {
+    if (!playersReady) return
     if (!queue.some(player => player.id === selectedId)) setSelectedId(queue[0]?.id || '')
-  }, [queue, selectedId])
+  }, [playersReady, queue, selectedId, setSelectedId])
 
   const selected = queue.find(player => player.id === selectedId) || filtered[0]
   const counts = Object.fromEntries(['needs-info','ready','reviewed','sent'].map(status => [status, queue.filter(player => emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player)) === status).length])) as Record<EmailQueueStatus, number>
@@ -106,7 +109,7 @@ export function EmailsPage({ players, sessions, settings, teamPlans, save, markS
   </>
 }
 
-function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen }: Props & { player: Player }) {
+function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'> & { player: Player }) {
   const [copied, setCopied] = useState<'subject' | 'body' | ''>('')
   const deadline=responseDeadlineDetails(player,sessions,settings.defaultResponseDeadline)
   const status = emailQueueStatus(player, settings, players, teamPlans, deadline)

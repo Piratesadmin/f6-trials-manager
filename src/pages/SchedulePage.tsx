@@ -76,12 +76,11 @@ export function SchedulePage({ sessions, players, saveSession, saveSessions, del
   useEffect(() => {
     if (!requestedSessionId) return
     const requested = sessions.find(session => session.id === requestedSessionId)
-    if (requested) {
-      setSelectedId(requested.id)
-      setFocusDate(localDate(requested.date))
-      setRosterView('assigned')
-      setFullScreen(true)
-    }
+    if (!requested) return
+    setSelectedId(requested.id)
+    setFocusDate(localDate(requested.date))
+    setRosterView('assigned')
+    setFullScreen(true)
     onRequestedSessionHandled?.()
   }, [requestedSessionId, sessions, onRequestedSessionHandled])
 

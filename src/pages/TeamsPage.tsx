@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { AlertTriangle, ArrowRight, CalendarDays, Check, CheckCircle2, ClipboardList, Lock, MailPlus, Minus, Plus, Star, TrendingUp, UserPlus, Users, X } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { positions, teams } from '../data/constants'
@@ -14,6 +14,8 @@ type Props = {
   teamPlans: TeamPlans
   savePlayer: (player: Player) => void
   saveTarget: (team: string, position: string, target: number) => void
+  selectedTeam: string
+  setSelectedTeam: (team: string) => void
   onOpenPlayer: (id: string) => void
   onOpenSchedule: (id: string) => void
   canEditTeam: (team: string) => boolean
@@ -31,8 +33,7 @@ type CandidateGroup = {
   tone: string
 }
 
-export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget, onOpenPlayer, onOpenSchedule, canEditTeam, editableTeams, isAdmin, finances, financeSettings, trialsMode }: Props) {
-  const [selectedTeam, setSelectedTeam] = useState(teams[0])
+export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget, selectedTeam, setSelectedTeam, onOpenPlayer, onOpenSchedule, canEditTeam, editableTeams, isAdmin, finances, financeSettings, trialsMode }: Props) {
   const targets = teamPlans[selectedTeam]
   const planned = useMemo(() => players.filter(player => isPlannedForTeam(player, selectedTeam)), [players, selectedTeam])
   const confirmed = useMemo(() => players.filter(player => confirmedTeam(player) === selectedTeam), [players, selectedTeam])

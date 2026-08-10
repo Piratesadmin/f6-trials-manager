@@ -13,7 +13,7 @@ type Props = {
   players: Player[]
   sessions: TrialSession[]
   selectedId: string
-  setSelectedId: (id: string) => void
+  openPlayer: (id: string, tab: PlayerTab) => void
   query: string
   setQuery: (query: string) => void
   teamFilter: string
@@ -38,7 +38,7 @@ type Props = {
 
 const recommendationClass = (recommendation: Player['recommendation']) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayersPage({ players, sessions, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, saveDecision, saveAssessment, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, trialsMode }: Props) {
+export function PlayersPage({ players, sessions, selectedId, openPlayer, query, setQuery, teamFilter, setTeamFilter, save, saveDecision, saveAssessment, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, trialsMode }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState<PlayerFilterValues>(emptyPlayerFilters)
   useEffect(()=>{if(!trialsMode&&!['overview','assessment'].includes(activeTab))setActiveTab('overview')},[trialsMode,activeTab,setActiveTab])
@@ -65,8 +65,7 @@ export function PlayersPage({ players, sessions, selectedId, setSelectedId, quer
   if (!selected) return <div className="empty-state">No players found.</div>
 
   const selectPlayer = (id: string) => {
-    setSelectedId(id)
-    setActiveTab(trialsMode ? 'decision' : 'overview')
+    openPlayer(id,trialsMode ? 'decision' : 'overview')
   }
 
   return <>

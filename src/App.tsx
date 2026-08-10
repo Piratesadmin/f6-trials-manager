@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
-import { defaultEmailSettings, initialPlayers } from './data/constants'
+import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
 import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, normalisePlayer } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
@@ -10,12 +10,13 @@ import { assignedCoachNameForTeam, assignedTeamNames, createCoachProfile, normal
 import { buildCommunication, normaliseEmailSettings, sentDecisionFor } from './utils/email'
 import { blobToDataUrl, prepareEventPhoto, preparePlayerPhoto } from './utils/photo'
 import { normaliseTrialSession, trialDateLabel } from './utils/schedule'
-import { defaultFinanceSettings, normaliseFinanceSettings, normalisePlayerFinance } from './utils/finance'
+import { confirmedTeam, defaultFinanceSettings, normaliseFinanceSettings, normalisePlayerFinance } from './utils/finance'
 import { responseDeadlineDetails } from './utils/deadline'
 import { createActivityEntry, describePlayerChange, normaliseActivityEntry } from './utils/activity'
 import { createSeasonArchive, defaultSeasonSettings, normaliseSeasonArchive, normaliseSeasonSettings } from './utils/season'
 import { createArchivedPlayerRecord, normaliseArchivedPlayerRecord } from './utils/archivedPlayers'
 import { applyDecisionDraft, decisionDraftFor, sameDecisionDraft } from './utils/decision'
+import { appHashFor, parseAppHash, type AppRoute } from './utils/navigation'
 import { Login } from './components/Login'
 import { CsvImportModal } from './components/CsvImportModal'
 import { Sidebar } from './components/Sidebar'
@@ -35,22 +36,25 @@ function firebaseSafeValue<T>(value:T):T {
 }
 
 export default function App(){
+  const initialRoute=parseAppHash(window.location.hash)
   const [user,setUser]=useState<User|null>(null)
   const [authLoading,setAuthLoading]=useState(firebaseConfigured)
   const [demo,setDemo]=useState(!firebaseConfigured)
-  const [page,setPage]=useState<PageKey>('dashboard')
-  const [requestedSessionId,setRequestedSessionId]=useState('')
+  const [page,setPageState]=useState<PageKey>(initialRoute.page)
+  const [requestedSessionId,setRequestedSessionId]=useState(initialRoute.sessionId||'')
   const [activeScheduleSessionId,setActiveScheduleSessionId]=useState('')
   const [players,setPlayers]=useState<Player[]>(()=>{
     const stored = JSON.parse(localStorage.getItem('f6players') || 'null') as Player[] | null
     return (stored || initialPlayers).map(normalisePlayer)
   })
-  const [selectedId,setSelectedId]=useState(players[0]?.id||'')
+  const [playersReady,setPlayersReady]=useState(!firebaseConfigured)
+  const [selectedId,setSelectedId]=useState(initialRoute.playerId||players[0]?.id||'')
   const [query,setQuery]=useState('')
-  const [teamFilter,setTeamFilter]=useState('All teams')
+  const [teamFilter,setTeamFilterState]=useState(initialRoute.teamFilter&&teams.includes(initialRoute.teamFilter)?initialRoute.teamFilter:'All teams')
   const [syncState,setSyncState]=useState<SyncState>(firebaseConfigured?'saving':'offline')
   const [importOpen,setImportOpen]=useState(false)
-  const [playerTab,setPlayerTab]=useState<PlayerTab>('decision')
+  const [playerTab,setPlayerTabState]=useState<PlayerTab>(initialRoute.playerTab||'decision')
+  const [selectedTeam,setSelectedTeamState]=useState(initialRoute.team&&teams.includes(initialRoute.team)?initialRoute.team:teams[0])
   const [teamPlans,setTeamPlans]=useState<TeamPlans>(()=>{
     const stored = JSON.parse(localStorage.getItem('f6teamplans') || 'null') as TeamPlans | null
     return normaliseTeamPlans(stored || createDefaultTeamPlans())
@@ -74,6 +78,7 @@ export default function App(){
     return stored.map(session=>normaliseTrialSession(session.id,session))
   })
   const [seasonSettings,setSeasonSettings]=useState<SeasonSettings>(()=>normaliseSeasonSettings(JSON.parse(localStorage.getItem('f6seasonsettings')||'null')||defaultSeasonSettings))
+  const [seasonSettingsReady,setSeasonSettingsReady]=useState(!firebaseConfigured)
   const [seasonArchives,setSeasonArchives]=useState<SeasonArchive[]>(()=>{
     const stored=JSON.parse(localStorage.getItem('f6seasonarchives')||'[]') as SeasonArchive[]
     return stored
@@ -93,20 +98,70 @@ export default function App(){
   const teamCoachNames=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,assignedCoachNameForTeam(coachProfiles,team,emailSettings.teamDetails[team]?.adminEmail)]))
   const activeEmailSettings={...emailSettings,currentCoachName:signedInCoachName,teamCoachNames}
 
-  useEffect(()=>{if(!seasonSettings.trialsMode&&page==='emails')setPage('dashboard')},[seasonSettings.trialsMode,page])
+  const applyRoute=useCallback((route:AppRoute)=>{
+    setPageState(route.page)
+    if(route.playerId)setSelectedId(route.playerId)
+    if(route.page==='players'){
+      setPlayerTabState(route.playerTab||'decision')
+      setTeamFilterState(route.teamFilter&&teams.includes(route.teamFilter)?route.teamFilter:'All teams')
+    }
+    if(route.page==='schedule')setRequestedSessionId(route.sessionId||'')
+    if(route.page==='teams')setSelectedTeamState(route.team&&teams.includes(route.team)?route.team:teams[0])
+  },[])
+
+  const navigate=useCallback((route:AppRoute,replace=false)=>{
+    applyRoute(route)
+    const nextHash=appHashFor(route)
+    if(window.location.hash===nextHash)return
+    if(replace)window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${nextHash}`)
+    else window.location.hash=nextHash
+  },[applyRoute])
+
+  const navigatePage=useCallback((nextPage:PageKey)=>{
+    if(nextPage==='players')navigate({page:nextPage,playerId:selectedId||undefined,playerTab,teamFilter})
+    else if(nextPage==='emails')navigate({page:nextPage,playerId:selectedId||undefined})
+    else if(nextPage==='schedule')navigate({page:nextPage,sessionId:activeScheduleSessionId||requestedSessionId||undefined})
+    else if(nextPage==='teams')navigate({page:nextPage,team:selectedTeam})
+    else navigate({page:nextPage})
+  },[activeScheduleSessionId,navigate,playerTab,requestedSessionId,selectedId,selectedTeam,teamFilter])
+
+  useEffect(()=>{
+    const handleHashChange=()=>applyRoute(parseAppHash(window.location.hash))
+    window.addEventListener('hashchange',handleHashChange)
+    const route=parseAppHash(window.location.hash)
+    applyRoute(route)
+    const canonicalHash=appHashFor(route)
+    if(window.location.hash!==canonicalHash)window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${canonicalHash}`)
+    return ()=>window.removeEventListener('hashchange',handleHashChange)
+  },[applyRoute])
+
+  useEffect(()=>{if(seasonSettingsReady&&!seasonSettings.trialsMode&&page==='emails')navigate({page:'dashboard'},true)},[seasonSettingsReady,seasonSettings.trialsMode,page,navigate])
 
   useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setFinanceSettings(defaultFinanceSettings);setUser(u);setAuthLoading(false)})},[])
-  useEffect(()=>{if(!database||!user||demo)return;const playersRef=ref(database,'players');return onValue(playersRef,snapshot=>{const value=snapshot.val() as Record<string,Omit<Player,'id'>>|null;if(!value){setPlayers([]);setSelectedId('');setSyncState('live');return}const next=Object.entries(value).map(([id,p])=>normalisePlayer({id,...p} as Player));setPlayers(next);setSelectedId(current=>next.some(p=>p.id===current)?current:(next[0]?.id||''));setSyncState('live')},()=>setSyncState('offline'))},[user,demo])
+  useEffect(()=>{
+    if(demo){setPlayersReady(true);return}
+    if(!database||!user){setPlayersReady(false);return}
+    setPlayersReady(false)
+    const playersRef=ref(database,'players')
+    return onValue(playersRef,snapshot=>{
+      const value=snapshot.val() as Record<string,Omit<Player,'id'>>|null
+      if(!value){setPlayers([]);setSelectedId('');setPlayersReady(true);setSyncState('live');return}
+      const next=Object.entries(value).map(([id,p])=>normalisePlayer({id,...p} as Player))
+      setPlayers(next);setSelectedId(current=>next.some(p=>p.id===current)?current:(next[0]?.id||''));setPlayersReady(true);setSyncState('live')
+    },()=>{setPlayersReady(true);setSyncState('offline')})
+  },[user,demo])
   useEffect(()=>{if(!database||!user||demo)return;const plansRef=ref(database,'teamPlans');return onValue(plansRef,snapshot=>{const value=snapshot.val() as TeamPlans|null;if(!value){if(isAdmin)set(plansRef,createDefaultTeamPlans());return}const normalised=normaliseTeamPlans(value);setTeamPlans(normalised);if(isAdmin&&teamPlansNeedMinimumUpgrade(value))set(plansRef,normalised);setSyncState('live')},()=>setSyncState('offline'))},[user,demo,isAdmin])
   useEffect(()=>{if(!database||!user||demo)return;const settingsRef=ref(database,'emailSettings');return onValue(settingsRef,snapshot=>{const value=snapshot.val() as EmailSettings|null;if(!value){set(settingsRef,defaultEmailSettings);return}setEmailSettings(normaliseEmailSettings(value));setSyncState('live')},()=>setSyncState('offline'))},[user,demo])
   useEffect(()=>{if(!database||!user||demo)return;return onValue(ref(database,'trialSessions'),snapshot=>{const value=snapshot.val() as Record<string,Partial<TrialSession>>|null;setTrialSessions(value?Object.entries(value).map(([id,session])=>normaliseTrialSession(id,session)):[]);setSyncState('live')},()=>setSyncState('offline'))},[user,demo])
   useEffect(()=>{
-    if(!database||!user||demo)return
+    if(demo){setSeasonSettingsReady(true);return}
+    if(!database||!user){setSeasonSettingsReady(false);return}
+    setSeasonSettingsReady(false)
     const settingsRef=ref(database,'seasonSettings')
     return onValue(settingsRef,snapshot=>{
-      if(!snapshot.exists()){if(isAdmin)set(settingsRef,defaultSeasonSettings);setSeasonSettings(defaultSeasonSettings);return}
-      setSeasonSettings(normaliseSeasonSettings(snapshot.val()));setSyncState('live')
-    },()=>setSyncState('offline'))
+      if(!snapshot.exists()){if(isAdmin)set(settingsRef,defaultSeasonSettings);setSeasonSettings(defaultSeasonSettings);setSeasonSettingsReady(true);return}
+      setSeasonSettings(normaliseSeasonSettings(snapshot.val()));setSeasonSettingsReady(true);setSyncState('live')
+    },()=>{setSeasonSettingsReady(true);setSyncState('offline')})
   },[user,demo,isAdmin])
   useEffect(()=>{
     if(!database||!user||demo)return
@@ -262,9 +317,7 @@ export default function App(){
       setPlayers(next)
       localStorage.setItem('f6players',JSON.stringify(next))
     }
-    if(stamped[0])setSelectedId(stamped[0].id)
-    setPlayerTab('overview')
-    setPage('players')
+    navigate({page:'players',playerId:stamped[0]?.id,playerTab:'overview',teamFilter:'All teams'})
     await recordActivity({category:'import',action:'players_imported',summary:`Imported ${stamped.length} player${stamped.length===1?'':'s'}`,detail:'CSV or Excel player import completed.',team:'',entityType:'settings',entityId:''})
   }
   const importTrialWorkbook=async(session:Omit<TrialSession,'id'>,importedPlayers:Omit<Player,'id'>[])=>{
@@ -310,7 +363,7 @@ export default function App(){
       setPlayers(merged);setTrialSessions(nextSessions)
       localStorage.setItem('f6players',JSON.stringify(merged));localStorage.setItem('f6trialsessions',JSON.stringify(nextSessions))
     }
-    setPage('schedule')
+    navigate({page:'schedule',sessionId})
     await recordActivity({category:'import',action:'trial_workbook_imported',summary:`Imported ${prepared.length} players into ${sessionRecord.title}`,detail:`${trialDateLabel(sessionRecord.date)} · Trial workbook`,team:'',entityType:'session',entityId:sessionRecord.id})
   }
   const saveTeamTarget=async(team:string,position:string,target:number)=>{
@@ -516,23 +569,35 @@ export default function App(){
       setPlayers(nextPlayers);setArchivedPlayers(nextArchived);setPlayerPhotos(nextPhotos)
       localStorage.setItem('f6players',JSON.stringify(nextPlayers));localStorage.setItem('f6archivedplayers',JSON.stringify(nextArchived));localStorage.setItem('f6playerphotos',JSON.stringify(nextPhotos))
     }
-    setSelectedId(record.id);setPlayerTab('overview');setPage('players')
+    navigate({page:'players',playerId:record.id,playerTab:'overview',teamFilter:'All teams'})
     await recordActivity({category:'season',action:'archived_player_restored',summary:`Restored ${record.player.name} to live player records`,detail:`Restored from ${record.archiveReason.toLowerCase()} in ${record.seasonName}.`,team:record.player.appliedTeam,entityType:'player',entityId:record.id})
   }
-  const openPlayer=(id:string,tab:PlayerTab)=>{setSelectedId(id);setPlayerTab(tab);setPage('players')}
-  const openSchedule=(id:string)=>{setRequestedSessionId(id);setPage('schedule')}
+  const openPlayer=(id:string,tab:PlayerTab)=>navigate({page:'players',playerId:id,playerTab:tab,teamFilter})
+  const openSchedule=(id:string)=>navigate({page:'schedule',sessionId:id})
+  const selectPlayerTab=(tab:PlayerTab)=>navigate({page:'players',playerId:selectedId||undefined,playerTab:tab,teamFilter})
+  const playerForTeamFilter=(team:string)=>players.find(player=>player.id===selectedId&&(team==='All teams'||(seasonSettings.trialsMode?player.appliedTeam:confirmedTeam(player))===team))||players.find(player=>team==='All teams'||(seasonSettings.trialsMode?player.appliedTeam:confirmedTeam(player))===team)
+  const changeTeamFilter=(team:string)=>navigate({page:'players',playerId:playerForTeamFilter(team)?.id,playerTab,teamFilter:team})
+  const openTeamPlayers=(team:string)=>navigate({page:'players',playerId:playerForTeamFilter(team)?.id,playerTab,teamFilter:team})
+  const selectEmailPlayer=(id:string)=>navigate({page:'emails',playerId:id},true)
+  const selectTeam=(team:string)=>navigate({page:'teams',team},true)
+  const selectScheduleSession=useCallback((id:string)=>{
+    setActiveScheduleSessionId(id)
+    if(!id||requestedSessionId)return
+    const nextHash=appHashFor({page:'schedule',sessionId:id})
+    if(window.location.hash!==nextHash)window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${nextHash}`)
+  },[requestedSessionId])
 
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
 
   return <div className="app">
-    <Sidebar page={page} setPage={setPage} players={players} teamFilter={teamFilter} setTeamFilter={setTeamFilter} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={Boolean(user?.email && user.email === sharedLoginEmail)} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)}/>
+    <Sidebar page={page} setPage={navigatePage} players={players} teamFilter={teamFilter} openTeam={openTeamPlayers} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={Boolean(user?.email && user.email === sharedLoginEmail)} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)}/>
     <main>
-      {page==='dashboard'&&<DashboardPage players={players} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={setPage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>} 
-      {page==='schedule'&&<SchedulePage sessions={trialSessions} players={players} saveSession={saveTrialSession} saveSessions={saveTrialSessionSeries} deleteSession={deleteTrialSession} savePlayer={save} openPlayer={id=>openPlayer(id,'overview')} onImport={()=>setImportOpen(true)} teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))} requestedSessionId={requestedSessionId} onRequestedSessionHandled={()=>setRequestedSessionId('')} eventPhotos={sessionPhotos[activeScheduleSessionId]||{}} uploadEventPhoto={uploadSessionPhoto} removeEventPhoto={removeSessionPhoto} onSelectedSessionChange={setActiveScheduleSessionId} editableTeams={editableTeams} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>} 
-      {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} setSelectedId={setSelectedId} query={query} setQuery={setQuery} teamFilter={teamFilter} setTeamFilter={setTeamFilter} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={setPlayerTab} emailSettings={activeEmailSettings} teamPlans={teamPlans} markSent={markEmailSent} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} trialsMode={seasonSettings.trialsMode}/>}
-      {page==='emails'&&<EmailsPage players={players} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} onOpen={id=>openPlayer(id,'email')}/>} 
-      {page==='teams'&&<TeamsPage players={players} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode}/>} 
+      {page==='dashboard'&&<DashboardPage players={players} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='schedule'&&<SchedulePage sessions={trialSessions} players={players} saveSession={saveTrialSession} saveSessions={saveTrialSessionSeries} deleteSession={deleteTrialSession} savePlayer={save} openPlayer={id=>openPlayer(id,'overview')} onImport={()=>setImportOpen(true)} teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))} requestedSessionId={requestedSessionId} onRequestedSessionHandled={()=>setRequestedSessionId('')} eventPhotos={sessionPhotos[activeScheduleSessionId]||{}} uploadEventPhoto={uploadSessionPhoto} removeEventPhoto={removeSessionPhoto} onSelectedSessionChange={selectScheduleSession} editableTeams={editableTeams} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} teamFilter={teamFilter} setTeamFilter={changeTeamFilter} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} emailSettings={activeEmailSettings} teamPlans={teamPlans} markSent={markEmailSent} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='emails'&&<EmailsPage players={players} playersReady={playersReady} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'email')}/>}
+      {page==='teams'&&<TeamsPage players={players} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode}/>}
       {page==='finance'&&isAdmin&&<FinancePage players={players} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} onOpenPlayer={id=>openPlayer(id,'overview')}/>} 
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
       {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
