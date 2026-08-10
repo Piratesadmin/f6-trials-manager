@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { AlertTriangle, ArrowRight, CalendarDays, Check, CheckCircle2, ClipboardList, Lock, MailPlus, Minus, Plus, Star, TrendingUp, UserPlus, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CalendarDays, Check, CheckCircle2, ClipboardList, Lock, MailPlus, Minus, Plus, RotateCcw, Star, TrendingUp, UserPlus, Users } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { positions, teams } from '../data/constants'
 import type { FinanceSettings, Player, PlayerFinanceMap, TeamPlans, TrialSession } from '../types'
@@ -65,12 +65,6 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
     { title: 'Division applicants', description: `Unplanned applicants interested in ${teamDivisions[selectedTeam] || 'this team’s division'}.`, players: take(player => teamMatchesInterestedDivisions(player,selectedTeam,teamDivisions)), tone: 'applicants' },
   ].filter(group => group.players.length)
 
-  const removeFromPlan = (player: Player) => {
-    if(!editable)return
-    const teamConsideration = { ...player.teamConsideration }
-    delete teamConsideration[selectedTeam]
-    savePlayer({ ...player, teamConsideration })
-  }
   const changePosition = (player: Player, position: string) => {
     if(!editable)return
     const offers = player.offers.map(offer => offer.team === selectedTeam ? { ...offer, position } : offer)
@@ -128,6 +122,23 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
       teamConsideration:{...player.teamConsideration,[selectedTeam]:acceptedOffer.position},
     })
   }
+  const resetPlayerWorkflow = (player: Player) => {
+    if(!editable)return
+    if(!window.confirm(`Reset ${player.name} to their initial recruitment state?\n\nThis removes all recommendations, suitable teams, offer options and team-planning assignments. Their profile, assessments, notes and communication history will be kept.`))return
+    savePlayer({
+      ...player,
+      decision:'Awaiting decision',
+      recommendation:'',
+      suitableTeams:[],
+      offers:[],
+      offeredTeam:'',
+      offeredPosition:'',
+      rejectionReason:'',
+      teamConsideration:{},
+      emailReviewStatus:'draft',
+      emailDraft:{responseDeadline:'',coachName:'',personalMessage:''},
+    })
+  }
 
   if(!trialsMode)return <>
     <PageHeader title="Teams" subtitle="Confirmed squads and attendance during the playing season."/>
@@ -176,7 +187,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
 
         <article className="planner-panel">
           <div className="planner-panel-head"><div><span className="eyebrow">PLANNED SQUAD</span><h3>{activePlan.length} player{activePlan.length === 1 ? '' : 's'} still in planning</h3><p>Confirmed players are shown above and still count towards positional targets.</p></div></div>
-          {activePlan.length ? <div className="planned-player-list">{activePlan.sort((a,b)=>(assignmentForTeam(a,selectedTeam)||a.position).localeCompare(assignmentForTeam(b,selectedTeam)||b.position)).map(player => <PlannedPlayerCard key={player.id} player={player} team={selectedTeam} editable={editable} moveTeams={editableTeams} onOpen={onOpenPlayer} onPosition={changePosition} onMove={movePlayer} onPrepareOffer={prepareOffer} onAddToTeam={addOfferedPlayerToTeam} onRemove={removeFromPlan}/>)}</div> : <div className="planner-empty"><Users/><h4>No players awaiting squad confirmation</h4><p>{editable?'Add candidates below or prepare offers from the plan.':'This team has no players still in planning.'}</p></div>}
+          {activePlan.length ? <div className="planned-player-list">{activePlan.sort((a,b)=>(assignmentForTeam(a,selectedTeam)||a.position).localeCompare(assignmentForTeam(b,selectedTeam)||b.position)).map(player => <PlannedPlayerCard key={player.id} player={player} team={selectedTeam} editable={editable} moveTeams={editableTeams} onOpen={onOpenPlayer} onPosition={changePosition} onMove={movePlayer} onPrepareOffer={prepareOffer} onAddToTeam={addOfferedPlayerToTeam} onReset={resetPlayerWorkflow}/>)}</div> : <div className="planner-empty"><Users/><h4>No players awaiting squad confirmation</h4><p>{editable?'Add candidates below or prepare offers from the plan.':'This team has no players still in planning.'}</p></div>}
         </article>
       </div>
 
@@ -220,15 +231,14 @@ function ConfirmedPlayerCard({player,isAdmin,finance,financeSettings,onOpen}:{pl
   return <button className="confirmed-player-card" onClick={onOpen}><div className="confirmed-player-icon"><Check/></div><div><b>{player.name}</b><span>{confirmedPosition(player)}{player.bibNumber?` · #${player.bibNumber}`:''}</span></div>{isAdmin?<div className="confirmed-finance"><span className={`finance-status ${deadline.state==='overdue'?'overdue':status.toLowerCase().replaceAll(' ','-')}`}>{deadline.state==='overdue'?'Payment overdue':status}</span><small>{deadline.state==='overdue'?deadline.label:`${formatCurrency(outstandingAmount(record,amountOwed))} outstanding`}</small></div>:<span className="confirmed-private">Confirmed</span>}<ArrowRight/></button>
 }
 
-function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPosition, onMove, onPrepareOffer, onAddToTeam, onRemove }: { player: Player; team: string; editable:boolean; moveTeams:string[]; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onAddToTeam:(player:Player)=>void; onRemove:(player:Player)=>void }) {
+function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPosition, onMove, onPrepareOffer, onAddToTeam, onReset }: { player: Player; team: string; editable:boolean; moveTeams:string[]; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onAddToTeam:(player:Player)=>void; onReset:(player:Player)=>void }) {
   const rating = averageRating(player)
   const isOffered = Boolean(offerForTeam(player, team))
-  const automaticallyPlanned=(player.recommendation==='Offer'||player.recommendation==='Strong offer')&&player.suitableTeams.includes(team)
   return <div className="planned-player-card">
     <button className="planner-player-identity" onClick={() => onOpen(player.id)}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</span></div><ArrowRight/></button>
     <label>Position<select disabled={!editable} aria-label={`${player.name} planned position`} value={assignmentForTeam(player,team)||player.position} onChange={event => onPosition(player,event.target.value)}>{positions.map(position=><option key={position}>{position}</option>)}</select></label>
     <label>Team<select disabled={!editable} aria-label={`Move ${player.name} to team`} value={team} onChange={event => onMove(player,event.target.value)}><option>{team}</option>{moveTeams.filter(item=>item!==team).map(item=><option key={item}>{item}</option>)}</select></label>
-    <div className="planned-actions">{isOffered ? <><span className="offer-ready-chip"><Check/> {player.decision}</span>{editable&&player.decision==='Offer sent'&&<button className="accept-offer" onClick={()=>onAddToTeam(player)}><UserPlus/>Add to team</button>}</> : editable?<button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>:<span className="view-only-chip"><Lock/>View only</span>}{!isOffered && editable && !automaticallyPlanned && <button className="remove-plan" aria-label={`Remove ${player.name} from plan`} title="Remove from plan" onClick={() => onRemove(player)}><X/></button>}</div>
+    <div className="planned-actions">{isOffered ? <><span className="offer-ready-chip"><Check/> {player.decision}</span>{editable&&player.decision==='Offer sent'&&<button className="accept-offer" onClick={()=>onAddToTeam(player)}><UserPlus/>Add to team</button>}</> : editable?<button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>:<span className="view-only-chip"><Lock/>View only</span>}{editable&&<button className="reset-player-workflow" onClick={()=>onReset(player)} title="Reset recruitment workflow"><RotateCcw/>Reset</button>}</div>
   </div>
 }
 
