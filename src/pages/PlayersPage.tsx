@@ -65,7 +65,7 @@ export function PlayersPage({ players, sessions, selectedId, setSelectedId, quer
 
   const selectPlayer = (id: string) => {
     setSelectedId(id)
-    setActiveTab('overview')
+    setActiveTab(trialsMode ? 'decision' : 'overview')
   }
 
   return <>

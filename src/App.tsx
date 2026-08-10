@@ -45,7 +45,7 @@ export default function App(){
   const [teamFilter,setTeamFilter]=useState('All teams')
   const [syncState,setSyncState]=useState<SyncState>(firebaseConfigured?'saving':'offline')
   const [importOpen,setImportOpen]=useState(false)
-  const [playerTab,setPlayerTab]=useState<PlayerTab>('overview')
+  const [playerTab,setPlayerTab]=useState<PlayerTab>('decision')
   const [teamPlans,setTeamPlans]=useState<TeamPlans>(()=>{
     const stored = JSON.parse(localStorage.getItem('f6teamplans') || 'null') as TeamPlans | null
     return normaliseTeamPlans(stored || createDefaultTeamPlans())

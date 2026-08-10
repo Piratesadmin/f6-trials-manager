@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { BarChart3, CalendarClock, Camera, Check, CheckCircle2, ClipboardList, Copy, CreditCard, ExternalLink, LoaderCircle, Mail, Save, Star, Trash2, TrendingUp, UserRound } from 'lucide-react'
-import type { Assessment, AssessmentSnapshot, Decision, EmailSettings, Player, PlayerTab, Recommendation, TeamPlans, TrialResponseStatus, TrialSession } from '../types'
+import type { Assessment, AssessmentSnapshot, EmailSettings, Player, PlayerTab, Recommendation, TeamPlans, TrialResponseStatus, TrialSession } from '../types'
 import { positions, reasons, recommendations, teams } from '../data/constants'
 import { assessmentCompletion, assessmentFields, averageRating } from '../utils/player'
 import { emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailValidation, mailtoFor } from '../utils/email'
@@ -120,8 +120,8 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
   </div>
 }
 
-type AssessmentDraft={assessment:Assessment;recommendation:Recommendation;strengths:string;developmentAreas:string;suitableTeams:string[]}
-const assessmentDraftFor=(player:Player):AssessmentDraft=>({assessment:{...player.assessment},recommendation:player.recommendation,strengths:player.strengths,developmentAreas:player.developmentAreas,suitableTeams:[...player.suitableTeams]})
+type AssessmentDraft={assessment:Assessment;strengths:string;developmentAreas:string}
+const assessmentDraftFor=(player:Player):AssessmentDraft=>({assessment:{...player.assessment},strengths:player.strengths,developmentAreas:player.developmentAreas})
 
 function Assessment({ player, saveAssessment, trialsMode }: Pick<Props, 'player' | 'saveAssessment' | 'trialsMode'>) {
   const [draft,setDraft]=useState<AssessmentDraft>(()=>assessmentDraftFor(player))
@@ -132,7 +132,6 @@ function Assessment({ player, saveAssessment, trialsMode }: Pick<Props, 'player'
   const average=averageRating(draftPlayer)
   const completion=assessmentCompletion(draftPlayer)
   const history=Object.values(player.assessmentHistory||{}).sort((a,b)=>a.recordedAt-b.recordedAt)
-  const toggleTeam=(team:string)=>setDraft(current=>({...current,suitableTeams:current.suitableTeams.includes(team)?current.suitableTeams.filter(item=>item!==team):[...current.suitableTeams,team]}))
   const submit=async()=>{setBusy(true);setSaved(false);try{await saveAssessment(draftPlayer);setSaved(true);window.setTimeout(()=>setSaved(false),2200)}finally{setBusy(false)}}
 
   return <div className="profile-section">
@@ -144,18 +143,6 @@ function Assessment({ player, saveAssessment, trialsMode }: Pick<Props, 'player'
     <div className="ratings-grid">
       {assessmentFields.map(({ key, label, hint }) => <div className="rating-row" key={key}><div><b>{label}</b><span>{hint}</span></div><StarRating label={label} value={draft.assessment[key]} onChange={value=>setDraft(current=>({...current,assessment:{...current.assessment,[key]:value}}))}/><strong>{draft.assessment[key] || '—'}</strong></div>)}
     </div>
-
-    {trialsMode&&<div className="assessment-card">
-      <div className="section-heading"><div><span className="eyebrow">RECOMMENDATION</span><h3>Coach recommendation</h3><p>This is stored with each assessment snapshot so changes can be reviewed over time.</p></div></div>
-      <div className="recommendation-options">
-        {recommendations.map(recommendation => <button type="button" key={recommendation} className={`${recommendationClass(recommendation)} ${draft.recommendation === recommendation ? 'selected' : ''}`} onClick={()=>setDraft(current=>({...current,recommendation:current.recommendation===recommendation?'':recommendation}))}><span></span>{recommendation}{draft.recommendation === recommendation && <Check/>}</button>)}
-      </div>
-    </div>}
-
-    {trialsMode&&<div className="assessment-card">
-      <div className="section-heading"><div><span className="eyebrow">TEAM FIT</span><h3>Suitable teams</h3><p>Select every team that could be a realistic fit.</p></div></div>
-      <div className="team-options">{teams.map(team => <button type="button" key={team} className={draft.suitableTeams.includes(team) ? 'selected' : ''} onClick={() => toggleTeam(team)}>{draft.suitableTeams.includes(team) && <Check/>}{team}</button>)}</div>
-    </div>}
 
     <div className="notes-grid">
       <label><span>Strengths</span><small>What stood out positively?</small><textarea value={draft.strengths} onChange={event=>setDraft(current=>({...current,strengths:event.target.value}))} placeholder="e.g. Reliable serve receive, vocal communicator…"/></label>
@@ -175,15 +162,24 @@ function AssessmentProgression({history,trialsMode}:{history:AssessmentSnapshot[
 }
 
 function DecisionPanel({ player, save }: Pick<Props, 'player' | 'save'>) {
+  const chooseRecommendation=(recommendation:Recommendation)=>save({...player,recommendation:player.recommendation===recommendation?'':recommendation})
+  const toggleTeam=(team:string)=>save({...player,suitableTeams:player.suitableTeams.includes(team)?player.suitableTeams.filter(item=>item!==team):[...player.suitableTeams,team]})
+
   return <div className="profile-section">
-    <div className="section-heading"><div><span className="eyebrow">FINAL OUTCOME</span><h3>Decision workflow</h3><p>Set the confirmed outcome before preparing an email.</p></div></div>
-    <div className="form-card profile-form-grid">
-      <label className="full-width">Decision<select value={player.decision} onChange={event => save({ ...player, decision: event.target.value as Decision, emailReviewStatus: event.target.value.endsWith('sent') || event.target.value === 'Offer accepted' ? 'sent' : 'draft' })}>{['Awaiting decision','Offer planned','Alternative offer','Waiting list planned','Rejection planned','Offer sent','Offer accepted','Waiting list sent','Rejection sent'].map(decision => <option key={decision}>{decision}</option>)}</select></label>
-      {player.decision.includes('Rejection') && <label className="full-width">Rejection reason<select value={player.rejectionReason || reasons[0]} onChange={event => save({ ...player, rejectionReason: event.target.value })}>{reasons.map(reason => <option key={reason}>{reason}</option>)}</select></label>}
+    <div className="assessment-card">
+      <div className="section-heading"><div><span className="eyebrow">RECOMMENDATION</span><h3>Coach recommendation</h3><p>Record the coaches’ current view of the player.</p></div></div>
+      <div className="recommendation-options">
+        {recommendations.map(recommendation => <button type="button" key={recommendation} className={`${recommendationClass(recommendation)} ${player.recommendation === recommendation ? 'selected' : ''}`} onClick={()=>chooseRecommendation(recommendation)}><span></span>{recommendation}{player.recommendation === recommendation && <Check/>}</button>)}
+      </div>
     </div>
+
+    <div className="assessment-card">
+      <div className="section-heading"><div><span className="eyebrow">TEAM FIT</span><h3>Suitable teams</h3><p>Select every team that could be a realistic fit.</p></div></div>
+      <div className="team-options">{teams.map(team => <button type="button" key={team} className={player.suitableTeams.includes(team) ? 'selected' : ''} onClick={() => toggleTeam(team)}>{player.suitableTeams.includes(team) && <Check/>}{team}</button>)}</div>
+    </div>
+    {player.decision.includes('Rejection') && <div className="form-card profile-form-grid"><label className="full-width">Rejection reason<select value={player.rejectionReason || reasons[0]} onChange={event => save({ ...player, rejectionReason: event.target.value })}>{reasons.map(reason => <option key={reason}>{reason}</option>)}</select></label></div>}
     {(player.decision.includes('Offer') || player.decision === 'Alternative offer')&&<OfferOptionsEditor player={player} save={save}/>} 
     {player.decision === 'Offer accepted' && <div className="decision-callout accepted"><CheckCircle2/><div><b>Confirmed squad place</b><p>{player.name} now appears in the confirmed squad for {player.offeredTeam || player.appliedTeam}{primaryOffer(player)?` as ${primaryOffer(player)!.position} · ${primaryOffer(player)!.squadRole}`:''}. Administrators can manage season fees in Finance.</p></div></div>}
-    <div className="decision-callout"><ClipboardList/><div><b>Recommendation and decision are separate</b><p>The assessment recommendation records the coaches’ view. This decision controls the email wording and confirmed-squad status.</p></div></div>
   </div>
 }
 
