@@ -49,7 +49,7 @@ export function EmailsPage({ players, sessions, settings, teamPlans, save, markS
 
   const selected = queue.find(player => player.id === selectedId) || filtered[0]
   const counts = Object.fromEntries(['needs-info','ready','reviewed','sent'].map(status => [status, queue.filter(player => emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player)) === status).length])) as Record<EmailQueueStatus, number>
-  const deadlineWarnings=queue.filter(player=>emailTypeFor(player)!=='rejection'&&emailQueueStatus(player,settings,players,teamPlans,deadlineFor(player))!=='sent'&&['overdue','due-soon','approaching'].includes(deadlineFor(player).state)).length
+  const deadlineWarnings=queue.filter(player=>emailTypeFor(player)!=='rejection'&&['overdue','due-soon','approaching'].includes(deadlineFor(player).state)).length
 
   const toggleChecked = (id: string) => setChecked(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   const markSelectedReviewed = () => {
@@ -77,7 +77,7 @@ export function EmailsPage({ players, sessions, settings, teamPlans, save, markS
       <div className="reviewed"><ClipboardCheck/><span>Reviewed</span><b>{counts.reviewed}</b></div>
       <div className="sent"><CheckCircle2/><span>Recorded sent</span><b>{counts.sent}</b></div>
     </section>
-    {deadlineWarnings>0&&<div className="email-deadline-banner"><CalendarClock/><div><b>{deadlineWarnings} response deadline{deadlineWarnings===1?' needs':'s need'} attention</b><span>Warnings begin 48 hours before the deadline calculated from each trial session.</span></div></div>}
+    {deadlineWarnings>0&&<div className="email-deadline-banner"><CalendarClock/><div><b>{deadlineWarnings} response deadline{deadlineWarnings===1?' needs':'s need'} attention</b><span>Warnings begin 48 hours before the deadline calculated from when each email was recorded sent.</span></div></div>}
 
     {checked.length > 0 && <div className="bulk-email-bar"><b>{checked.length} selected</b><span>Mark drafts as reviewed or export a handover list.</span><button onClick={markSelectedReviewed}><UserRoundCheck/>Mark reviewed</button><button onClick={() => setChecked([])}>Clear</button></div>}
 
@@ -95,7 +95,7 @@ export function EmailsPage({ players, sessions, settings, teamPlans, save, markS
             const status = emailQueueStatus(player, settings, players, teamPlans, deadline)
             return <div className={`email-queue-item ${selected?.id === player.id ? 'selected' : ''}`} key={player.id}>
               <input type="checkbox" checked={checked.includes(player.id)} onChange={() => toggleChecked(player.id)} aria-label={`Select ${player.name}`}/>
-              <button onClick={() => setSelectedId(player.id)}><div className="email-avatar">{player.name.split(' ').map(part => part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{emailTypeLabel(emailTypeFor(player))} · {offerTeamsLabel(player)}</span><small className={`email-status ${status}`}>{statusLabel[status]}</small>{emailTypeFor(player)!=='rejection'&&status!=='sent'&&deadline.state!=='none'&&<small className={`deadline-badge ${deadline.state}`}>{deadlineStateLabel(deadline.state)}</small>}</div></button>
+              <button onClick={() => setSelectedId(player.id)}><div className="email-avatar">{player.name.split(' ').map(part => part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{emailTypeLabel(emailTypeFor(player))} · {offerTeamsLabel(player)}</span><small className={`email-status ${status}`}>{statusLabel[status]}</small>{emailTypeFor(player)!=='rejection'&&deadline.state!=='none'&&<small className={`deadline-badge ${deadline.state}`}>{deadlineStateLabel(deadline.state)}</small>}</div></button>
             </div>
           })}
           {!filtered.length && <div className="email-centre-empty"><Mail/><b>No messages match</b><span>Try another status, type or search.</span></div>}
@@ -132,10 +132,10 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
     <header className="email-review-header"><div><span className="eyebrow">{emailTypeLabel(emailTypeFor(player)).toUpperCase()}</span><h2>{player.name}</h2><p>{player.email}</p></div><div><span className={`email-status large ${status}`}>{statusLabel[status]}</span><button className="text-button" onClick={() => onOpen(player.id)}>Open player profile</button></div></header>
 
     <div className="email-review-body">
-      {emailTypeFor(player)!=='rejection'&&deadline.effectiveDeadline&&<section className={`deadline-summary ${deadline.state}`}><CalendarClock/><div><b>{deadlineStateLabel(deadline.state)}</b><span>{formatDeadline(deadline.effectiveDeadline)}{deadline.source==='schedule'?' · automatically set 72 hours after the scheduled session':''}</span></div></section>}
+      {emailTypeFor(player)!=='rejection'&&<section className={`deadline-summary ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'The clock begins when this email is recorded as sent.'}</span></div></section>}
       {(emailTypeFor(player)==='offer'||emailTypeFor(player)==='alternative')&&<OfferOptionsEditor player={player} save={save} compact/>}
       <section className="email-draft-settings">
-        <label>Response deadline<input type="datetime-local" value={player.emailDraft.responseDeadline} placeholder={deadline.scheduledDeadline?formatDeadline(deadline.scheduledDeadline):settings.defaultResponseDeadline||'Assign a trial session'} onChange={event => updateDraft('responseDeadline', event.target.value)}/><small>{player.emailDraft.responseDeadline?'Player-specific override (cannot exceed the scheduled limit)':deadline.source==='schedule'?'Automatically using 72 hours after the trial session':fields.deadline?'Using the fallback deadline':'Assign a trial session to calculate this'}</small></label>
+        <div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div>
         <label>Coach name<input value={player.emailDraft.coachName} placeholder={settings.defaultCoachName || 'Set in Email settings'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using shared default' : 'Signs this email'}</small></label>
         <label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label>
       </section>

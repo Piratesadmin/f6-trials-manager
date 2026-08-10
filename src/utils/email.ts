@@ -50,18 +50,10 @@ export function emailTypeLabel(type: EmailType | null) {
 
 export function effectiveEmailFields(player: Player, settings: EmailSettings, deadline?: ResponseDeadlineDetails) {
   return {
-    deadline: player.emailDraft.responseDeadline || deadline?.scheduledDeadline || settings.defaultResponseDeadline,
+    deadline: deadline?.effectiveDeadline || '',
     coachName: player.emailDraft.coachName || settings.defaultCoachName,
     personalMessage: player.emailDraft.personalMessage.trim(),
   }
-}
-
-function displayDate(value: string) {
-  if (!value) return '[response deadline]'
-  const date = new Date(value.includes('T') ? value : `${value}T12:00:00`)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('en-GB', value.includes('T')
-    ? { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 export function emailSubjectFor(player: Player, settings: EmailSettings) {
@@ -81,9 +73,9 @@ function teamDetailsParagraph(team: string, settings: EmailSettings) {
   return parts.length ? `${parts.join(' ')}.` : ''
 }
 
-function responseParagraph(deadline: string, multipleTeams: boolean) {
+function responseParagraph(multipleTeams: boolean) {
   const choice = multipleTeams ? 'which option you would prefer' : 'whether you would like to accept your place'
-  return `Please let us know ${choice} by ${displayDate(deadline)}. We ask players to respond within 72 hours of their trial session. We understand that may not be possible, so please let us know as soon as you can if you need a little more time.`
+  return `Please let us know ${choice} within 72 hours of receiving this email. We understand that may not be possible, so please let us know as soon as you can if you need a little more time.`
 }
 
 function offerSection(player: Player, settings: EmailSettings) {
@@ -109,20 +101,20 @@ function offerSection(player: Player, settings: EmailSettings) {
 export function emailFor(player: Player, settings: EmailSettings, deadline?: ResponseDeadlineDetails) {
   const first = player.name.trim().split(/\s+/)[0] || 'there'
   const type = emailTypeFor(player)
-  const { deadline: responseDeadline, coachName, personalMessage } = effectiveEmailFields(player, settings, deadline)
+  const { coachName, personalMessage } = effectiveEmailFields(player, settings, deadline)
   const signoff = `Kind regards,\n${coachName || '[Coach name]'}\n${settings.clubName}`
   const personal = personalMessage ? `\n\n${personalMessage}` : ''
 
   if (type === 'offer') {
     const section = offerSection(player, settings)
-    return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials.\n\nWe were really impressed with your performance and would like to offer you ${section.wording}${personal}\n\n${responseParagraph(responseDeadline, section.multiple)}\n\n${signoff}`
+    return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials.\n\nWe were really impressed with your performance and would like to offer you ${section.wording}${personal}\n\n${responseParagraph(section.multiple)}\n\n${signoff}`
   }
   if (type === 'alternative') {
     const section = offerSection(player, settings)
-    return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials and for expressing an interest in joining ${player.appliedTeam}.\n\nAlthough we are unable to offer you a place with ${player.appliedTeam}, we were impressed with your performance and would like to offer you ${section.wording}${personal}\n\n${responseParagraph(responseDeadline, section.multiple)}\n\n${signoff}`
+    return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials and for expressing an interest in joining ${player.appliedTeam}.\n\nAlthough we are unable to offer you a place with ${player.appliedTeam}, we were impressed with your performance and would like to offer you ${section.wording}${personal}\n\n${responseParagraph(section.multiple)}\n\n${signoff}`
   }
   if (type === 'waiting-list') {
-    return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials.\n\nWe are not yet able to confirm a place, but we would like to offer you a position on our waiting list while we finalise the squads.${personal}\n\nPlease let us know by ${displayDate(responseDeadline)} if you would like to remain under consideration. We will contact you again as soon as a suitable place becomes available.\n\n${signoff}`
+    return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials.\n\nWe are not yet able to confirm a place, but we would like to offer you a position on our waiting list while we finalise the squads.${personal}\n\nPlease let us know within 72 hours of receiving this email if you would like to remain under consideration. We understand that may not be possible, so please let us know as soon as you can if you need a little more time. We will contact you again as soon as a suitable place becomes available.\n\n${signoff}`
   }
   const reason = player.rejectionReason === 'Position already filled'
     ? `We had a particularly high number of players competing for places in the ${player.position} position.`
@@ -139,12 +131,10 @@ export function emailFor(player: Player, settings: EmailSettings, deadline?: Res
 export function emailValidation(player: Player, settings: EmailSettings, players: Player[], teamPlans: TeamPlans, deadline?: ResponseDeadlineDetails): EmailIssue[] {
   const issues: EmailIssue[] = []
   const type = emailTypeFor(player)
-  const { deadline: responseDeadline, coachName } = effectiveEmailFields(player, settings, deadline)
+  const { coachName } = effectiveEmailFields(player, settings, deadline)
   if (!isValidEmail(player.email)) issues.push({ level: 'blocker', message: 'Add a valid recipient email address.' })
   if (!type) issues.push({ level: 'blocker', message: 'Choose an offer, waiting-list or rejection decision.' })
   if (!coachName) issues.push({ level: 'blocker', message: 'Add the coach name in this draft or Email settings.' })
-  if ((type === 'offer' || type === 'alternative' || type === 'waiting-list') && !responseDeadline) issues.push({ level: 'blocker', message: 'Assign a trial session or add a response deadline.' })
-  if ((type === 'offer' || type === 'alternative' || type === 'waiting-list') && deadline?.exceedsScheduleLimit) issues.push({ level: 'blocker', message: 'The response deadline cannot be later than 72 hours after the trial session.' })
   const offers = activeOffers(player)
   if ((type === 'offer' || type === 'alternative') && !offers.length) issues.push({ level: 'blocker', message: 'Choose at least one team option.' })
   if ((type === 'offer' || type === 'alternative') && offers.some(offer => !offer.position)) issues.push({ level: 'blocker', message: 'Choose a playing position for every team option.' })

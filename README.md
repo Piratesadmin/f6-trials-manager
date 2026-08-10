@@ -1,8 +1,21 @@
-# F6 Club Manager v0.21
+# F6 Club Manager v0.22
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.21 adds multi-team offers, a separate position and squad role for every option, and clearer 72-hour response wording.
+Version 0.22 adds coach-focused dashboard shortcuts and starts every response deadline from the time an email is recorded as sent.
+
+## v0.22 coach dashboard and receipt-based deadlines
+
+- Three prominent coach boxes now appear at the top of the dashboard: **Starred players**, **Recommended players** and **Email deadlines**.
+- Each box opens a complete, scrollable view of the relevant players and links directly to the most useful player tab.
+- Starred players remain private to the signed-in account.
+- Recommended players are limited to the coach or Team administrator's assigned teams; administrators see club-wide recommendations.
+- Email deadlines show sent offer, alternative-offer and waiting-list messages whose response window is still active or overdue.
+- Offer and waiting-list emails now ask players to reply within 72 hours of receiving the email.
+- The 72-hour tracking clock begins when the coach selects **Mark as sent**, because this portal prepares emails but does not deliver them directly.
+- Draft emails show that the clock has not started; sent emails show the exact response deadline and live warning state.
+- The old trial-session deadline and editable fallback deadline are no longer used.
+- Existing communication history supplies the recorded send time, so no database migration, rule update or new GitHub secret is required.
 
 ## v0.21 multi-team offer options
 

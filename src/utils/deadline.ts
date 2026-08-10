@@ -6,7 +6,7 @@ export type DecisionReminderState = 'none' | 'needed' | 'pending' | 'overdue'
 export type ResponseDeadlineDetails = {
   scheduledDeadline: string
   effectiveDeadline: string
-  source: 'player' | 'schedule' | 'fallback' | 'none'
+  source: 'receipt' | 'none'
   state: DeadlineState
   exceedsScheduleLimit: boolean
   session?: TrialSession
@@ -36,15 +36,6 @@ export function parseDeadline(value: string) {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-export function scheduledResponseDeadline(player: Player, sessions: TrialSession[]) {
-  const session = sessions.find(item => item.id === player.trialSessionId && item.eventType === 'trial')
-  if (!session) return { value: '', session: undefined }
-  const sessionFinish = sessionFinishDate(session)
-  if (!sessionFinish) return { value: '', session }
-  const deadline = new Date(sessionFinish.getTime() + 72 * 60 * 60 * 1000)
-  return { value: toLocalInputValue(deadline), session }
-}
-
 export type DecisionReminderDetails = {
   state: DecisionReminderState
   label: string
@@ -72,19 +63,23 @@ export function decisionReminderDetailText(details: DecisionReminderDetails) {
   return `Trial finished ${Math.floor(hours / 24)} days ago`
 }
 
-export function responseDeadlineDetails(player: Player, sessions: TrialSession[], fallbackDeadline = '', now = new Date()): ResponseDeadlineDetails {
-  const scheduled = scheduledResponseDeadline(player, sessions)
-  const effectiveDeadline = player.emailDraft.responseDeadline || scheduled.value || fallbackDeadline
-  const source = player.emailDraft.responseDeadline ? 'player' : scheduled.value ? 'schedule' : fallbackDeadline ? 'fallback' : 'none'
+export function responseDeadlineDetails(player: Player, _sessions: TrialSession[], _fallbackDeadline = '', now = new Date()): ResponseDeadlineDetails {
+  const awaitingResponse = player.decision === 'Offer sent' || player.decision === 'Waiting list sent'
+  const latestResponseEmail = Object.values(player.communicationHistory || {})
+    .filter(entry => entry.type === 'offer' || entry.type === 'alternative' || entry.type === 'waiting-list')
+    .sort((a, b) => b.sentAt - a.sentAt)[0]
+  const receiptDeadline = awaitingResponse && latestResponseEmail
+    ? new Date(latestResponseEmail.sentAt + 72 * 60 * 60 * 1000)
+    : null
+  const effectiveDeadline = receiptDeadline ? toLocalInputValue(receiptDeadline) : ''
+  const source = receiptDeadline ? 'receipt' : 'none'
   const effectiveDate = parseDeadline(effectiveDeadline)
-  const scheduledDate = parseDeadline(scheduled.value)
-  const exceedsScheduleLimit = Boolean(player.emailDraft.responseDeadline && effectiveDate && scheduledDate && effectiveDate.getTime() > scheduledDate.getTime())
   let state: DeadlineState = 'none'
   if (effectiveDate) {
     const hours = (effectiveDate.getTime() - now.getTime()) / 3_600_000
     state = hours < 0 ? 'overdue' : hours <= 24 ? 'due-soon' : hours <= 48 ? 'approaching' : 'on-track'
   }
-  return { scheduledDeadline: scheduled.value, effectiveDeadline, source, state, exceedsScheduleLimit, session: scheduled.session }
+  return { scheduledDeadline: '', effectiveDeadline, source, state, exceedsScheduleLimit: false }
 }
 
 export function formatDeadline(value: string) {
