@@ -17,6 +17,7 @@ type Props={
   teamPlans:TeamPlans
   setPage:(page:PageKey)=>void
   openPlayer:(playerId:string,tab?:PlayerTab)=>void
+  openEmail:(playerId:string)=>void
   openSchedule:(sessionId:string)=>void
   assignedTeams:string[]
   isAdmin:boolean
@@ -28,7 +29,7 @@ type Props={
 
 type FocusView='starred'|'recommended'|'deadlines'
 
-export function DashboardPage({players,sessions,settings,teamPlans,setPage,openPlayer,openSchedule,assignedTeams,isAdmin,finances,financeSettings,playerStars,trialsMode}:Props){
+export function DashboardPage({players,sessions,settings,teamPlans,setPage,openPlayer,openEmail,openSchedule,assignedTeams,isAdmin,finances,financeSettings,playerStars,trialsMode}:Props){
   const [focusView,setFocusView]=useState<FocusView|null>(null)
   const recent=[...players].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,5)
   const emailPlayers=players.filter(player=>emailTypeFor(player))
@@ -57,7 +58,7 @@ export function DashboardPage({players,sessions,settings,teamPlans,setPage,openP
   const focusPlayers=focusView==='starred'?starredPlayers:focusView==='recommended'?recommendedPlayers:deadlinePlayers
   const focusTitle=focusView==='starred'?'My starred players':focusView==='recommended'?'Recommended players':'Email response deadlines'
   const focusDescription=focusView==='starred'?'Your private shortlist for quick review.':focusView==='recommended'?'Players recommended for teams you can manage.':'Players whose 72-hour response window is currently running.'
-  const openFocusPlayer=(player:Player)=>{const tab=focusView==='deadlines'?'email':focusView==='recommended'?'assessment':'overview';setFocusView(null);openPlayer(player.id,tab)}
+  const openFocusPlayer=(player:Player)=>{setFocusView(null);if(focusView==='deadlines')openEmail(player.id);else openPlayer(player.id,focusView==='recommended'?'assessment':'overview')}
 
   if(!trialsMode)return <>
     <PageHeader title="Club dashboard" subtitle="Your in-season shortcuts, upcoming schedule and latest squad updates." action={<button className="primary" onClick={()=>setPage('schedule')}>Open schedule</button>}/>

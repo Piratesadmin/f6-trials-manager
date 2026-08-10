@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { BarChart3, CalendarClock, Camera, Check, CheckCircle2, ClipboardList, Copy, CreditCard, ExternalLink, LoaderCircle, Mail, Save, Star, Trash2, TrendingUp, UserRound } from 'lucide-react'
-import type { Assessment, AssessmentSnapshot, EmailSettings, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerTab, Recommendation, TeamPlans, TrialResponseStatus, TrialSession } from '../types'
+import { BarChart3, Camera, Check, CheckCircle2, ClipboardList, CreditCard, LoaderCircle, Save, Star, Trash2, TrendingUp, UserRound } from 'lucide-react'
+import type { Assessment, AssessmentSnapshot, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerTab, Recommendation, TrialResponseStatus, TrialSession } from '../types'
 import { positions, reasons, recommendations, teams } from '../data/constants'
 import { assessmentCompletion, assessmentFields, averageRating } from '../utils/player'
-import { emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailValidation, mailtoFor } from '../utils/email'
 import { StarRating } from './StarRating'
 import { formatSessionDate, trialDateLabel } from '../utils/schedule'
-import { deadlineStateLabel, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
 import { primaryOffer } from '../utils/offers'
 import { decisionDraftFor, sameDecisionDraft } from '../utils/decision'
 import { OfferOptionsEditor } from './OfferOptionsEditor'
@@ -20,10 +18,6 @@ type Props = {
   save: (player: Player) => void
   saveDecision: (playerId: string, expected: PlayerDecisionDraft, next: PlayerDecisionDraft) => Promise<PlayerDecisionSaveResult>
   saveAssessment: (player: Player) => Promise<void>
-  players: Player[]
-  emailSettings: EmailSettings
-  teamPlans: TeamPlans
-  markSent: (player: Player) => void | Promise<void>
   starred: boolean
   toggleStar: () => void | Promise<void>
   photo: string
@@ -36,12 +30,11 @@ const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
   { key: 'overview', label: 'Overview', icon: UserRound },
   { key: 'assessment', label: 'Assessment', icon: Star },
   { key: 'decision', label: 'Decision', icon: ClipboardList },
-  { key: 'email', label: 'Email', icon: Mail },
 ]
 
 const recommendationClass = (recommendation: Recommendation) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayerProfile({ player, players, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, emailSettings, teamPlans, markSent, starred, toggleStar, photo, uploadPhoto, removePhoto, trialsMode }: Props) {
+export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, starred, toggleStar, photo, uploadPhoto, removePhoto, trialsMode }: Props) {
   const average = averageRating(player)
   const completion = assessmentCompletion(player)
   const initials = player.name.split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2)
@@ -71,7 +64,6 @@ export function PlayerProfile({ player, players, sessions, activeTab, setActiveT
       {activeTab === 'overview' && <Overview player={player} sessions={sessions} save={save} photo={photo} uploadPhoto={uploadPhoto} removePhoto={removePhoto}/>} 
       {activeTab === 'assessment' && <Assessment player={player} saveAssessment={saveAssessment} trialsMode={trialsMode}/>} 
       {activeTab === 'decision' && <DecisionPanel key={player.id} player={player} saveDecision={saveDecision}/>}
-      {activeTab === 'email' && <EmailPanel player={player} players={players} sessions={sessions} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent}/>} 
     </div>
   </article>
 }
@@ -220,33 +212,5 @@ function DecisionPanel({ player, saveDecision }: Pick<Props, 'player' | 'saveDec
       {(remoteChanged||conflict)&&<button className="secondary" type="button" onClick={loadLatest}>Load latest</button>}
       <button className="primary" type="button" disabled={!dirty||busy||remoteChanged||conflict} onClick={submit}>{busy?<LoaderCircle className="spin"/>:saved?<CheckCircle2/>:<Save/>}{busy?'Saving…':saved?'Saved':'Save changes'}</button>
     </div>
-  </div>
-}
-
-function EmailPanel({ player, players, sessions, emailSettings, teamPlans, markSent }: Pick<Props, 'player' | 'players' | 'sessions' | 'emailSettings' | 'teamPlans' | 'markSent'>) {
-  const [copied, setCopied] = useState(false)
-  const emailReady = Boolean(emailTypeFor(player))
-  const deadline=responseDeadlineDetails(player,sessions,emailSettings.defaultResponseDeadline)
-  const draft = emailFor(player, emailSettings, deadline)
-  const cc = emailCcFor(player, emailSettings)
-  const subject = emailSubjectFor(player, emailSettings)
-  const blockers = emailValidation(player, emailSettings, players, teamPlans, deadline).filter(issue => issue.level === 'blocker')
-  const status = emailQueueStatus(player, emailSettings, players, teamPlans, deadline)
-
-  const copy = async () => {
-    await navigator.clipboard.writeText(draft)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
-  }
-
-  if (!emailReady) return <div className="email-empty"><Mail/><h3>{player.decision === 'Offer accepted' ? 'Offer accepted' : 'Choose an email decision first'}</h3><p>{player.decision === 'Offer accepted' ? 'This player is already in the confirmed squad. Their original sent offer remains in communication history.' : 'Set an offer, waiting-list or rejection decision in the Decision tab to prepare the correct email.'}</p></div>
-
-  return <div className="profile-section">
-    <div className="section-heading"><div><span className="eyebrow">EMAIL PREVIEW</span><h3>{subject}</h3><p>Use the Email Centre for editing, checks and full communication history.</p></div><span className={`pill ${player.decision.toLowerCase().replaceAll(' ', '-')}`}>{player.decision}</span></div>
-    {emailTypeFor(player)!=='rejection'&&<div className={`profile-deadline ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'Begins when the email is recorded as sent'}</span></div></div>}
-    {blockers.length > 0 && <div className="profile-email-warning">{blockers.map(issue => <span key={issue.message}>{issue.message}</span>)}</div>}
-    <div className="profile-email-cc"><Mail/><div><b>CC</b><span>{cc.length?cc.join(', '):'No club or team contacts configured'}</span></div></div>
-    <div className="profile-email-card"><pre>{draft}</pre></div>
-    <div className="email-actions"><button className="secondary" onClick={copy}>{copied ? <CheckCircle2/> : <Copy/>}{copied ? 'Copied' : 'Copy email'}</button><a className={`secondary ${blockers.length ? 'disabled' : ''}`} href={blockers.length ? undefined : mailtoFor(player,emailSettings,deadline)}><ExternalLink/>Open in email app</a><button className="primary" disabled={Boolean(blockers.length)||status==='sent'} onClick={() => window.confirm('This records the email as sent but does not send it. Continue?') && markSent(player)}><CheckCircle2/>{status==='sent'?'Sent recorded':'Mark email as sent'}</button></div>
   </div>
 }

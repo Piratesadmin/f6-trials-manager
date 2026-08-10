@@ -2,14 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
 import type { EmailSettings, Player, TeamPlans, TrialSession } from '../types'
 import { PageHeader } from '../components/PageHeader'
-import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
+import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTeamsFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
 import { deadlineStateLabel, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
 import { offerTeamsLabel } from '../utils/offers'
 import { OfferOptionsEditor } from '../components/OfferOptionsEditor'
+import { teams } from '../data/constants'
 
 type Props = {
   players: Player[]
   playersReady: boolean
+  teamAccessReady: boolean
+  assignedTeams: string[]
   sessions: TrialSession[]
   settings: EmailSettings
   teamPlans: TeamPlans
@@ -30,15 +33,23 @@ const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
 
 const statusLabel: Record<EmailQueueStatus, string> = { 'needs-info': 'Needs info', ready: 'Ready to review', reviewed: 'Reviewed', sent: 'Sent' }
 
-export function EmailsPage({ players, playersReady, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen }: Props) {
+export function EmailsPage({ players, playersReady, teamAccessReady, assignedTeams, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen }: Props) {
   const queue = useMemo(() => players.filter(player => emailTypeFor(player) || latestCommunication(player)), [players])
   const deadlineFor = (player: Player) => responseDeadlineDetails(player, sessions, settings.defaultResponseDeadline)
   const [statusFilter, setStatusFilter] = useState<'all' | EmailQueueStatus>('all')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [teamFilter, setTeamFilter] = useState('assigned')
   const [query, setQuery] = useState('')
   const [checked, setChecked] = useState<string[]>([])
+  const configuredTeams = teams.filter(team => assignedTeams.includes(team))
+  const teamScopedQueue = queue.filter(player => {
+    const playerTeams = Array.from(new Set([...player.suitableTeams,...emailTeamsFor(player)]))
+    if (teamFilter === 'all') return true
+    if (teamFilter === 'assigned') return configuredTeams.some(team => playerTeams.includes(team))
+    return playerTeams.includes(teamFilter)
+  })
 
-  const filtered = queue.filter(player => {
+  const filtered = teamScopedQueue.filter(player => {
     const status = emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player))
     const type = emailTypeFor(player)
     const search = `${player.name} ${player.email} ${player.appliedTeam} ${offerTeamsLabel(player)} ${type || ''}`.toLowerCase()
@@ -46,15 +57,19 @@ export function EmailsPage({ players, playersReady, sessions, settings, teamPlan
   })
 
   useEffect(() => {
-    if (!playersReady) return
-    if (!queue.some(player => player.id === selectedId)) setSelectedId(queue[0]?.id || '')
-  }, [playersReady, queue, selectedId, setSelectedId])
+    if (!playersReady || !teamAccessReady) return
+    if (!teamScopedQueue.some(player => player.id === selectedId)) {
+      const nextId=teamScopedQueue[0]?.id||''
+      if(nextId!==selectedId)setSelectedId(nextId)
+    }
+  }, [playersReady, teamAccessReady, teamScopedQueue, selectedId, setSelectedId])
 
-  const selected = queue.find(player => player.id === selectedId) || filtered[0]
-  const counts = Object.fromEntries(['needs-info','ready','reviewed','sent'].map(status => [status, queue.filter(player => emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player)) === status).length])) as Record<EmailQueueStatus, number>
-  const deadlineWarnings=queue.filter(player=>emailTypeFor(player)!=='rejection'&&['overdue','due-soon','approaching'].includes(deadlineFor(player).state)).length
+  const selected = teamScopedQueue.find(player => player.id === selectedId) || filtered[0]
+  const counts = Object.fromEntries(['needs-info','ready','reviewed','sent'].map(status => [status, teamScopedQueue.filter(player => emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player)) === status).length])) as Record<EmailQueueStatus, number>
+  const deadlineWarnings=teamScopedQueue.filter(player=>emailTypeFor(player)!=='rejection'&&['overdue','due-soon','approaching'].includes(deadlineFor(player).state)).length
 
   const toggleChecked = (id: string) => setChecked(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
+  const changeTeamFilter = (team: string) => { setTeamFilter(team); setChecked([]) }
   const markSelectedReviewed = () => {
     queue.filter(player => checked.includes(player.id) && emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player)) !== 'sent').forEach(player => save({ ...player, emailReviewStatus: 'reviewed' }))
     setChecked([])
@@ -89,6 +104,7 @@ export function EmailsPage({ players, playersReady, sessions, settings, teamPlan
         <div className="email-queue-tools">
           <label><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search emails"/></label>
           <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)} aria-label="Filter by email type"><option value="all">All types</option><option value="offer">Offers</option><option value="alternative">Alternative offers</option><option value="waiting-list">Waiting list</option><option value="rejection">Rejections</option></select>
+          <select className="email-team-filter" value={teamFilter} onChange={event => changeTeamFilter(event.target.value)} aria-label="Filter emails by team"><option value="assigned">My Teams</option><option value="all">All club teams</option>{teams.map(team => <option value={team} key={team}>{team}</option>)}</select>
         </div>
         <nav className="email-status-tabs" aria-label="Email status filters">{statuses.map(status => <button key={status.value} className={statusFilter === status.value ? 'active' : ''} onClick={() => setStatusFilter(status.value)}>{status.label}{status.value !== 'all' && <span>{counts[status.value]}</span>}</button>)}</nav>
         <div className="email-queue-summary"><span>{filtered.length} message{filtered.length === 1 ? '' : 's'}</span><button onClick={() => setChecked(checked.length === filtered.length ? [] : filtered.map(player => player.id))}>{checked.length === filtered.length && filtered.length ? 'Clear all' : 'Select all'}</button></div>
@@ -109,7 +125,7 @@ export function EmailsPage({ players, playersReady, sessions, settings, teamPlan
   </>
 }
 
-function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'> & { player: Player }) {
+function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'|'teamAccessReady'|'assignedTeams'> & { player: Player }) {
   const [copied, setCopied] = useState<'subject' | 'body' | ''>('')
   const deadline=responseDeadlineDetails(player,sessions,settings.defaultResponseDeadline)
   const status = emailQueueStatus(player, settings, players, teamPlans, deadline)

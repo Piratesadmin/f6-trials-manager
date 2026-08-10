@@ -133,7 +133,7 @@ export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | '
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
 export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'finance' | 'activity' | 'archive' | 'settings'
-export type PlayerTab = 'overview' | 'assessment' | 'decision' | 'email'
+export type PlayerTab = 'overview' | 'assessment' | 'decision'
 export type SyncState = 'live' | 'saving' | 'offline'
 export type PositionTargets = Record<string, number>
 export type TeamPlans = Record<string, PositionTargets>

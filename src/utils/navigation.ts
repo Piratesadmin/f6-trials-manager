@@ -10,7 +10,7 @@ export type AppRoute = {
 }
 
 const pages: PageKey[] = ['dashboard','schedule','players','emails','teams','finance','activity','archive','settings']
-const playerTabs: PlayerTab[] = ['overview','assessment','decision','email']
+const playerTabs: PlayerTab[] = ['overview','assessment','decision']
 
 const safeDecode = (value = '') => {
   try { return decodeURIComponent(value) } catch { return '' }
