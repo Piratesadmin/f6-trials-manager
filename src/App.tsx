@@ -120,10 +120,10 @@ export default function App(){
   const navigatePage=useCallback((nextPage:PageKey)=>{
     if(nextPage==='players')navigate({page:nextPage,playerId:selectedId||undefined,playerTab})
     else if(nextPage==='emails')navigate({page:nextPage,playerId:selectedId||undefined})
-    else if(nextPage==='schedule')navigate({page:nextPage,sessionId:activeScheduleSessionId||requestedSessionId||undefined})
+    else if(nextPage==='schedule')navigate({page:nextPage})
     else if(nextPage==='teams')navigate({page:nextPage,team:selectedTeam})
     else navigate({page:nextPage})
-  },[activeScheduleSessionId,navigate,playerTab,requestedSessionId,selectedId,selectedTeam])
+  },[navigate,playerTab,selectedId,selectedTeam])
 
   useEffect(()=>{
     const handleHashChange=()=>applyRoute(parseAppHash(window.location.hash))
@@ -617,10 +617,10 @@ export default function App(){
   const selectTeam=(team:string)=>navigate({page:'teams',team},true)
   const selectScheduleSession=useCallback((id:string)=>{
     setActiveScheduleSessionId(id)
-    if(!id||requestedSessionId)return
-    const nextHash=appHashFor({page:'schedule',sessionId:id})
+    if(page!=='schedule'||requestedSessionId)return
+    const nextHash=appHashFor(id?{page:'schedule',sessionId:id}:{page:'schedule'})
     if(window.location.hash!==nextHash)window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${nextHash}`)
-  },[requestedSessionId])
+  },[page,requestedSessionId])
 
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>

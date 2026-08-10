@@ -65,12 +65,6 @@ export function SchedulePage({ sessions, players, saveSession, saveSessions, del
   const orderedSessions = useMemo(() => [...sessions].sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`)), [sessions])
   const selected = orderedSessions.find(session => session.id === selectedId)
 
-  useEffect(() => {
-    if (selectedId && sessions.some(session => session.id === selectedId)) return
-    const first = orderedSessions.find(session => session.date >= dateKey(today)) || orderedSessions[0]
-    if (first) { setSelectedId(first.id); setFocusDate(localDate(first.date)) }
-  }, [orderedSessions, selectedId, sessions, today])
-
   useEffect(()=>{onSelectedSessionChange(selectedId)},[selectedId,onSelectedSessionChange])
 
   useEffect(() => {
