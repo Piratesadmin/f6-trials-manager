@@ -28,3 +28,14 @@ export function normaliseCoachProfile(uid: string, value: unknown, fallbackEmail
 export function assignedTeamNames(profile: CoachProfile | null) {
   return profile ? teams.filter(team => profile.teams[team]) : []
 }
+
+export function assignedCoachNameForTeam(profiles: CoachProfile[], team: string, preferredEmail = '') {
+  const assigned = profiles
+    .filter(profile => profile.role !== 'admin' && profile.teams[team] && profile.displayName.trim())
+    .sort((left, right) => left.displayName.localeCompare(right.displayName))
+  const preferred = preferredEmail.trim().toLowerCase()
+  return (preferred ? assigned.find(profile => profile.email.trim().toLowerCase() === preferred) : undefined)?.displayName.trim()
+    || assigned.find(profile => profile.role === 'team-admin')?.displayName.trim()
+    || assigned[0]?.displayName.trim()
+    || ''
+}

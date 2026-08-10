@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
 import type { EmailSettings, Player, TeamPlans, TrialSession } from '../types'
 import { PageHeader } from '../components/PageHeader'
-import { effectiveEmailFields, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
+import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
 import { deadlineStateLabel, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
 import { offerTeamsLabel } from '../utils/offers'
 import { OfferOptionsEditor } from '../components/OfferOptionsEditor'
@@ -114,6 +114,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
   const blockers = issues.filter(issue => issue.level === 'blocker')
   const subject = emailSubjectFor(player, settings)
   const body = emailFor(player, settings, deadline)
+  const cc = emailCcFor(player, settings)
   const fields = effectiveEmailFields(player, settings, deadline)
   const history = Object.values(player.communicationHistory || {}).sort((a,b) => b.sentAt - a.sentAt)
 
@@ -136,7 +137,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
       {(emailTypeFor(player)==='offer'||emailTypeFor(player)==='alternative')&&<OfferOptionsEditor player={player} save={save} compact/>}
       <section className="email-draft-settings">
         <div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div>
-        <label>Coach name<input value={player.emailDraft.coachName} placeholder={settings.defaultCoachName || 'Set in Email settings'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using shared default' : 'Signs this email'}</small></label>
+        <label>Coach name<input value={player.emailDraft.coachName} placeholder={fields.coachName || 'Set a coach name'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using the signed-in or assigned team coach' : 'Signs this email'}</small></label>
         <label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label>
       </section>
 
@@ -144,6 +145,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
 
       <section className="email-message-card">
         <div className="email-field"><span>To</span><b>{player.email || 'No recipient email'}</b></div>
+        <div className="email-field"><span>CC</span><b>{cc.length ? cc.join(', ') : 'No CC contacts configured'}</b></div>
         <div className="email-field subject"><span>Subject</span><b>{subject}</b><button onClick={() => copy('subject')}><Copy/>{copied === 'subject' ? 'Copied' : 'Copy'}</button></div>
         <pre>{body}</pre>
       </section>
@@ -156,7 +158,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
       </div>
       <p className="manual-send-note"><AlertTriangle/>“Open in email app” creates a draft. “Mark as sent” only records your completed action; this portal does not send email automatically.</p>
 
-      <section className="communication-history"><div className="history-title"><History/><div><span className="eyebrow">COMMUNICATION HISTORY</span><h3>{history.length ? `${history.length} recorded message${history.length === 1 ? '' : 's'}` : 'No sent messages yet'}</h3></div></div>{history.map(entry => <details key={entry.id}><summary><span><b>{emailTypeLabel(entry.type)}</b><small>{new Date(entry.sentAt).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})} · {entry.recipient}</small></span><CheckCircle2/></summary><div><strong>{entry.subject}</strong><pre>{entry.body}</pre><small>Recorded by {entry.sentBy}</small></div></details>)}</section>
+      <section className="communication-history"><div className="history-title"><History/><div><span className="eyebrow">COMMUNICATION HISTORY</span><h3>{history.length ? `${history.length} recorded message${history.length === 1 ? '' : 's'}` : 'No sent messages yet'}</h3></div></div>{history.map(entry => <details key={entry.id}><summary><span><b>{emailTypeLabel(entry.type)}</b><small>{new Date(entry.sentAt).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})} · {entry.recipient}</small></span><CheckCircle2/></summary><div><strong>{entry.subject}</strong>{entry.cc?.length?<small>CC: {entry.cc.join(', ')}</small>:null}<pre>{entry.body}</pre><small>Recorded by {entry.sentBy}</small></div></details>)}</section>
     </div>
   </article>
 }

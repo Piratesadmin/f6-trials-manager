@@ -10,9 +10,10 @@ export const squadRoles: SquadRole[] = ['Starting six','Frequent player','Rotati
 
 export const defaultEmailSettings: EmailSettings = {
   clubName: 'Flaming Six Volleyball Club',
+  clubEmail: '',
   defaultCoachName: '',
   defaultResponseDeadline: '',
-  teamDetails: Object.fromEntries(teams.map(team => [team, { trainingDay: '', trainingTime: '', venue: '', competition: '', calendarColor: defaultTeamColours[team] }])),
+  teamDetails: Object.fromEntries(teams.map(team => [team, { adminEmail: '', trainingDay: '', trainingTime: '', venue: '', competition: '', calendarColor: defaultTeamColours[team] }])),
 }
 
 const assessmentDefaults = () => ({

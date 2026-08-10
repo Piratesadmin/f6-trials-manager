@@ -4,7 +4,7 @@ import { BarChart3, CalendarClock, Camera, Check, CheckCircle2, ClipboardList, C
 import type { Assessment, AssessmentSnapshot, EmailSettings, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerTab, Recommendation, TeamPlans, TrialResponseStatus, TrialSession } from '../types'
 import { positions, reasons, recommendations, teams } from '../data/constants'
 import { assessmentCompletion, assessmentFields, averageRating } from '../utils/player'
-import { emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailValidation, mailtoFor } from '../utils/email'
+import { emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailValidation, mailtoFor } from '../utils/email'
 import { StarRating } from './StarRating'
 import { formatSessionDate, trialDateLabel } from '../utils/schedule'
 import { deadlineStateLabel, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
@@ -228,6 +228,7 @@ function EmailPanel({ player, players, sessions, emailSettings, teamPlans, markS
   const emailReady = Boolean(emailTypeFor(player))
   const deadline=responseDeadlineDetails(player,sessions,emailSettings.defaultResponseDeadline)
   const draft = emailFor(player, emailSettings, deadline)
+  const cc = emailCcFor(player, emailSettings)
   const subject = emailSubjectFor(player, emailSettings)
   const blockers = emailValidation(player, emailSettings, players, teamPlans, deadline).filter(issue => issue.level === 'blocker')
   const status = emailQueueStatus(player, emailSettings, players, teamPlans, deadline)
@@ -244,6 +245,7 @@ function EmailPanel({ player, players, sessions, emailSettings, teamPlans, markS
     <div className="section-heading"><div><span className="eyebrow">EMAIL PREVIEW</span><h3>{subject}</h3><p>Use the Email Centre for editing, checks and full communication history.</p></div><span className={`pill ${player.decision.toLowerCase().replaceAll(' ', '-')}`}>{player.decision}</span></div>
     {emailTypeFor(player)!=='rejection'&&<div className={`profile-deadline ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'Begins when the email is recorded as sent'}</span></div></div>}
     {blockers.length > 0 && <div className="profile-email-warning">{blockers.map(issue => <span key={issue.message}>{issue.message}</span>)}</div>}
+    <div className="profile-email-cc"><Mail/><div><b>CC</b><span>{cc.length?cc.join(', '):'No club or team contacts configured'}</span></div></div>
     <div className="profile-email-card"><pre>{draft}</pre></div>
     <div className="email-actions"><button className="secondary" onClick={copy}>{copied ? <CheckCircle2/> : <Copy/>}{copied ? 'Copied' : 'Copy email'}</button><a className={`secondary ${blockers.length ? 'disabled' : ''}`} href={blockers.length ? undefined : mailtoFor(player,emailSettings,deadline)}><ExternalLink/>Open in email app</a><button className="primary" disabled={Boolean(blockers.length)||status==='sent'} onClick={() => window.confirm('This records the email as sent but does not send it. Continue?') && markSent(player)}><CheckCircle2/>{status==='sent'?'Sent recorded':'Mark email as sent'}</button></div>
   </div>

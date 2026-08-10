@@ -6,7 +6,7 @@ import { defaultEmailSettings, initialPlayers } from './data/constants'
 import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, normalisePlayer } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
-import { assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
+import { assignedCoachNameForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
 import { buildCommunication, normaliseEmailSettings, sentDecisionFor } from './utils/email'
 import { blobToDataUrl, prepareEventPhoto, preparePlayerPhoto } from './utils/photo'
 import { normaliseTrialSession, trialDateLabel } from './utils/schedule'
@@ -29,6 +29,10 @@ import { SettingsPage } from './pages/SettingsPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { ArchivePage } from './pages/ArchivePage'
 import './App.css'
+
+function firebaseSafeValue<T>(value:T):T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
 
 export default function App(){
   const [user,setUser]=useState<User|null>(null)
@@ -86,7 +90,8 @@ export default function App(){
   const editableTeams=isAdmin?Object.keys(teamPlans):assignedTeamNames(coachProfile)
   const currentCoachId=user?.uid||'local-demo'
   const signedInCoachName=user?.email&&user.email!==sharedLoginEmail?coachProfile?.displayName.trim()||'':''
-  const activeEmailSettings=signedInCoachName?{...emailSettings,defaultCoachName:signedInCoachName}:emailSettings
+  const teamCoachNames=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,assignedCoachNameForTeam(coachProfiles,team,emailSettings.teamDetails[team]?.adminEmail)]))
+  const activeEmailSettings={...emailSettings,currentCoachName:signedInCoachName,teamCoachNames}
 
   useEffect(()=>{if(!seasonSettings.trialsMode&&page==='emails')setPage('dashboard')},[seasonSettings.trialsMode,page])
 
@@ -213,7 +218,7 @@ export default function App(){
           const latest=normalisePlayer({id:playerId,...current} as Player)
           if(!sameDecisionDraft(decisionDraftFor(latest),expected))return
           const{id:_,...data}=normalisePlayer({...applyDecisionDraft(latest,next),updatedAt,updatedBy})
-          return data
+          return firebaseSafeValue(data)
         },{applyLocally:false})
       }catch(error){
         setSyncState('live')

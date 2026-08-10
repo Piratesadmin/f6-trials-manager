@@ -12,11 +12,13 @@ export function normaliseEmailSettings(value: unknown): EmailSettings {
   const incomingTeams = incoming.teamDetails && typeof incoming.teamDetails === 'object' ? incoming.teamDetails : {}
   return {
     clubName: incoming.clubName || defaultEmailSettings.clubName,
+    clubEmail: typeof incoming.clubEmail === 'string' ? incoming.clubEmail.trim() : '',
     defaultCoachName: incoming.defaultCoachName || '',
     defaultResponseDeadline: incoming.defaultResponseDeadline || '',
     teamDetails: Object.fromEntries(teams.map(team => {
       const details = incomingTeams[team]
       return [team, {
+        adminEmail: typeof details?.adminEmail === 'string' ? details.adminEmail.trim() : '',
         trainingDay: details?.trainingDay || '',
         trainingTime: details?.trainingTime || '',
         venue: details?.venue || '',
@@ -49,9 +51,13 @@ export function emailTypeLabel(type: EmailType | null) {
 }
 
 export function effectiveEmailFields(player: Player, settings: EmailSettings, deadline?: ResponseDeadlineDetails) {
+  const assignedCoachName = emailTeamsFor(player).flatMap(team => {
+    const coachName = settings.teamCoachNames?.[team]?.trim()
+    return coachName ? [`${coachName} - ${team} Coach`] : []
+  }).join('\n')
   return {
     deadline: deadline?.effectiveDeadline || '',
-    coachName: player.emailDraft.coachName || settings.defaultCoachName,
+    coachName: player.emailDraft.coachName || assignedCoachName || settings.currentCoachName || settings.defaultCoachName,
     personalMessage: player.emailDraft.personalMessage.trim(),
   }
 }
@@ -63,6 +69,24 @@ export function emailSubjectFor(player: Player, settings: EmailSettings) {
   if (type === 'alternative') return `${settings.clubName} – ${multipleTeams ? 'Alternative team options' : 'Alternative team offer'}`
   if (type === 'waiting-list') return `${settings.clubName} – Trials waiting list`
   return `${settings.clubName} trials`
+}
+
+export function emailTeamsFor(player: Player) {
+  const offeredTeams = activeOffers(player).map(offer => offer.team)
+  const selectedTeams = offeredTeams.length ? offeredTeams : [player.appliedTeam, ...player.suitableTeams]
+  return Array.from(new Set(selectedTeams)).filter(team => teams.includes(team))
+}
+
+export function emailCcFor(player: Player, settings: EmailSettings) {
+  const contacts = [settings.clubEmail, ...emailTeamsFor(player).map(team => settings.teamDetails[team]?.adminEmail || '')]
+  const seen = new Set([player.email.trim().toLowerCase()])
+  return contacts.flatMap(contact => {
+    const email = contact.trim()
+    const key = email.toLowerCase()
+    if (!isValidEmail(email) || seen.has(key)) return []
+    seen.add(key)
+    return [email]
+  })
 }
 
 function teamDetailsParagraph(team: string, settings: EmailSettings) {
@@ -136,6 +160,13 @@ export function emailValidation(player: Player, settings: EmailSettings, players
   if (!type) issues.push({ level: 'blocker', message: 'Choose an offer, waiting-list or rejection decision.' })
   if (!coachName) issues.push({ level: 'blocker', message: 'Add the coach name in this draft or Email settings.' })
   const offers = activeOffers(player)
+  const contactEmails = [
+    { label: 'Club contact', email: settings.clubEmail },
+    ...emailTeamsFor(player).map(team => ({ label: `${team} team admin`, email: settings.teamDetails[team]?.adminEmail || '' })),
+  ]
+  contactEmails.forEach(contact => {
+    if (contact.email && !isValidEmail(contact.email)) issues.push({ level: 'warning', message: `${contact.label} email is invalid and will not be added to CC.` })
+  })
   if ((type === 'offer' || type === 'alternative') && !offers.length) issues.push({ level: 'blocker', message: 'Choose at least one team option.' })
   if ((type === 'offer' || type === 'alternative') && offers.some(offer => !offer.position)) issues.push({ level: 'blocker', message: 'Choose a playing position for every team option.' })
   if ((type === 'offer' || type === 'alternative') && offers.some(offer => !offer.squadRole)) issues.push({ level: 'blocker', message: 'Choose a squad role for every team option.' })
@@ -161,7 +192,7 @@ export function emailQueueStatus(player: Player, settings: EmailSettings, player
 
 export function buildCommunication(player: Player, settings: EmailSettings, sentBy: string, deadline?: ResponseDeadlineDetails): CommunicationHistoryEntry {
   const id = crypto.randomUUID()
-  return { id, type: emailTypeFor(player) || 'rejection', subject: emailSubjectFor(player, settings), body: emailFor(player, settings, deadline), recipient: player.email, sentAt: Date.now(), sentBy }
+  return { id, type: emailTypeFor(player) || 'rejection', subject: emailSubjectFor(player, settings), body: emailFor(player, settings, deadline), recipient: player.email, cc: emailCcFor(player, settings), sentAt: Date.now(), sentBy }
 }
 
 export function sentDecisionFor(player: Player) {
@@ -172,5 +203,7 @@ export function sentDecisionFor(player: Player) {
 }
 
 export function mailtoFor(player: Player, settings: EmailSettings, deadline?: ResponseDeadlineDetails) {
-  return `mailto:${encodeURIComponent(player.email)}?subject=${encodeURIComponent(emailSubjectFor(player, settings))}&body=${encodeURIComponent(emailFor(player, settings, deadline))}`
+  const cc = emailCcFor(player, settings)
+  const ccParameter = cc.length ? `cc=${encodeURIComponent(cc.join(','))}&` : ''
+  return `mailto:${encodeURIComponent(player.email)}?${ccParameter}subject=${encodeURIComponent(emailSubjectFor(player, settings))}&body=${encodeURIComponent(emailFor(player, settings, deadline))}`
 }

@@ -67,11 +67,13 @@ export type CommunicationHistoryEntry = {
   subject: string
   body: string
   recipient: string
+  cc?: string[]
   sentAt: number
   sentBy: string
 }
 
 export type TeamEmailDetails = {
+  adminEmail: string
   trainingDay: string
   trainingTime: string
   venue: string
@@ -81,9 +83,12 @@ export type TeamEmailDetails = {
 
 export type EmailSettings = {
   clubName: string
+  clubEmail: string
   defaultCoachName: string
   defaultResponseDeadline: string
   teamDetails: Record<string, TeamEmailDetails>
+  currentCoachName?: string
+  teamCoachNames?: Record<string, string>
 }
 
 export type Player = {
