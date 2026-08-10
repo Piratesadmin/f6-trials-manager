@@ -307,7 +307,7 @@ export default function App(){
     await save({...updated,assessmentHistory:{...updated.assessmentHistory,[snapshotId]:snapshot}},{category:'player',action:'assessment_saved',summary:`Saved a new assessment for ${updated.name}`,detail:`Overall average ${snapshot.average?snapshot.average.toFixed(1):'not rated'} · ${updated.recommendation||'No recommendation'}`,team:updated.offeredTeam||updated.suitableTeams[0]||'',entityType:'player',entityId:updated.id})
   }
   const importPlayers=async(newPlayers:Omit<Player,'id'>[])=>{
-    const stamped=newPlayers.map(player=>({...player,id:crypto.randomUUID(),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}))
+    const stamped=newPlayers.map(player=>normalisePlayer({...player,id:crypto.randomUUID(),recommendation:'',suitableTeams:[],updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}))
     if(database&&user&&!demo){
       setSyncState('saving')
       const updates=Object.fromEntries(stamped.map(({id,...data})=>[`players/${id}`,data]))
@@ -342,6 +342,8 @@ export default function App(){
         secondaryPosition:incoming.secondaryPosition,
         playingExperience:incoming.playingExperience,
         highestLevelPlayed:incoming.highestLevelPlayed,
+        recommendation:existing?base.recommendation:'',
+        suitableTeams:existing?[...base.suitableTeams]:[],
         trialSessionId:assigned?sessionId:base.trialSessionId,
         trialDate:assigned?trialDateLabel(sessionRecord.date):base.trialDate,
         trialResponseStatus:incoming.trialResponseStatus,
