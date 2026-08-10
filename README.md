@@ -359,6 +359,8 @@ The import window now accepts both `.csv` and `.xlsx` files. For Excel workbooks
 
 The detected session name, date, times and venue remain editable in the preview. If the workbook omits a year, the importer assumes the current year and asks the coach to confirm the date.
 
+A plain `.xlsx` player spreadsheet can also be imported without creating a trial session. It recognises the Spond export headings for name, email, date of birth, interested divisions, primary position, second position, past playing experience and highest level played. Dates formatted by Excel are retained as `DD.MM.YYYY`; `All rounder` is normalised to `All-rounder`, while a blank or `None` second position is left empty. Existing email addresses are shown and skipped so that a routine player import cannot overwrite an existing profile.
+
 Trial response status is visible in the schedule roster and player Overview. It is also available as a player filter.
 
 ## v0.13 confirmed squads and finance

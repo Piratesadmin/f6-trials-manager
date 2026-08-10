@@ -40,14 +40,15 @@ export function CsvImportModal({ existingPlayers, onClose, onImport, onWorkbookI
 
   const candidates = useMemo(() => parsed ? rowsToPlayers(parsed.rows, mapping) : [], [parsed, mapping])
   const existingEmails = useMemo(() => new Set(existingPlayers.map(player => player.email.toLowerCase()).filter(Boolean)), [existingPlayers])
-  const analysed = analysePlayers(candidates, existingEmails, false)
-  const ready = analysed.filter(item => item.valid && !item.duplicate).map(item => item.player)
-  const duplicateCount = analysed.filter(item => item.duplicate).length
+  const analysed = analysePlayers(candidates, existingEmails)
+  const ready = analysed.filter(item => item.valid && !item.duplicate && !item.existing).map(item => item.player)
+  const duplicateCount = analysed.filter(item => item.duplicate || item.existing).length
   const invalidCount = analysed.filter(item => !item.valid).length
   const hasNameMapping = Boolean(mapping.name || mapping.firstName || mapping.lastName)
 
-  const workbookAnalysed = analysePlayers(workbook?.players || [], existingEmails, true)
-  const workbookReady = workbookAnalysed.filter(item => item.valid && !item.duplicate).map(item => item.player)
+  const workbookUpdatesExisting = workbook?.mode === 'trial-session'
+  const workbookAnalysed = analysePlayers(workbook?.players || [], existingEmails)
+  const workbookReady = workbookAnalysed.filter(item => item.valid && !item.duplicate && (workbookUpdatesExisting || !item.existing)).map(item => item.player)
   const workbookExistingCount = workbookAnalysed.filter(item => item.valid && item.existing && !item.duplicate).length
   const workbookInvalidCount = workbookAnalysed.filter(item => !item.valid || item.duplicate).length
   const goingCount = workbookReady.filter(player => player.trialResponseStatus === 'Going').length
@@ -94,34 +95,40 @@ export function CsvImportModal({ existingPlayers, onClose, onImport, onWorkbookI
   }
 
   const submitWorkbook = async () => {
-    if (!workbookSession?.title.trim() || !workbookSession.date) { setError('Check the session name and date before importing.'); return }
+    if (!workbook) return
+    if (workbook.mode === 'trial-session' && (!workbookSession?.title.trim() || !workbookSession.date)) { setError('Check the session name and date before importing.'); return }
     if (!workbookReady.length) { setError('There are no valid players ready to import.'); return }
     setBusy(true); setError('')
-    try { await onWorkbookImport(workbookSession, workbookReady); onClose() }
+    try {
+      if (workbook.mode === 'trial-session' && workbookSession) await onWorkbookImport(workbookSession, workbookReady)
+      else await onImport(workbookReady)
+      onClose()
+    }
     catch (err) { setError(err instanceof Error ? err.message : 'The session and players could not be imported.') }
     finally { setBusy(false) }
   }
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}>
     <section className="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-title">
-      <div className="modal-head"><div><span className="eyebrow">PLAYER &amp; SCHEDULE IMPORT</span><h2 id="import-title">Import trial sign-ups</h2><p>Upload a CSV or an Excel trial workbook. Phone numbers and address columns are never imported.</p></div><button className="modal-close" onClick={onClose} aria-label="Close"><X /></button></div>
+      <div className="modal-head"><div><span className="eyebrow">PLAYER &amp; SCHEDULE IMPORT</span><h2 id="import-title">Import players</h2><p>Upload a CSV, an Excel player spreadsheet or an Excel trial workbook. Phone numbers and address columns are never imported.</p></div><button className="modal-close" onClick={onClose} aria-label="Close"><X /></button></div>
 
       {!parsed && !workbook ? <div className="upload-step">
         <input ref={inputRef} hidden type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={event => readFile(event.target.files?.[0])}/>
-        <button className="drop-zone" onClick={() => inputRef.current?.click()}><FileSpreadsheet/><b>Choose a CSV or Excel file</b><span>Excel files like the club trial attendance workbook are detected automatically.</span><small>.csv or .xlsx · up to 10 MB</small></button>
+        <button className="drop-zone" onClick={() => inputRef.current?.click()}><FileSpreadsheet/><b>Choose a CSV or Excel file</b><span>Player spreadsheets and club trial attendance workbooks are detected automatically.</span><small>.csv or .xlsx · up to 10 MB</small></button>
         {error && <div className="import-alert error"><AlertTriangle/>{error}</div>}
       </div> : <>
         <div className="file-summary"><FileSpreadsheet/><div><b>{fileName}</b><span>{workbook ? `Excel · player details read from “${workbook.sourceSheet}”` : `${parsed?.rows.length || 0} CSV rows detected`}</span></div><button onClick={reset}>Choose another file</button></div>
 
-        {workbook && workbookSession ? <>
-          <div className="excel-session-editor"><div><span className="eyebrow">SESSION DETECTED</span><h3>Check the trial details</h3><p>The first three rows supplied the session name, date/time and venue. You can correct anything before import.</p></div><div className="excel-session-fields"><label className="wide">Session name<input value={workbookSession.title} onChange={event => setWorkbookSession({...workbookSession,title:event.target.value})}/></label><label>Date<input type="date" value={workbookSession.date} onChange={event => setWorkbookSession({...workbookSession,date:event.target.value})}/></label><label>Venue<input value={workbookSession.venue} onChange={event => setWorkbookSession({...workbookSession,venue:event.target.value})}/></label><label>Start time<input type="time" value={workbookSession.startTime} onChange={event => setWorkbookSession({...workbookSession,startTime:event.target.value})}/></label><label>End time<input type="time" value={workbookSession.endTime} onChange={event => setWorkbookSession({...workbookSession,endTime:event.target.value})}/></label></div></div>
+        {workbook ? <>
+          {workbook.mode==='trial-session'&&workbookSession&&<div className="excel-session-editor"><div><span className="eyebrow">SESSION DETECTED</span><h3>Check the trial details</h3><p>The first three rows supplied the session name, date/time and venue. You can correct anything before import.</p></div><div className="excel-session-fields"><label className="wide">Session name<input value={workbookSession.title} onChange={event => setWorkbookSession({...workbookSession,title:event.target.value})}/></label><label>Date<input type="date" value={workbookSession.date} onChange={event => setWorkbookSession({...workbookSession,date:event.target.value})}/></label><label>Venue<input value={workbookSession.venue} onChange={event => setWorkbookSession({...workbookSession,venue:event.target.value})}/></label><label>Start time<input type="time" value={workbookSession.startTime} onChange={event => setWorkbookSession({...workbookSession,startTime:event.target.value})}/></label><label>End time<input type="time" value={workbookSession.endTime} onChange={event => setWorkbookSession({...workbookSession,endTime:event.target.value})}/></label></div></div>}
+          {workbook.mode==='players'&&<div className="excel-session-editor players-only"><div><span className="eyebrow">PLAYER SPREADSHEET DETECTED</span><h3>Import player profiles</h3><p>The header row was matched directly. No trial session will be created, and existing email addresses will be skipped.</p></div></div>}
           {workbook.warnings.map(warning => <div className="import-alert warning" key={warning}><AlertTriangle/>{warning}</div>)}
-          <div className="excel-response-summary"><span className="going"><CheckCircle2/>{goingCount} Going</span><span className="unanswered"><Users/>{unansweredCount} Not answered</span><span className="cannot-go"><X/>{cannotGoCount} Can’t go</span></div>
-          <div className="import-results"><div className="result-good"><CheckCircle2/><b>{workbookReady.length}</b><span>Players ready</span></div><div><Users/><b>{workbookExistingCount}</b><span>Existing profiles updated</span></div><div><AlertTriangle/><b>{workbookInvalidCount}</b><span>Invalid/repeated rows skipped</span></div></div>
-          <div className="excel-import-note"><CalendarDays/><p><b>Going and Not answered</b> players will be placed into this session. <b>Can’t go</b> players are imported but left off the session roster. Payment and attendance begin as not paid and not attended.</p></div>
-          <div className="preview-table-wrap"><table className="preview-table"><thead><tr><th>Response</th><th>Name</th><th>Email</th><th>Date of birth</th><th>Division(s)</th><th>Primary position</th><th>Second position</th><th>Import result</th></tr></thead><tbody>{workbookAnalysed.slice(0,10).map(({player,existing,duplicate,valid},index)=><tr key={`${player.email}-${index}`}><td><span className={`rsvp-status ${statusClass(player.trialResponseStatus)}`}>{player.trialResponseStatus||'No response'}</span></td><td>{player.name||'Missing name'}</td><td>{player.email||'Missing email'}</td><td>{player.dateOfBirth||'—'}</td><td>{player.interestedDivisions||'—'}</td><td>{player.position}</td><td>{player.secondaryPosition||'—'}</td><td><span className={`row-status ${!valid||duplicate?'invalid':existing?'duplicate':'ready'}`}>{!valid?'Invalid':duplicate?'Repeated':existing?'Update':'New'}</span></td></tr>)}</tbody></table>{workbookAnalysed.length>10&&<p className="preview-more">Showing 10 of {workbookAnalysed.length} rows</p>}</div>
+          {workbook.mode==='trial-session'&&<div className="excel-response-summary"><span className="going"><CheckCircle2/>{goingCount} Going</span><span className="unanswered"><Users/>{unansweredCount} Not answered</span><span className="cannot-go"><X/>{cannotGoCount} Can’t go</span></div>}
+          <div className="import-results"><div className="result-good"><CheckCircle2/><b>{workbookReady.length}</b><span>Players ready</span></div><div><Users/><b>{workbookExistingCount}</b><span>{workbookUpdatesExisting?'Existing profiles updated':'Existing profiles skipped'}</span></div><div><AlertTriangle/><b>{workbookInvalidCount}</b><span>Invalid/repeated rows skipped</span></div></div>
+          {workbook.mode==='trial-session'&&<div className="excel-import-note"><CalendarDays/><p><b>Going and Not answered</b> players will be placed into this session. <b>Can’t go</b> players are imported but left off the session roster. Payment and attendance begin as not paid and not attended.</p></div>}
+          <div className="preview-table-wrap"><table className="preview-table"><thead><tr>{workbook.mode==='trial-session'&&<th>Response</th>}<th>Name</th><th>Email</th><th>Date of birth</th><th>Division(s)</th><th>Primary position</th><th>Second position</th><th>Experience</th><th>Highest level</th><th>Import result</th></tr></thead><tbody>{workbookAnalysed.slice(0,10).map(({player,existing,duplicate,valid},index)=><tr key={`${player.email}-${index}`}>{workbook.mode==='trial-session'&&<td><span className={`rsvp-status ${statusClass(player.trialResponseStatus)}`}>{player.trialResponseStatus||'No response'}</span></td>}<td>{player.name||'Missing name'}</td><td>{player.email||'Missing email'}</td><td>{player.dateOfBirth||'—'}</td><td>{player.interestedDivisions||'—'}</td><td>{player.position}</td><td>{player.secondaryPosition||'—'}</td><td>{player.playingExperience||'—'}</td><td>{player.highestLevelPlayed||'—'}</td><td><span className={`row-status ${!valid||duplicate?'invalid':existing?'duplicate':'ready'}`}>{!valid?'Invalid':duplicate?'Repeated':existing?(workbookUpdatesExisting?'Update':'Existing'):'New'}</span></td></tr>)}</tbody></table>{workbookAnalysed.length>10&&<p className="preview-more">Showing 10 of {workbookAnalysed.length} rows</p>}</div>
           {error && <div className="import-alert error"><AlertTriangle/>{error}</div>}
-          <div className="modal-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy||!workbookReady.length} onClick={submitWorkbook}><Upload/>{busy?'Importing…':`Create session and import ${workbookReady.length} players`}</button></div>
+          <div className="modal-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy||!workbookReady.length} onClick={submitWorkbook}><Upload/>{busy?'Importing…':workbook.mode==='trial-session'?`Create session and import ${workbookReady.length} players`:`Import ${workbookReady.length} players`}</button></div>
         </> : parsed ? <>
           <div className="mapping-grid"><div><span className="eyebrow">MATCH COLUMNS</span><h3>Tell us what each column contains</h3><p>Likely headings are matched automatically. Cell, street address, city and postal-code columns are deliberately excluded.</p></div><div className="mapping-fields">{fieldLabels.map(field => <label key={field.key}>{field.label}{field.required && <em>Required</em>}<select value={mapping[field.key]} onChange={event => setMapping({...mapping, [field.key]: event.target.value})}><option value="">Not included</option>{parsed.headers.map(header => <option key={header} value={header}>{header}</option>)}</select></label>)}</div></div>
           <div className="import-results"><div className="result-good"><CheckCircle2/><b>{ready.length}</b><span>Ready to import</span></div><div><AlertTriangle/><b>{duplicateCount}</b><span>Duplicates skipped</span></div><div><AlertTriangle/><b>{invalidCount}</b><span>Invalid rows skipped</span></div></div>
@@ -134,7 +141,7 @@ export function CsvImportModal({ existingPlayers, onClose, onImport, onWorkbookI
   </div>
 }
 
-function analysePlayers(players: Omit<Player,'id'>[], existingEmails: Set<string>, updateExisting: boolean) {
+function analysePlayers(players: Omit<Player,'id'>[], existingEmails: Set<string>) {
   const seen=new Set<string>()
   return players.map(player=>{
     const key=player.email.toLowerCase()
@@ -142,7 +149,7 @@ function analysePlayers(players: Omit<Player,'id'>[], existingEmails: Set<string
     if(key)seen.add(key)
     const existing=existingEmails.has(key)
     const valid=Boolean(player.name)&&isValidEmail(player.email)
-    return{player,duplicate:duplicate||(!updateExisting&&existing),existing,valid}
+    return{player,duplicate,existing,valid}
   })
 }
 

@@ -5,7 +5,8 @@ type Cell = string | number | boolean | Date | null | undefined
 type Row = Cell[]
 
 export type ParsedTrialWorkbook = {
-  session: Omit<TrialSession, 'id'>
+  mode: 'players' | 'trial-session'
+  session: Omit<TrialSession, 'id'> | null
   players: Omit<Player, 'id'>[]
   warnings: string[]
   sourceSheet: string
@@ -170,14 +171,18 @@ export async function parseTrialWorkbook(file: File): Promise<ParsedTrialWorkboo
   const timing = parseSessionLine(metadata[1])
   const players = parsePlayers(rows, responseLookup)
   if (!players.length) throw new Error('No player table with Name and Email columns was found in this workbook.')
+  const mode: ParsedTrialWorkbook['mode'] = printName || importName || timing.date ? 'trial-session' : 'players'
 
   const warnings: string[] = []
-  if (!timing.date) warnings.push('The session date could not be read automatically. Check it before importing.')
-  if (!metadata[0]) warnings.push('The session name was not found. Add one before importing.')
-  if (!players.some(player => player.trialResponseStatus)) warnings.push('No Going/Not answered/Can\'t go responses were detected.')
+  if (mode === 'trial-session') {
+    if (!timing.date) warnings.push('The session date could not be read automatically. Check it before importing.')
+    if (!metadata[0]) warnings.push('The session name was not found. Add one before importing.')
+    if (!players.some(player => player.trialResponseStatus)) warnings.push('No Going/Not answered/Can\'t go responses were detected.')
+  }
 
   return {
-    session: {
+    mode,
+    session: mode === 'trial-session' ? {
       eventType: 'trial',
       title: metadata[0] || 'Trial session',
       date: timing.date,
@@ -192,7 +197,7 @@ export async function parseTrialWorkbook(file: File): Promise<ParsedTrialWorkboo
       recurrenceGroupId: '',
       notes: `Imported from ${file.name}`,
       attendance: {},
-    },
+    } : null,
     players,
     warnings,
     sourceSheet,

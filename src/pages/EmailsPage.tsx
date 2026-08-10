@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
 import type { EmailSettings, Player, TeamPlans, TrialSession } from '../types'
 import { PageHeader } from '../components/PageHeader'
-import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTeamsFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
+import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
 import { deadlineStateLabel, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
 import { offerTeamsLabel } from '../utils/offers'
 import { OfferOptionsEditor } from '../components/OfferOptionsEditor'
@@ -44,10 +44,9 @@ export function EmailsPage({ players, playersReady, teamAccessReady, assignedTea
   const [checked, setChecked] = useState<string[]>([])
   const configuredTeams = teams.filter(team => assignedTeams.includes(team))
   const teamScopedQueue = queue.filter(player => {
-    const playerTeams = Array.from(new Set([...player.suitableTeams,...emailTeamsFor(player)]))
     if (teamFilter === 'all') return true
-    if (teamFilter === 'assigned') return configuredTeams.some(team => playerTeams.includes(team))
-    return playerTeams.includes(teamFilter)
+    if (teamFilter === 'assigned') return configuredTeams.some(team => player.suitableTeams.includes(team))
+    return player.suitableTeams.includes(teamFilter)
   })
 
   const filtered = teamScopedQueue.filter(player => {
