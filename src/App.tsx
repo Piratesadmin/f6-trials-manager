@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
-import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, set, update } from 'firebase/database'
+import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers } from './data/constants'
-import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
+import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, normalisePlayer } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
@@ -15,6 +15,7 @@ import { responseDeadlineDetails } from './utils/deadline'
 import { createActivityEntry, describePlayerChange, normaliseActivityEntry } from './utils/activity'
 import { createSeasonArchive, defaultSeasonSettings, normaliseSeasonArchive, normaliseSeasonSettings } from './utils/season'
 import { createArchivedPlayerRecord, normaliseArchivedPlayerRecord } from './utils/archivedPlayers'
+import { applyDecisionDraft, decisionDraftFor, sameDecisionDraft } from './utils/decision'
 import { Login } from './components/Login'
 import { CsvImportModal } from './components/CsvImportModal'
 import { Sidebar } from './components/Sidebar'
@@ -198,6 +199,41 @@ export default function App(){
     if(database&&user&&!demo){try{await set(ref(database,`auditLog/${entry.id}`),entry)}catch(error){console.warn('Activity record could not be saved. Publish the v0.20 Firebase rules.',error)}}else{setActivityLog(current=>{const next=[entry,...current].slice(0,500);localStorage.setItem('f6activitylog',JSON.stringify(next));return next})}
   }
   const save=async(updated:Player,activityOverride?:ActivityDraft|null)=>{const previous=players.find(player=>player.id===updated.id);const stamped={...normalisePlayer(updated),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'};if(database&&user&&!demo){setSyncState('saving');const{id,...data}=stamped;await update(ref(database,`players/${id}`),data)}else{const next=players.map(p=>p.id===stamped.id?stamped:p);setPlayers(next);localStorage.setItem('f6players',JSON.stringify(next))}const activity=activityOverride===undefined?describePlayerChange(previous,stamped):activityOverride;if(activity)await recordActivity(activity)}
+  const savePlayerDecision=async(playerId:string,expected:PlayerDecisionDraft,next:PlayerDecisionDraft):Promise<PlayerDecisionSaveResult>=>{
+    const previous=players.find(player=>player.id===playerId)
+    const updatedAt=Date.now()
+    const updatedBy=user?.email||'Local demo'
+    let saved:Player|undefined
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      const result=await runTransaction(ref(database,`players/${playerId}`),current=>{
+        if(!current)return
+        const latest=normalisePlayer({id:playerId,...current} as Player)
+        if(!sameDecisionDraft(decisionDraftFor(latest),expected))return
+        const{id:_,...data}=normalisePlayer({...applyDecisionDraft(latest,next),updatedAt,updatedBy})
+        return data
+      },{applyLocally:false})
+      if(!result.committed){
+        if(result.snapshot.exists()){
+          const latest=normalisePlayer({id:playerId,...result.snapshot.val()} as Player)
+          setPlayers(current=>current.map(player=>player.id===playerId?latest:player))
+        }
+        setSyncState('live')
+        return 'conflict'
+      }
+      saved=normalisePlayer({id:playerId,...result.snapshot.val()} as Player)
+      setPlayers(current=>current.map(player=>player.id===playerId?saved!:player))
+    }else{
+      if(!previous||!sameDecisionDraft(decisionDraftFor(previous),expected))return 'conflict'
+      saved=normalisePlayer({...applyDecisionDraft(previous,next),updatedAt,updatedBy})
+      const updatedPlayers=players.map(player=>player.id===playerId?saved!:player)
+      setPlayers(updatedPlayers)
+      localStorage.setItem('f6players',JSON.stringify(updatedPlayers))
+    }
+    const activity=describePlayerChange(previous,saved)
+    if(activity)await recordActivity(activity)
+    return 'saved'
+  }
   const saveAssessment=async(updated:Player)=>{
     const snapshotId=crypto.randomUUID()
     const recordedBy=activityActor.name
@@ -483,7 +519,7 @@ export default function App(){
     <main>
       {page==='dashboard'&&<DashboardPage players={players} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={setPage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>} 
       {page==='schedule'&&<SchedulePage sessions={trialSessions} players={players} saveSession={saveTrialSession} saveSessions={saveTrialSessionSeries} deleteSession={deleteTrialSession} savePlayer={save} openPlayer={id=>openPlayer(id,'overview')} onImport={()=>setImportOpen(true)} teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))} requestedSessionId={requestedSessionId} onRequestedSessionHandled={()=>setRequestedSessionId('')} eventPhotos={sessionPhotos[activeScheduleSessionId]||{}} uploadEventPhoto={uploadSessionPhoto} removeEventPhoto={removeSessionPhoto} onSelectedSessionChange={setActiveScheduleSessionId} editableTeams={editableTeams} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>} 
-      {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} setSelectedId={setSelectedId} query={query} setQuery={setQuery} teamFilter={teamFilter} setTeamFilter={setTeamFilter} save={save} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={setPlayerTab} emailSettings={activeEmailSettings} teamPlans={teamPlans} markSent={markEmailSent} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} trialsMode={seasonSettings.trialsMode}/>} 
+      {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} setSelectedId={setSelectedId} query={query} setQuery={setQuery} teamFilter={teamFilter} setTeamFilter={setTeamFilter} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={setPlayerTab} emailSettings={activeEmailSettings} teamPlans={teamPlans} markSent={markEmailSent} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} onOpen={id=>openPlayer(id,'email')}/>} 
       {page==='teams'&&<TeamsPage players={players} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode}/>} 
       {page==='finance'&&isAdmin&&<FinancePage players={players} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} onOpenPlayer={id=>openPlayer(id,'overview')}/>} 

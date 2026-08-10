@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight, Filter, Search, Star } from 'lucide-react'
-import type { EmailSettings, Player, PlayerStars, PlayerTab, TeamPlans, TrialSession } from '../types'
+import type { EmailSettings, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerStars, PlayerTab, TeamPlans, TrialSession } from '../types'
 import { teams } from '../data/constants'
 import { averageRating } from '../utils/player'
 import { PageHeader } from '../components/PageHeader'
@@ -19,6 +19,7 @@ type Props = {
   teamFilter: string
   setTeamFilter: (team: string) => void
   save: (player: Player) => void
+  saveDecision: (playerId: string, expected: PlayerDecisionDraft, next: PlayerDecisionDraft) => Promise<PlayerDecisionSaveResult>
   saveAssessment: (player: Player) => Promise<void>
   onImport: () => void
   activeTab: PlayerTab
@@ -37,7 +38,7 @@ type Props = {
 
 const recommendationClass = (recommendation: Player['recommendation']) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayersPage({ players, sessions, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, saveAssessment, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, trialsMode }: Props) {
+export function PlayersPage({ players, sessions, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, saveDecision, saveAssessment, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, trialsMode }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState<PlayerFilterValues>(emptyPlayerFilters)
   useEffect(()=>{if(!trialsMode&&!['overview','assessment'].includes(activeTab))setActiveTab('overview')},[trialsMode,activeTab,setActiveTab])
@@ -96,7 +97,7 @@ export function PlayersPage({ players, sessions, selectedId, setSelectedId, quer
           {!filtered.length && <div className="empty-state compact">No players match these filters.</div>}
         </div>
       </div>
-      <PlayerProfile player={selected} players={players} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveAssessment={saveAssessment} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} trialsMode={trialsMode}/>
+      <PlayerProfile player={selected} players={players} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveDecision={saveDecision} saveAssessment={saveAssessment} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} trialsMode={trialsMode}/>
     </section>
   </>
 }
