@@ -8,7 +8,6 @@ import { StarRating } from './StarRating'
 import { formatSessionDate, trialDateLabel } from '../utils/schedule'
 import { primaryOffer } from '../utils/offers'
 import { decisionDraftFor, sameDecisionDraft } from '../utils/decision'
-import { OfferOptionsEditor } from './OfferOptionsEditor'
 
 type Props = {
   player: Player
@@ -26,7 +25,6 @@ type Props = {
   deletePlayer: (player: Player) => Promise<void>
   isAdmin: boolean
   trialsMode: boolean
-  teamDivisions: Record<string,string>
 }
 
 const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
@@ -37,7 +35,7 @@ const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
 
 const recommendationClass = (recommendation: Recommendation) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, starred, toggleStar, photo, uploadPhoto, removePhoto, deletePlayer, isAdmin, trialsMode, teamDivisions }: Props) {
+export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, starred, toggleStar, photo, uploadPhoto, removePhoto, deletePlayer, isAdmin, trialsMode }: Props) {
   const average = averageRating(player)
   const completion = assessmentCompletion(player)
   const initials = player.name.split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2)
@@ -73,7 +71,7 @@ export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save,
     <div className="profile-content">
       {activeTab === 'overview' && <Overview player={player} sessions={sessions} save={save} photo={photo} uploadPhoto={uploadPhoto} removePhoto={removePhoto}/>} 
       {activeTab === 'assessment' && <Assessment player={player} saveAssessment={saveAssessment} trialsMode={trialsMode}/>} 
-      {activeTab === 'decision' && <DecisionPanel key={player.id} player={player} saveDecision={saveDecision} teamDivisions={teamDivisions}/>}
+      {activeTab === 'decision' && <DecisionPanel key={player.id} player={player} saveDecision={saveDecision}/>}
     </div>
   </article>
 }
@@ -164,7 +162,7 @@ function AssessmentProgression({history,trialsMode}:{history:AssessmentSnapshot[
   return <section className="assessment-progression"><header><div><span className="eyebrow">PLAYER PROGRESSION</span><h3>Assessment history</h3><p>Every saved assessment is retained as a dated snapshot.</p></div><div className={`progression-change ${change>0?'improved':change<0?'declined':''}`}><TrendingUp/><b>{history.length}</b><span>saved assessment{history.length===1?'':'s'}</span>{latest&&previous&&<small>{change>0?'+':''}{change.toFixed(1)} since previous</small>}</div></header>{history.length?<><div className="progression-chart" aria-label="Saved overall assessment progression">{recent.map((snapshot,index)=><div key={snapshot.id}><span style={{height:`${Math.max(5,snapshot.average/5*100)}%`}}></span><b>{snapshot.average.toFixed(1)}</b><small>{new Date(snapshot.recordedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</small>{index===recent.length-1&&<em>Latest</em>}</div>)}</div><div className="assessment-history-list">{[...history].reverse().map((snapshot,index)=><details key={snapshot.id} open={index===0}><summary><span><b>{new Date(snapshot.recordedAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</b><small>{snapshot.recordedBy||'Club coach'}{trialsMode?` · ${snapshot.recommendation||'No recommendation'}`:''}</small></span><strong><Star/>{snapshot.average.toFixed(1)}</strong></summary><div className="history-skill-grid">{assessmentFields.map(field=><span key={field.key}><b>{field.label}</b><em>{snapshot.assessment[field.key]||'—'}</em></span>)}</div>{(snapshot.strengths||snapshot.developmentAreas)&&<div className="history-notes"><p><b>Strengths</b>{snapshot.strengths||'Not recorded'}</p><p><b>Development</b>{snapshot.developmentAreas||'Not recorded'}</p></div>}</details>)}</div></>:<div className="progression-empty"><BarChart3/><b>No saved assessments yet</b><span>Complete the current ratings and select Save assessment to begin tracking progress.</span></div>}</section>
 }
 
-function DecisionPanel({ player, saveDecision, teamDivisions }: Pick<Props, 'player' | 'saveDecision' | 'teamDivisions'>) {
+function DecisionPanel({ player, saveDecision }: Pick<Props, 'player' | 'saveDecision'>) {
   const [base,setBase]=useState<PlayerDecisionDraft>(()=>decisionDraftFor(player))
   const [draft,setDraft]=useState<PlayerDecisionDraft>(()=>decisionDraftFor(player))
   const [busy,setBusy]=useState(false)
@@ -214,7 +212,6 @@ function DecisionPanel({ player, saveDecision, teamDivisions }: Pick<Props, 'pla
       <div className="team-options">{teams.map(team => <button type="button" key={team} disabled={busy||remoteChanged||conflict} className={draft.suitableTeams.includes(team) ? 'selected' : ''} onClick={() => toggleTeam(team)}>{draft.suitableTeams.includes(team) && <Check/>}{team}</button>)}</div>
     </div>
     {draftPlayer.decision.includes('Rejection') && <div className="form-card profile-form-grid"><label className="full-width">Rejection reason<select disabled={busy||remoteChanged||conflict} value={draftPlayer.rejectionReason || reasons[0]} onChange={event => updateDecisionDraft({ ...draftPlayer, rejectionReason: event.target.value })}>{reasons.map(reason => <option key={reason}>{reason}</option>)}</select></label></div>}
-    {(draftPlayer.decision.includes('Offer') || draftPlayer.decision === 'Alternative offer')&&<OfferOptionsEditor player={draftPlayer} save={updateDecisionDraft} disabled={busy||remoteChanged||conflict} teamDivisions={teamDivisions}/>}
     {draftPlayer.decision === 'Offer accepted' && <div className="decision-callout accepted"><CheckCircle2/><div><b>Confirmed squad place</b><p>{draftPlayer.name} now appears in the confirmed squad for {draftPlayer.offeredTeam || 'the accepted team'}{primaryOffer(draftPlayer)?` as ${primaryOffer(draftPlayer)!.position} · ${primaryOffer(draftPlayer)!.squadRole}`:''}. Administrators can manage season fees in Finance.</p></div></div>}
     <div className={`decision-save-bar ${remoteChanged||conflict?'conflict':dirty?'dirty':saved?'saved':''}`}>
       <div><b>{remoteChanged||conflict?'Another coach updated this decision':dirty?'Unsaved decision changes':saved?'Decision changes saved':'Decision details are up to date'}</b><span>{remoteChanged||conflict?'Load the latest Decision-tab values before making your changes again.':dirty?'Your changes have not been sent to Firebase yet.':'The Decision tab matches Firebase.'}</span>{error&&<p className="decision-save-error" role="alert">{error}</p>}</div>

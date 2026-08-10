@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Check, CheckCircle2, ClipboardCheck, ClipboardList, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
 import type { EmailSettings, Player, TeamPlans, TrialSession } from '../types'
 import { PageHeader } from '../components/PageHeader'
 import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, mailtoFor, type EmailQueueStatus } from '../utils/email'
@@ -137,6 +137,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
   const cc = emailCcFor(player, settings)
   const fields = effectiveEmailFields(player, settings, deadline)
   const history = Object.values(player.communicationHistory || {}).sort((a,b) => b.sentAt - a.sentAt)
+  const recommendationClass=player.recommendation?`recommendation-${player.recommendation.toLowerCase().replaceAll(' ','-')}`:''
 
   const copy = async (kind: 'subject' | 'body') => {
     await navigator.clipboard.writeText(kind === 'subject' ? subject : body)
@@ -156,6 +157,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
 
     <div className="email-review-body">
       {emailType!=='rejection'&&<section className={`deadline-summary ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'The clock begins when this email is recorded as sent.'}</span></div></section>}
+      <section className="email-decision-snapshot" aria-label="Saved player decision"><span className="email-decision-title"><ClipboardList/>Decision</span><strong className={recommendationClass}>{player.recommendation||'No recommendation'}</strong><span className="email-decision-teams">{player.suitableTeams.map(team=><b key={team}>{team}</b>)}</span></section>
       {(emailType==='offer'||emailType==='alternative')&&<OfferOptionsEditor player={player} save={save} compact teamDivisions={teamDivisions}/>}
       <section className="email-draft-settings">
         <div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div>

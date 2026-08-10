@@ -99,7 +99,7 @@ export function PlayersPage({ players, sessions, selectedId, openPlayer, query, 
           {!filtered.length && <div className="empty-state compact">No players match these filters.</div>}
         </div>
       </div>
-      {selected?<PlayerProfile player={selected} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveDecision={saveDecision} saveAssessment={saveAssessment} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} deletePlayer={deletePlayer} isAdmin={isAdmin} trialsMode={trialsMode} teamDivisions={teamDivisions}/>:<div className="empty-state">No players match the selected division and filters.</div>}
+      {selected?<PlayerProfile player={selected} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveDecision={saveDecision} saveAssessment={saveAssessment} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} deletePlayer={deletePlayer} isAdmin={isAdmin} trialsMode={trialsMode}/>:<div className="empty-state">No players match the selected division and filters.</div>}
     </section>
   </>
 }
