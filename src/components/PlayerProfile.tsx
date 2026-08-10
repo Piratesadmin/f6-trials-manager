@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { CalendarClock, Camera, Check, CheckCircle2, ClipboardList, Copy, CreditCard, ExternalLink, LoaderCircle, Mail, Star, Trash2, UserRound } from 'lucide-react'
-import type { AssessmentKey, Decision, EmailSettings, Player, PlayerTab, Recommendation, TeamPlans, TrialResponseStatus, TrialSession } from '../types'
+import { BarChart3, CalendarClock, Camera, Check, CheckCircle2, ClipboardList, Copy, CreditCard, ExternalLink, LoaderCircle, Mail, Save, Star, Trash2, TrendingUp, UserRound } from 'lucide-react'
+import type { Assessment, AssessmentSnapshot, Decision, EmailSettings, Player, PlayerTab, Recommendation, TeamPlans, TrialResponseStatus, TrialSession } from '../types'
 import { positions, reasons, recommendations, teams } from '../data/constants'
 import { assessmentCompletion, assessmentFields, averageRating } from '../utils/player'
 import { emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailValidation, mailtoFor } from '../utils/email'
@@ -17,6 +17,7 @@ type Props = {
   activeTab: PlayerTab
   setActiveTab: (tab: PlayerTab) => void
   save: (player: Player) => void
+  saveAssessment: (player: Player) => Promise<void>
   players: Player[]
   emailSettings: EmailSettings
   teamPlans: TeamPlans
@@ -26,6 +27,7 @@ type Props = {
   photo: string
   uploadPhoto: (player: Player, file: File) => Promise<void>
   removePhoto: (player: Player) => Promise<void>
+  trialsMode: boolean
 }
 
 const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
@@ -37,19 +39,11 @@ const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
 
 const recommendationClass = (recommendation: Recommendation) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayerProfile({ player, players, sessions, activeTab, setActiveTab, save, emailSettings, teamPlans, markSent, starred, toggleStar, photo, uploadPhoto, removePhoto }: Props) {
+export function PlayerProfile({ player, players, sessions, activeTab, setActiveTab, save, saveAssessment, emailSettings, teamPlans, markSent, starred, toggleStar, photo, uploadPhoto, removePhoto, trialsMode }: Props) {
   const average = averageRating(player)
   const completion = assessmentCompletion(player)
   const initials = player.name.split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2)
-
-  const updateRating = (key: AssessmentKey, score: number) => {
-    save({ ...player, assessment: { ...player.assessment, [key]: score } })
-  }
-
-  const toggleTeam = (team: string) => {
-    const selected = player.suitableTeams.includes(team)
-    save({ ...player, suitableTeams: selected ? player.suitableTeams.filter(item => item !== team) : [...player.suitableTeams, team] })
-  }
+  const visibleTabs=trialsMode?tabs:tabs.filter(tab=>tab.key==='overview'||tab.key==='assessment')
 
   return <article className="player-profile">
     <header className="profile-hero">
@@ -68,12 +62,12 @@ export function PlayerProfile({ player, players, sessions, activeTab, setActiveT
     </header>
 
     <nav className="profile-tabs" aria-label="Player profile sections">
-      {tabs.map(({ key, label, icon: Icon }) => <button key={key} className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}><Icon/>{label}</button>)}
+      {visibleTabs.map(({ key, label, icon: Icon }) => <button key={key} className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}><Icon/>{label}</button>)}
     </nav>
 
     <div className="profile-content">
       {activeTab === 'overview' && <Overview player={player} sessions={sessions} save={save} photo={photo} uploadPhoto={uploadPhoto} removePhoto={removePhoto}/>} 
-      {activeTab === 'assessment' && <Assessment player={player} save={save} updateRating={updateRating} toggleTeam={toggleTeam}/>} 
+      {activeTab === 'assessment' && <Assessment player={player} saveAssessment={saveAssessment} trialsMode={trialsMode}/>} 
       {activeTab === 'decision' && <DecisionPanel player={player} save={save}/>} 
       {activeTab === 'email' && <EmailPanel player={player} players={players} sessions={sessions} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent}/>} 
     </div>
@@ -126,37 +120,58 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
   </div>
 }
 
-function Assessment({ player, save, updateRating, toggleTeam }: Pick<Props, 'player' | 'save'> & { updateRating: (key: AssessmentKey, value: number) => void; toggleTeam: (team: string) => void }) {
-  const average = averageRating(player)
-  const completion = assessmentCompletion(player)
+type AssessmentDraft={assessment:Assessment;recommendation:Recommendation;strengths:string;developmentAreas:string;suitableTeams:string[]}
+const assessmentDraftFor=(player:Player):AssessmentDraft=>({assessment:{...player.assessment},recommendation:player.recommendation,strengths:player.strengths,developmentAreas:player.developmentAreas,suitableTeams:[...player.suitableTeams]})
+
+function Assessment({ player, saveAssessment, trialsMode }: Pick<Props, 'player' | 'saveAssessment' | 'trialsMode'>) {
+  const [draft,setDraft]=useState<AssessmentDraft>(()=>assessmentDraftFor(player))
+  const [busy,setBusy]=useState(false)
+  const [saved,setSaved]=useState(false)
+  useEffect(()=>{setDraft(assessmentDraftFor(player));setSaved(false)},[player.id,player.updatedAt])
+  const draftPlayer={...player,...draft}
+  const average=averageRating(draftPlayer)
+  const completion=assessmentCompletion(draftPlayer)
+  const history=Object.values(player.assessmentHistory||{}).sort((a,b)=>a.recordedAt-b.recordedAt)
+  const toggleTeam=(team:string)=>setDraft(current=>({...current,suitableTeams:current.suitableTeams.includes(team)?current.suitableTeams.filter(item=>item!==team):[...current.suitableTeams,team]}))
+  const submit=async()=>{setBusy(true);setSaved(false);try{await saveAssessment(draftPlayer);setSaved(true);window.setTimeout(()=>setSaved(false),2200)}finally{setBusy(false)}}
 
   return <div className="profile-section">
-    <div className="assessment-summary">
-      <div><span className="eyebrow">SHARED ASSESSMENT</span><h3>{average ? `${average.toFixed(1)} average rating` : 'Not assessed yet'}</h3><p>One shared assessment, updated live for every coach.</p></div>
-      <div className="completion-ring" style={{ '--completion': `${completion * 3.6}deg` } as CSSProperties}><span>{completion}%</span></div>
+    <div className="assessment-summary assessment-draft-summary">
+      <div><span className="eyebrow">CURRENT ASSESSMENT</span><h3>{average ? `${average.toFixed(1)} average rating` : 'Not assessed yet'}</h3><p>Update the scores, then save a dated assessment to add it to this player’s progression.</p></div>
+      <div className="assessment-summary-actions"><div className="completion-ring" style={{ '--completion': `${completion * 3.6}deg` } as CSSProperties}><span>{completion}%</span></div><button className="primary save-assessment" disabled={busy||completion===0} onClick={submit}>{busy?<LoaderCircle className="spin"/>:saved?<CheckCircle2/>:<Save/>}{busy?'Saving…':saved?'Assessment saved':'Save assessment'}</button></div>
     </div>
 
     <div className="ratings-grid">
-      {assessmentFields.map(({ key, label, hint }) => <div className="rating-row" key={key}><div><b>{label}</b><span>{hint}</span></div><StarRating label={label} value={player.assessment[key]} onChange={value => updateRating(key, value)}/><strong>{player.assessment[key] || '—'}</strong></div>)}
+      {assessmentFields.map(({ key, label, hint }) => <div className="rating-row" key={key}><div><b>{label}</b><span>{hint}</span></div><StarRating label={label} value={draft.assessment[key]} onChange={value=>setDraft(current=>({...current,assessment:{...current.assessment,[key]:value}}))}/><strong>{draft.assessment[key] || '—'}</strong></div>)}
     </div>
 
-    <div className="assessment-card">
-      <div className="section-heading"><div><span className="eyebrow">RECOMMENDATION</span><h3>Coach recommendation</h3><p>This guides discussion without changing the final decision.</p></div></div>
+    {trialsMode&&<div className="assessment-card">
+      <div className="section-heading"><div><span className="eyebrow">RECOMMENDATION</span><h3>Coach recommendation</h3><p>This is stored with each assessment snapshot so changes can be reviewed over time.</p></div></div>
       <div className="recommendation-options">
-        {recommendations.map(recommendation => <button type="button" key={recommendation} className={`${recommendationClass(recommendation)} ${player.recommendation === recommendation ? 'selected' : ''}`} onClick={() => save({ ...player, recommendation: player.recommendation === recommendation ? '' : recommendation })}><span></span>{recommendation}{player.recommendation === recommendation && <Check/>}</button>)}
+        {recommendations.map(recommendation => <button type="button" key={recommendation} className={`${recommendationClass(recommendation)} ${draft.recommendation === recommendation ? 'selected' : ''}`} onClick={()=>setDraft(current=>({...current,recommendation:current.recommendation===recommendation?'':recommendation}))}><span></span>{recommendation}{draft.recommendation === recommendation && <Check/>}</button>)}
       </div>
-    </div>
+    </div>}
 
-    <div className="assessment-card">
+    {trialsMode&&<div className="assessment-card">
       <div className="section-heading"><div><span className="eyebrow">TEAM FIT</span><h3>Suitable teams</h3><p>Select every team that could be a realistic fit.</p></div></div>
-      <div className="team-options">{teams.map(team => <button type="button" key={team} className={player.suitableTeams.includes(team) ? 'selected' : ''} onClick={() => toggleTeam(team)}>{player.suitableTeams.includes(team) && <Check/>}{team}</button>)}</div>
-    </div>
+      <div className="team-options">{teams.map(team => <button type="button" key={team} className={draft.suitableTeams.includes(team) ? 'selected' : ''} onClick={() => toggleTeam(team)}>{draft.suitableTeams.includes(team) && <Check/>}{team}</button>)}</div>
+    </div>}
 
     <div className="notes-grid">
-      <label><span>Strengths</span><small>What stood out positively?</small><textarea value={player.strengths} onChange={event => save({ ...player, strengths: event.target.value })} placeholder="e.g. Reliable serve receive, vocal communicator…"/></label>
-      <label><span>Development areas</span><small>What should they work on?</small><textarea value={player.developmentAreas} onChange={event => save({ ...player, developmentAreas: event.target.value })} placeholder="e.g. Blocking timing, transition speed…"/></label>
+      <label><span>Strengths</span><small>What stood out positively?</small><textarea value={draft.strengths} onChange={event=>setDraft(current=>({...current,strengths:event.target.value}))} placeholder="e.g. Reliable serve receive, vocal communicator…"/></label>
+      <label><span>Development areas</span><small>What should they work on?</small><textarea value={draft.developmentAreas} onChange={event=>setDraft(current=>({...current,developmentAreas:event.target.value}))} placeholder="e.g. Blocking timing, transition speed…"/></label>
     </div>
+
+    <AssessmentProgression history={history} trialsMode={trialsMode}/>
   </div>
+}
+
+function AssessmentProgression({history,trialsMode}:{history:AssessmentSnapshot[];trialsMode:boolean}){
+  const recent=history.slice(-8)
+  const latest=history.at(-1)
+  const previous=history.at(-2)
+  const change=latest&&previous?latest.average-previous.average:0
+  return <section className="assessment-progression"><header><div><span className="eyebrow">PLAYER PROGRESSION</span><h3>Assessment history</h3><p>Every saved assessment is retained as a dated snapshot.</p></div><div className={`progression-change ${change>0?'improved':change<0?'declined':''}`}><TrendingUp/><b>{history.length}</b><span>saved assessment{history.length===1?'':'s'}</span>{latest&&previous&&<small>{change>0?'+':''}{change.toFixed(1)} since previous</small>}</div></header>{history.length?<><div className="progression-chart" aria-label="Saved overall assessment progression">{recent.map((snapshot,index)=><div key={snapshot.id}><span style={{height:`${Math.max(5,snapshot.average/5*100)}%`}}></span><b>{snapshot.average.toFixed(1)}</b><small>{new Date(snapshot.recordedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</small>{index===recent.length-1&&<em>Latest</em>}</div>)}</div><div className="assessment-history-list">{[...history].reverse().map((snapshot,index)=><details key={snapshot.id} open={index===0}><summary><span><b>{new Date(snapshot.recordedAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</b><small>{snapshot.recordedBy||'Club coach'}{trialsMode?` · ${snapshot.recommendation||'No recommendation'}`:''}</small></span><strong><Star/>{snapshot.average.toFixed(1)}</strong></summary><div className="history-skill-grid">{assessmentFields.map(field=><span key={field.key}><b>{field.label}</b><em>{snapshot.assessment[field.key]||'—'}</em></span>)}</div>{(snapshot.strengths||snapshot.developmentAreas)&&<div className="history-notes"><p><b>Strengths</b>{snapshot.strengths||'Not recorded'}</p><p><b>Development</b>{snapshot.developmentAreas||'Not recorded'}</p></div>}</details>)}</div></>:<div className="progression-empty"><BarChart3/><b>No saved assessments yet</b><span>Complete the current ratings and select Save assessment to begin tracking progress.</span></div>}</section>
 }
 
 function DecisionPanel({ player, save }: Pick<Props, 'player' | 'save'>) {

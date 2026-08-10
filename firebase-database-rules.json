@@ -23,6 +23,13 @@
       ".write": "auth != null",
       "$playerId": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 150000)" }
     },
+    "sessionPhotos": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$sessionId": {
+        "$photoId": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 300000)" }
+      }
+    },
     "playerFinance": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
@@ -33,7 +40,10 @@
     "financeSettings": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      ".validate": "newData.hasChildren(['nvlFee','lvaFee']) && newData.child('nvlFee').isNumber() && newData.child('nvlFee').val() >= 0 && newData.child('lvaFee').isNumber() && newData.child('lvaFee').val() >= 0"
+      ".validate": "newData.hasChildren(['nvlFee','lvaFee']) && newData.child('nvlFee').isNumber() && newData.child('nvlFee').val() >= 0 && newData.child('lvaFee').isNumber() && newData.child('lvaFee').val() >= 0 && (!newData.child('fullPaymentDueDate').exists() || newData.child('fullPaymentDueDate').isString()) && (!newData.child('instalmentOneDueDate').exists() || newData.child('instalmentOneDueDate').isString()) && (!newData.child('instalmentTwoDueDate').exists() || newData.child('instalmentTwoDueDate').isString())",
+      "directDebitDueDates": {
+        "$index": { ".validate": "newData.isString()" }
+      }
     },
     "teamPlans": {
       ".read": "auth != null",
@@ -58,7 +68,14 @@
     "seasonSettings": {
       ".read": "auth != null",
       ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      ".validate": "newData.hasChildren(['currentSeason']) && newData.child('currentSeason').isString() && newData.child('currentSeason').val().length > 0 && newData.child('currentSeason').val().length <= 60"
+      ".validate": "newData.hasChildren(['currentSeason']) && newData.child('currentSeason').isString() && newData.child('currentSeason').val().length > 0 && newData.child('currentSeason').val().length <= 60 && (!newData.child('trialsMode').exists() || newData.child('trialsMode').isBoolean())"
+    },
+    "archivedPlayers": {
+      ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$playerId": {
+        ".validate": "!newData.exists() || (newData.hasChildren(['id','seasonName','archivedAt','archivedBy','archiveReason','player','photo']) && newData.child('id').val() == $playerId && newData.child('seasonName').isString() && newData.child('seasonName').val().length <= 60 && newData.child('archivedAt').isNumber() && newData.child('archivedBy').isString() && newData.child('archivedBy').val().length <= 120 && (newData.child('archiveReason').val() == 'Final rejection cleanup' || newData.child('archiveReason').val() == 'Outside confirmed squad cleanup') && newData.child('player').hasChildren(['name','email','decision']) && newData.child('photo').isString() && newData.child('photo').val().length <= 150000)"
+      }
     },
     "seasonArchives": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",

@@ -7,7 +7,7 @@ import { StatsCards } from '../components/StatsCards'
 import { averageRating } from '../utils/player'
 import { emailQueueStatus, emailTypeFor } from '../utils/email'
 import { eventTypeLabel, formatSessionDate } from '../utils/schedule'
-import { effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount } from '../utils/finance'
+import { effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount, paymentDeadlineDetails } from '../utils/finance'
 import { deadlineStateLabel, decisionReminderDetailText, decisionReminderDetails, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
 
 type Props={
@@ -23,11 +23,12 @@ type Props={
   finances:PlayerFinanceMap
   financeSettings:FinanceSettings
   playerStars:PlayerStars
+  trialsMode:boolean
 }
 
 type FocusView='starred'|'recommended'|'deadlines'
 
-export function DashboardPage({players,sessions,settings,teamPlans,setPage,openPlayer,openSchedule,assignedTeams,isAdmin,finances,financeSettings,playerStars}:Props){
+export function DashboardPage({players,sessions,settings,teamPlans,setPage,openPlayer,openSchedule,assignedTeams,isAdmin,finances,financeSettings,playerStars,trialsMode}:Props){
   const [focusView,setFocusView]=useState<FocusView|null>(null)
   const recent=[...players].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,5)
   const emailPlayers=players.filter(player=>emailTypeFor(player))
@@ -47,6 +48,7 @@ export function DashboardPage({players,sessions,settings,teamPlans,setPage,openP
   const financeRecords=confirmed.map(player=>({player,finance:finances[player.id]||emptyPlayerFinance(player.id)}))
   const billed=financeRecords.reduce((total,{player,finance})=>total+effectiveAmountOwed(player,finance,financeSettings),0)
   const outstanding=financeRecords.reduce((total,{player,finance})=>total+outstandingAmount(finance,effectiveAmountOwed(player,finance,financeSettings)),0)
+  const overduePayments=financeRecords.filter(({player,finance})=>paymentDeadlineDetails(finance,effectiveAmountOwed(player,finance,financeSettings),financeSettings).state==='overdue').length
   const relevantToCoach=(player:Player)=>isAdmin||assignedTeams.some(team=>player.appliedTeam===team||player.suitableTeams.includes(team)||Boolean(player.teamConsideration[team]))
   const starredPlayers=players.filter(player=>playerStars[player.id])
   const recommendedPlayers=players.filter(player=>player.recommendation&&player.recommendation!=='Not suitable'&&relevantToCoach(player))
@@ -56,6 +58,15 @@ export function DashboardPage({players,sessions,settings,teamPlans,setPage,openP
   const focusTitle=focusView==='starred'?'My starred players':focusView==='recommended'?'Recommended players':'Email response deadlines'
   const focusDescription=focusView==='starred'?'Your private shortlist for quick review.':focusView==='recommended'?'Players recommended for teams you can manage.':'Players whose 72-hour response window is currently running.'
   const openFocusPlayer=(player:Player)=>{const tab=focusView==='deadlines'?'email':focusView==='recommended'?'assessment':'overview';setFocusView(null);openPlayer(player.id,tab)}
+
+  if(!trialsMode)return <>
+    <PageHeader title="Club dashboard" subtitle="Your in-season shortcuts, upcoming schedule and latest squad updates." action={<button className="primary" onClick={()=>setPage('schedule')}>Open schedule</button>}/>
+    <section className="club-mode-banner"><ShieldCheck/><div><span className="eyebrow">CLUB MODE</span><h2>In-season workspace</h2><p>Trial decisions, email preparation and squad planning are hidden until an administrator turns Trials Mode back on.</p></div></section>
+    <section className="dashboard-grid club-mode-dashboard">
+      <div className="panel"><div className="panel-head"><div><span className="eyebrow">RECENT ACTIVITY</span><h2>Latest player updates</h2></div><button className="text-button" onClick={()=>setPage('players')}>Open players <ArrowRight/></button></div><div className="activity-list">{recent.map(player=>{const rating=averageRating(player);return <div key={player.id} className="activity-row"><div className="avatar">{player.name.split(' ').map(part=>part[0]).join('')}</div><div><b>{player.name}</b><span>{player.decision==='Offer accepted'?'Confirmed squad':player.recommendation||player.decision} · {rating?`${rating.toFixed(1)} rating`:'Player record'}</span></div><time>{player.updatedAt?new Date(player.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):'—'}</time></div>})}{!recent.length&&<div className="empty-state compact">No recent player updates.</div>}</div></div>
+      <div className="quick-actions"><button onClick={()=>setPage('schedule')}><CalendarDays/><div><b>Club schedule</b><span>{nextSession?`${eventTypeLabel(nextSession.eventType)} · ${formatSessionDate(nextSession.date)} · ${nextSession.title}`:'Add the next training session or game'}</span></div><ArrowRight/></button><button onClick={()=>setPage('players')}><Users/><div><b>Player records</b><span>View confirmed members and club information</span></div><ArrowRight/></button><button onClick={()=>setPage('teams')}><ShieldCheck/><div><b>Teams and attendance</b><span>Confirmed squads, training and game statistics</span></div><ArrowRight/></button>{isAdmin&&<button onClick={()=>setPage('finance')}><WalletCards/><div><b>Finance</b><span>{overduePayments?`${overduePayments} payment${overduePayments===1?'':'s'} overdue`:`${formatCurrency(outstanding)} outstanding`}</span></div><ArrowRight/></button>}</div>
+    </section>
+  </>
 
   return <>
     <PageHeader title="Club dashboard" subtitle="A live overview of trials, squads, communications and decisions." action={<div className="dashboard-header-actions"><NotificationDropdown players={players} sessions={sessions} assignedTeams={assignedTeams} isAdmin={isAdmin} openPlayer={id=>openPlayer(id,'decision')} openSchedule={openSchedule}/><button className="primary" onClick={()=>setPage('players')}>View players</button></div>}/>

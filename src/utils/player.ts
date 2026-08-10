@@ -1,4 +1,4 @@
-import type { Assessment, AssessmentKey, Player } from '../types'
+import type { Assessment, AssessmentKey, AssessmentSnapshot, Player } from '../types'
 import { normaliseOffers } from './offers'
 
 export const assessmentFields: { key: AssessmentKey; label: string; hint: string }[] = [
@@ -63,6 +63,17 @@ export function normalisePlayer(player: Player): Player {
   const history = player.communicationHistory && typeof player.communicationHistory === 'object'
     ? player.communicationHistory
     : {}
+  const assessmentHistory = player.assessmentHistory && typeof player.assessmentHistory === 'object'
+    ? Object.fromEntries(Object.entries(player.assessmentHistory).flatMap(([id,value])=>{
+      if(!value||typeof value!=='object')return[]
+      const incomingSnapshot=value as Partial<AssessmentSnapshot>
+      const snapshotAssessment=emptyAssessment()
+      assessmentFields.forEach(({key})=>{snapshotAssessment[key]=normaliseScore(incomingSnapshot.assessment?.[key])})
+      const scores=Object.values(snapshotAssessment).filter(score=>score>0)
+      const average=scores.length?scores.reduce((total,score)=>total+score,0)/scores.length:0
+      return [[id,{id,assessment:snapshotAssessment,average, recommendation:incomingSnapshot.recommendation||'',strengths:incomingSnapshot.strengths||'',developmentAreas:incomingSnapshot.developmentAreas||'',suitableTeams:Array.isArray(incomingSnapshot.suitableTeams)?incomingSnapshot.suitableTeams.filter(Boolean):[],recordedAt:typeof incomingSnapshot.recordedAt==='number'?incomingSnapshot.recordedAt:0,recordedBy:typeof incomingSnapshot.recordedBy==='string'?incomingSnapshot.recordedBy:''} as AssessmentSnapshot]]
+    }))
+    : {}
   const sentDecision = player.decision === 'Offer sent' || player.decision === 'Offer accepted' || player.decision === 'Rejection sent' || player.decision === 'Waiting list sent'
   const reviewStatus = sentDecision ? 'sent' : player.emailReviewStatus === 'reviewed' ? 'reviewed' : 'draft'
 
@@ -84,6 +95,7 @@ export function normalisePlayer(player: Player): Player {
     offeredTeam: player.offeredTeam || primary?.team || '',
     offeredPosition: player.offeredPosition || primary?.position || '',
     assessment,
+    assessmentHistory,
     recommendation: player.recommendation || '',
     strengths: player.strengths || '',
     developmentAreas: player.developmentAreas || '',

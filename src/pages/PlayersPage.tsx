@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronRight, Filter, Search, Star } from 'lucide-react'
 import type { EmailSettings, Player, PlayerStars, PlayerTab, TeamPlans, TrialSession } from '../types'
 import { teams } from '../data/constants'
@@ -7,6 +7,7 @@ import { PageHeader } from '../components/PageHeader'
 import { PlayerProfile } from '../components/PlayerProfile'
 import { activeFilterCount, emptyPlayerFilters, PlayerFilters, type PlayerFilterValues } from '../components/PlayerFilters'
 import { decisionReminderDetailText, decisionReminderDetails } from '../utils/deadline'
+import { confirmedTeam } from '../utils/finance'
 
 type Props = {
   players: Player[]
@@ -18,6 +19,7 @@ type Props = {
   teamFilter: string
   setTeamFilter: (team: string) => void
   save: (player: Player) => void
+  saveAssessment: (player: Player) => Promise<void>
   onImport: () => void
   activeTab: PlayerTab
   setActiveTab: (tab: PlayerTab) => void
@@ -30,16 +32,18 @@ type Props = {
   selectedPhoto: string
   uploadPhoto: (player: Player, file: File) => Promise<void>
   removePhoto: (player: Player) => Promise<void>
+  trialsMode: boolean
 }
 
 const recommendationClass = (recommendation: Player['recommendation']) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayersPage({ players, sessions, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto }: Props) {
+export function PlayersPage({ players, sessions, selectedId, setSelectedId, query, setQuery, teamFilter, setTeamFilter, save, saveAssessment, onImport, activeTab, setActiveTab, emailSettings, teamPlans, markSent, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, trialsMode }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState<PlayerFilterValues>(emptyPlayerFilters)
+  useEffect(()=>{if(!trialsMode&&!['overview','assessment'].includes(activeTab))setActiveTab('overview')},[trialsMode,activeTab,setActiveTab])
   const search = query.trim().toLowerCase()
   const filtered = players.filter(player => {
-    const matchesTeam = teamFilter === 'All teams' || player.appliedTeam === teamFilter
+    const matchesTeam = teamFilter === 'All teams' || (trialsMode ? player.appliedTeam : confirmedTeam(player)) === teamFilter
     const matchesStarred = !filters.starredOnly || Boolean(playerStars[player.id])
     const matchesPosition = !filters.positions.length || filters.positions.includes(player.position)
     const matchesAttendance = filters.attendance === 'all' || (filters.attendance === 'attended' ? player.attended : !player.attended)
@@ -65,7 +69,7 @@ export function PlayersPage({ players, sessions, selectedId, setSelectedId, quer
   }
 
   return <>
-    <PageHeader title="Players" subtitle="Review profiles, record shared assessments and prepare decisions." action={<button className="primary" onClick={onImport}>+ Import players / schedule</button>}/>
+    <PageHeader title="Players" subtitle={trialsMode?'Review profiles, record shared assessments and prepare decisions.':'View and maintain the club’s active player records.'} action={trialsMode?<button className="primary" onClick={onImport}>+ Import players / schedule</button>:undefined}/>
     <section className="workspace player-workspace">
       <div className="list-panel">
         <div className="toolbar">
@@ -92,7 +96,7 @@ export function PlayersPage({ players, sessions, selectedId, setSelectedId, quer
           {!filtered.length && <div className="empty-state compact">No players match these filters.</div>}
         </div>
       </div>
-      <PlayerProfile player={selected} players={players} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto}/>
+      <PlayerProfile player={selected} players={players} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveAssessment={saveAssessment} emailSettings={emailSettings} teamPlans={teamPlans} markSent={markSent} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} trialsMode={trialsMode}/>
     </section>
   </>
 }

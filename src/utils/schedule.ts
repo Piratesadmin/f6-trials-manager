@@ -1,7 +1,10 @@
-import type { ClubEventType, TrialSession } from '../types'
+import type { ClubEventType, SessionAttendanceStatus, TrialSession } from '../types'
 import { teams } from '../data/constants'
 
 export function normaliseTrialSession(id: string, value: Partial<TrialSession>): TrialSession {
+  const attendance = value.attendance && typeof value.attendance === 'object'
+    ? Object.fromEntries(Object.entries(value.attendance).filter((entry): entry is [string, SessionAttendanceStatus] => Boolean(entry[0]) && (entry[1] === 'present' || entry[1] === 'absent' || entry[1] === 'excused')))
+    : {}
   return {
     id,
     eventType: value.eventType === 'training' || value.eventType === 'game' ? value.eventType : 'trial',
@@ -17,6 +20,7 @@ export function normaliseTrialSession(id: string, value: Partial<TrialSession>):
     recurrenceRule: value.recurrenceRule === 'weekly' || value.recurrenceRule === 'fortnightly' || value.recurrenceRule === 'monthly' ? value.recurrenceRule : '',
     recurrenceGroupId: value.recurrenceGroupId || '',
     notes: value.notes || '',
+    attendance,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     updatedBy: value.updatedBy,

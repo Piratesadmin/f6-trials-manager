@@ -23,6 +23,18 @@ export type AssessmentKey =
 
 export type Assessment = Record<AssessmentKey, number>
 
+export type AssessmentSnapshot = {
+  id: string
+  assessment: Assessment
+  average: number
+  recommendation: Recommendation
+  strengths: string
+  developmentAreas: string
+  suitableTeams: string[]
+  recordedAt: number
+  recordedBy: string
+}
+
 export type Recommendation =
   | ''
   | 'Strong offer'
@@ -98,6 +110,7 @@ export type Player = {
   rejectionReason?: string
   notes: string
   assessment: Assessment
+  assessmentHistory?: Record<string, AssessmentSnapshot>
   recommendation: Recommendation
   strengths: string
   developmentAreas: string
@@ -137,6 +150,10 @@ export type PlayerFinanceMap = Record<string, PlayerFinance>
 export type FinanceSettings = {
   nvlFee: number
   lvaFee: number
+  fullPaymentDueDate: string
+  instalmentOneDueDate: string
+  instalmentTwoDueDate: string
+  directDebitDueDates: string[]
   updatedAt?: number
   updatedBy?: string
 }
@@ -144,6 +161,8 @@ export type FinanceSettings = {
 export type ClubEventType = 'trial' | 'training' | 'game'
 export type GameLocation = '' | 'Home' | 'Away'
 export type RecurrenceRule = '' | 'weekly' | 'fortnightly' | 'monthly'
+export type SessionAttendanceStatus = 'present' | 'absent' | 'excused'
+export type SessionPhotos = Record<string, Record<string, string>>
 
 export type TrialSession = {
   id: string
@@ -160,6 +179,7 @@ export type TrialSession = {
   recurrenceRule: RecurrenceRule
   recurrenceGroupId: string
   notes: string
+  attendance: Record<string, SessionAttendanceStatus>
   createdAt?: number
   updatedAt?: number
   updatedBy?: string
@@ -198,9 +218,24 @@ export type ActivityDraft = Omit<ActivityLogEntry, 'id' | 'timestamp' | 'actorUi
 
 export type SeasonSettings = {
   currentSeason: string
+  trialsMode: boolean
   updatedAt?: number
   updatedBy?: string
 }
+
+export type ArchivedPlayerReason = 'Final rejection cleanup' | 'Outside confirmed squad cleanup'
+
+export type ArchivedPlayerRecord = {
+  id: string
+  seasonName: string
+  archivedAt: number
+  archivedBy: string
+  archiveReason: ArchivedPlayerReason
+  player: Player
+  photo: string
+}
+
+export type ArchivedPlayersMap = Record<string, ArchivedPlayerRecord>
 
 export type SeasonArchiveSummary = {
   players: number
@@ -213,6 +248,7 @@ export type SeasonArchiveSummary = {
 
 export type SeasonArchiveSnapshot = {
   players: Record<string, Player>
+  archivedPlayers: ArchivedPlayersMap
   trialSessions: Record<string, TrialSession>
   teamPlans: TeamPlans
   playerFinance: PlayerFinanceMap

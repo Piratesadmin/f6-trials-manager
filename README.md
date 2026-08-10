@@ -1,8 +1,72 @@
-# F6 Club Manager v0.22
+# F6 Club Manager v0.26
 
 A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. Coaches enter one shared club PIN and see changes live across devices.
 
-Version 0.22 adds coach-focused dashboard shortcuts and starts every response deadline from the time an email is recorded as sent.
+Version 0.26 turns trialist cleanup into a recoverable archive, creating a searchable replacement pool for the remainder of the season.
+
+## v0.26 archived players and replacement pool
+
+- Trialist cleanup now moves matching players out of live records and into **Seasons → Archived players** instead of deleting their profile permanently.
+- The administrator-only replacement pool can be searched by name, email, experience or notes and filtered by applied team and playing position.
+- Archived profiles retain player details, trial ratings, assessment progression, recommendations, strengths, development areas, coach notes, communication history and the compressed player photo.
+- Selecting an archived player shows the information coaches need when considering a replacement, including overall rating and saved-assessment count.
+- Administrators can restore a player to the live player list with their profile and photo intact.
+- Finance records and personal coach-star references are intentionally removed during cleanup and are not recreated when a player is restored.
+- Every archive and restore action is recorded in administrator activity history.
+- The current replacement pool is included in season rollover, without the image payload, and then cleared ready for the new season.
+- Existing season archives default safely to an empty archived-player collection.
+- Publish the supplied v0.26 Firebase rules before using cleanup or restore. No new GitHub secret is required.
+
+## v0.25.1 Club Mode assessment refinement
+
+- Club Mode assessments contain the ten player ratings, automatic average, strengths, development areas, Save assessment action and progression history.
+- Coach recommendation and suitable-team controls appear only while Trials Mode is on.
+- Trial recommendations and suitable-team data already saved on a player are retained when Club Mode is active and return unchanged when Trials Mode is turned back on.
+- Club Mode progression entries show the coach and assessment results without displaying old trial recommendations.
+- No Firebase rule change, migration or new GitHub secret is required.
+
+## v0.25 saved assessments and player progression
+
+- Club Mode keeps both the **Overview** and **Assessment** tabs available on every player profile.
+- Assessment ratings now work as a draft until a coach selects **Save assessment**.
+- Every save creates a dated snapshot containing all ten ratings, the automatic average, recommendation, suitable teams, strengths and development areas.
+- Coaches can reassess a player repeatedly without losing earlier records.
+- The player profile shows a progression chart, the change since the previous assessment and an expandable history of every saved snapshot.
+- The latest saved assessment remains the player’s current assessment, so existing player cards, filters and team views continue to use the latest score and recommendation.
+- The signed-in coach or Team administrator’s name is recorded on each snapshot; shared-PIN saves use the configured club identity.
+- Existing players default safely to an empty history while retaining their current ratings, which can be saved as the first snapshot.
+- Saved assessment history syncs through the existing player record and is included automatically in season archives.
+- No Firebase rule change, data migration or new GitHub secret is required.
+
+## v0.24 payment schedules and Trials Mode
+
+- Administrators can set a fully-paid deadline, two instalment deadlines and any number of direct-debit collection dates in Settings.
+- Every confirmed player is checked against the dates for their selected payment arrangement.
+- Two-instalment players are expected to have paid half by the first deadline and the full balance by the second.
+- Direct-debit expectations are divided evenly across all configured collection dates.
+- The administrator Finance page shows overdue-player totals, overdue amounts, a deadline filter and a clear per-player schedule status.
+- Overdue payment status is also visible on confirmed squad cards for administrators.
+- Finance CSV exports now include the payment schedule status and next or missed date.
+- Administrators can switch Trials Mode on or off from Settings.
+- Trials Mode on preserves the complete trials, assessment, decision, email and squad-planning workflow.
+- Trials Mode off hides Emails and trial-only Decision/Email player tabs, keeps seasonal player assessments available, simplifies the dashboard to recent activity and operational shortcuts, defaults new calendar entries to training, and limits Teams to confirmed squads and attendance.
+- Existing trial events remain readable in Club Mode, but cannot be edited until Trials Mode is turned on.
+- Existing Firebase settings default safely: Trials Mode remains on and payment dates begin empty, so no data migration is required.
+- The existing v0.23 Firebase rules accept these additional protected settings; no new GitHub secrets are required.
+
+## v0.23 session workspaces and team attendance
+
+- Clicking a trial, training session or game now opens a focused full-screen event view; the minimise button returns to the calendar.
+- Each event has shared session notes for plans, arrival instructions, drills, transport and match preparation.
+- Coaches can attach up to six compressed images to an event, including drill diagrams, court plans and match-day information.
+- Event photos are stored separately under `sessionPhotos`, protected by Firebase Authentication and loaded only for the event being viewed.
+- Training sessions and games show every confirmed player for the selected team or teams.
+- Assigned coaches and Team administrators can mark their own players **Present**, **Absent** or **Excused**; administrators can edit every team.
+- The Team Planner now includes a complete attendance dashboard for each team, with session totals, attendance percentage, unmarked records, recent events and per-player statistics.
+- Excused absences do not reduce the attendance percentage. Unmarked players remain visible so incomplete registers are easy to find.
+- Existing calendar events receive an empty attendance register automatically, so no database migration is needed.
+- Deleting an event also removes its photo gallery. Season rollover clears live event photos while preserving attendance inside the archived event records.
+- Publish the supplied v0.23 Firebase rules before uploading event photos.
 
 ## v0.22 coach dashboard and receipt-based deadlines
 
@@ -236,7 +300,7 @@ The PIN itself is not placed in `.env.local`; enter it on the portal screen.
 
 The PIN protects access through Firebase, but it is still a shared credential. Change it after trials, when a coach leaves, or if it is shared outside the intended group.
 
-Dates of birth and photos are personal data. Only collect them when needed, limit portal access to current coaches and remove trial records in line with the club's retention policy.
+Dates of birth and photos are personal data. Only collect them when needed, limit portal access to current coaches and permanently erase archived trial records when required by the club's retention policy.
 
 ## v0.10 player information, personal stars and photos
 

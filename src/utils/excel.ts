@@ -192,6 +192,7 @@ export async function parseTrialWorkbook(file: File): Promise<ParsedTrialWorkboo
       recurrenceRule: '',
       recurrenceGroupId: '',
       notes: `Imported from ${file.name}`,
+      attendance: {},
     },
     players,
     warnings,

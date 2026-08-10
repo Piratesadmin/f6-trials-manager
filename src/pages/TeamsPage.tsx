@@ -1,24 +1,27 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, Check, CheckCircle2, ClipboardList, Lock, MailPlus, Minus, Plus, Star, UserPlus, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CalendarDays, Check, CheckCircle2, ClipboardList, Lock, MailPlus, Minus, Plus, Star, TrendingUp, UserPlus, Users, X } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { positions, teams } from '../data/constants'
-import type { FinanceSettings, Player, PlayerFinanceMap, TeamPlans } from '../types'
+import type { FinanceSettings, Player, PlayerFinanceMap, TeamPlans, TrialSession } from '../types'
 import { averageRating } from '../utils/player'
 import { assignmentForTeam, isPlannedForTeam, minimumSquadSize, minimumTargetForPosition, recommendationMatchesTeam } from '../utils/teamPlanner'
-import { confirmedPosition, confirmedTeam, effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount, paymentStatus } from '../utils/finance'
+import { confirmedPosition, confirmedTeam, effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentStatus } from '../utils/finance'
 import { defaultSquadRole, offerForTeam, primaryOffer } from '../utils/offers'
 
 type Props = {
   players: Player[]
+  sessions: TrialSession[]
   teamPlans: TeamPlans
   savePlayer: (player: Player) => void
   saveTarget: (team: string, position: string, target: number) => void
   onOpenPlayer: (id: string) => void
+  onOpenSchedule: (id: string) => void
   canEditTeam: (team: string) => boolean
   editableTeams: string[]
   isAdmin: boolean
   finances: PlayerFinanceMap
   financeSettings: FinanceSettings
+  trialsMode: boolean
 }
 
 type CandidateGroup = {
@@ -28,7 +31,7 @@ type CandidateGroup = {
   tone: string
 }
 
-export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPlayer, canEditTeam, editableTeams, isAdmin, finances, financeSettings }: Props) {
+export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget, onOpenPlayer, onOpenSchedule, canEditTeam, editableTeams, isAdmin, finances, financeSettings, trialsMode }: Props) {
   const [selectedTeam, setSelectedTeam] = useState(teams[0])
   const targets = teamPlans[selectedTeam]
   const planned = useMemo(() => players.filter(player => isPlannedForTeam(player, selectedTeam)), [players, selectedTeam])
@@ -111,6 +114,14 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
     })
   }
 
+  if(!trialsMode)return <>
+    <PageHeader title="Teams" subtitle="Confirmed squads and attendance during the playing season."/>
+    <section className="planner-team-strip" aria-label="Choose a team">{teams.map(team=>{const teamConfirmed=players.filter(player=>confirmedTeam(player)===team).length;return <button key={team} className={`${selectedTeam===team?'active':''} ${canEditTeam(team)?'':'view-only'}`} onClick={()=>setSelectedTeam(team)}><span>{team}{!canEditTeam(team)&&<Lock/>}</span><b>{teamConfirmed}</b><small>{canEditTeam(team)?'Confirmed squad':'View only'}</small></button>})}</section>
+    {!editable&&<div className="team-access-banner"><Lock/><div><b>{selectedTeam} is view only</b><span>You can see the confirmed squad and attendance, but only its assigned coach, Team administrator or a full administrator can change team records.</span></div></div>}
+    <section className="confirmed-squad-panel"><div className="planner-panel-head"><div><span className="eyebrow">CONFIRMED SQUAD</span><h3>{confirmed.length} accepted player{confirmed.length===1?'':'s'}</h3><p>The active playing squad for {selectedTeam}.</p></div>{isAdmin&&<span className="admin-finance-label">Administrator finance view</span>}</div>{confirmed.length?<div className="confirmed-squad-grid">{confirmed.sort((a,b)=>confirmedPosition(a).localeCompare(confirmedPosition(b))||a.name.localeCompare(b.name)).map(player=><ConfirmedPlayerCard key={player.id} player={player} isAdmin={isAdmin} finance={finances[player.id]} financeSettings={financeSettings} onOpen={()=>onOpenPlayer(player.id)}/>)}</div>:<div className="planner-empty compact"><CheckCircle2/><h4>No confirmed players yet</h4><p>No active players are currently assigned to {selectedTeam}.</p></div>}</section>
+    <TeamAttendancePanel team={selectedTeam} players={confirmed} sessions={sessions} onOpenPlayer={onOpenPlayer} onOpenSchedule={onOpenSchedule}/>
+  </>
+
   return <>
     <PageHeader title="Team planner" subtitle="Build balanced squads from coach assessments, referrals and planned offers."/>
 
@@ -139,6 +150,8 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
       {confirmed.length?<div className="confirmed-squad-grid">{confirmed.sort((a,b)=>confirmedPosition(a).localeCompare(confirmedPosition(b))||a.name.localeCompare(b.name)).map(player=><ConfirmedPlayerCard key={player.id} player={player} isAdmin={isAdmin} finance={finances[player.id]} financeSettings={financeSettings} onOpen={()=>onOpenPlayer(player.id)}/>)}</div>:<div className="planner-empty compact"><CheckCircle2/><h4>No confirmed players yet</h4><p>Accepted offers for {selectedTeam} will be collected here automatically.</p></div>}
     </section>
 
+    <TeamAttendancePanel team={selectedTeam} players={confirmed} sessions={sessions} onOpenPlayer={onOpenPlayer} onOpenSchedule={onOpenSchedule}/>
+
     <section className="planner-grid">
       <div className="planner-main">
         <article className="planner-panel position-planner">
@@ -164,11 +177,32 @@ export function TeamsPage({ players, teamPlans, savePlayer, saveTarget, onOpenPl
   </>
 }
 
+function TeamAttendancePanel({team,players,sessions,onOpenPlayer,onOpenSchedule}:{team:string;players:Player[];sessions:TrialSession[];onOpenPlayer:(id:string)=>void;onOpenSchedule:(id:string)=>void}){
+  const today=new Date().toISOString().slice(0,10)
+  const events=sessions.filter(session=>session.eventType!=='trial'&&session.teams.includes(team)&&session.date<=today).sort((a,b)=>`${b.date} ${b.startTime}`.localeCompare(`${a.date} ${a.startTime}`))
+  const marks=events.flatMap(session=>players.map(player=>session.attendance[player.id]||''))
+  const present=marks.filter(status=>status==='present').length
+  const absent=marks.filter(status=>status==='absent').length
+  const excused=marks.filter(status=>status==='excused').length
+  const recorded=present+absent+excused
+  const rate=present+absent?Math.round((present/(present+absent))*100):0
+  const playerRows=players.map(player=>{
+    const statuses=events.map(event=>event.attendance[player.id]||'')
+    const playerPresent=statuses.filter(status=>status==='present').length
+    const playerAbsent=statuses.filter(status=>status==='absent').length
+    const playerExcused=statuses.filter(status=>status==='excused').length
+    const playerRate=playerPresent+playerAbsent?Math.round(playerPresent/(playerPresent+playerAbsent)*100):0
+    return {player,present:playerPresent,absent:playerAbsent,excused:playerExcused,recorded:playerPresent+playerAbsent+playerExcused,rate:playerRate}
+  }).sort((a,b)=>b.rate-a.rate||a.player.name.localeCompare(b.player.name))
+  return <section className="team-attendance-panel"><header><div><span className="eyebrow">TEAM ATTENDANCE</span><h3>Training and game attendance</h3><p>Live statistics from completed calendar sessions for {team}. Excused absences are not counted against attendance rate.</p></div><TrendingUp/></header>{events.length?<><div className="team-attendance-stats"><span><CalendarDays/><b>{events.length}</b><small>Sessions</small></span><span><CheckCircle2/><b>{present}</b><small>Present marks</small></span><span><TrendingUp/><b>{rate}%</b><small>Attendance</small></span><span><ClipboardList/><b>{Math.max(0,events.length*players.length-recorded)}</b><small>Unmarked</small></span></div><div className="team-attendance-layout"><div className="attendance-history"><h4>Recent sessions</h4>{events.slice(0,8).map(event=>{const teamPlayers=players.filter(player=>event.attendance[player.id]);const eventPresent=teamPlayers.filter(player=>event.attendance[player.id]==='present').length;return <button key={event.id} onClick={()=>onOpenSchedule(event.id)}><span className={`event-kind ${event.eventType}`}>{event.eventType==='game'?'Game':'Training'}</span><span><b>{event.title}</b><small>{new Date(`${event.date}T12:00:00`).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</small></span><strong>{eventPresent}/{players.length}</strong><ArrowRight/></button>})}</div><div className="attendance-player-table"><h4>Player overview</h4><div className="attendance-table-wrap"><table><thead><tr><th>Player</th><th>Present</th><th>Absent</th><th>Excused</th><th>Rate</th></tr></thead><tbody>{playerRows.map(row=><tr key={row.player.id}><td><button onClick={()=>onOpenPlayer(row.player.id)}>{row.player.name}<small>{row.recorded}/{events.length} marked</small></button></td><td>{row.present}</td><td>{row.absent}</td><td>{row.excused}</td><td><strong className={row.rate>=80?'good':row.rate<60&&row.recorded?'low':''}>{row.recorded?`${row.rate}%`:'—'}</strong></td></tr>)}</tbody></table></div></div></div></>:<div className="planner-empty compact"><CalendarDays/><h4>No completed sessions yet</h4><p>Add training or games to the calendar, then record attendance inside the full-screen event.</p></div>}</section>
+}
+
 function ConfirmedPlayerCard({player,isAdmin,finance,financeSettings,onOpen}:{player:Player;isAdmin:boolean;finance:PlayerFinanceMap[string]|undefined;financeSettings:FinanceSettings;onOpen:()=>void}){
   const record=finance||emptyPlayerFinance(player.id)
   const amountOwed=effectiveAmountOwed(player,record,financeSettings)
   const status=paymentStatus(record,amountOwed)
-  return <button className="confirmed-player-card" onClick={onOpen}><div className="confirmed-player-icon"><Check/></div><div><b>{player.name}</b><span>{confirmedPosition(player)}{player.bibNumber?` · #${player.bibNumber}`:''}</span></div>{isAdmin?<div className="confirmed-finance"><span className={`finance-status ${status.toLowerCase().replaceAll(' ','-')}`}>{status}</span><small>{formatCurrency(outstandingAmount(record,amountOwed))} outstanding</small></div>:<span className="confirmed-private">Confirmed</span>}<ArrowRight/></button>
+  const deadline=paymentDeadlineDetails(record,amountOwed,financeSettings)
+  return <button className="confirmed-player-card" onClick={onOpen}><div className="confirmed-player-icon"><Check/></div><div><b>{player.name}</b><span>{confirmedPosition(player)}{player.bibNumber?` · #${player.bibNumber}`:''}</span></div>{isAdmin?<div className="confirmed-finance"><span className={`finance-status ${deadline.state==='overdue'?'overdue':status.toLowerCase().replaceAll(' ','-')}`}>{deadline.state==='overdue'?'Payment overdue':status}</span><small>{deadline.state==='overdue'?deadline.label:`${formatCurrency(outstandingAmount(record,amountOwed))} outstanding`}</small></div>:<span className="confirmed-private">Confirmed</span>}<ArrowRight/></button>
 }
 
 function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPosition, onMove, onPrepareOffer, onRemove }: { player: Player; team: string; editable:boolean; moveTeams:string[]; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onRemove:(player:Player)=>void }) {
