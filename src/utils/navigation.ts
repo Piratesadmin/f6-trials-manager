@@ -6,7 +6,6 @@ export type AppRoute = {
   playerTab?: PlayerTab
   sessionId?: string
   team?: string
-  teamFilter?: string
 }
 
 const pages: PageKey[] = ['dashboard','schedule','players','emails','teams','finance','activity','archive','settings']
@@ -18,17 +17,15 @@ const safeDecode = (value = '') => {
 
 export function parseAppHash(hash: string): AppRoute {
   const raw = hash.replace(/^#\/?/, '')
-  const [path, query = ''] = raw.split('?')
+  const [path] = raw.split('?')
   const parts = path.split('/').filter(Boolean).map(safeDecode)
   const page = pages.includes(parts[0] as PageKey) ? parts[0] as PageKey : 'dashboard'
-  const params = new URLSearchParams(query)
 
   if (page === 'players') {
     return {
       page,
       playerId: parts[1] || undefined,
       playerTab: playerTabs.includes(parts[2] as PlayerTab) ? parts[2] as PlayerTab : 'decision',
-      teamFilter: params.get('team') || undefined,
     }
   }
   if (page === 'emails') return { page, playerId: parts[1] || undefined }
@@ -48,8 +45,5 @@ export function appHashFor(route: AppRoute): string {
   } else if (route.page === 'teams' && route.team) {
     parts.push(route.team)
   }
-  const params = new URLSearchParams()
-  if (route.page === 'players' && route.teamFilter && route.teamFilter !== 'All teams') params.set('team', route.teamFilter)
-  const query = params.toString()
-  return `#/${parts.map(encodeURIComponent).join('/')}${query ? `?${query}` : ''}`
+  return `#/${parts.map(encodeURIComponent).join('/')}`
 }

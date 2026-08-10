@@ -18,7 +18,6 @@ const fieldLabels: { key: CsvField; label: string; required?: boolean }[] = [
   { key: 'email', label: 'Email address', required: true },
   { key: 'dateOfBirth', label: 'Date of birth' },
   { key: 'interestedDivisions', label: 'Interested division(s)' },
-  { key: 'appliedTeam', label: 'Applied team' },
   { key: 'position', label: 'Primary position' },
   { key: 'secondaryPosition', label: 'Second position' },
   { key: 'playingExperience', label: 'Past playing experience' },
@@ -27,7 +26,7 @@ const fieldLabels: { key: CsvField; label: string; required?: boolean }[] = [
   { key: 'trialDate', label: 'Trial date/session' },
 ]
 
-const blankMapping: CsvMapping = { name: '', firstName: '', lastName: '', email: '', dateOfBirth: '', interestedDivisions: '', appliedTeam: '', position: '', secondaryPosition: '', playingExperience: '', highestLevelPlayed: '', photoUrl: '', trialDate: '' }
+const blankMapping: CsvMapping = { name: '', firstName: '', lastName: '', email: '', dateOfBirth: '', interestedDivisions: '', position: '', secondaryPosition: '', playingExperience: '', highestLevelPlayed: '', photoUrl: '', trialDate: '' }
 
 export function CsvImportModal({ existingPlayers, onClose, onImport, onWorkbookImport }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -126,7 +125,7 @@ export function CsvImportModal({ existingPlayers, onClose, onImport, onWorkbookI
         </> : parsed ? <>
           <div className="mapping-grid"><div><span className="eyebrow">MATCH COLUMNS</span><h3>Tell us what each column contains</h3><p>Likely headings are matched automatically. Cell, street address, city and postal-code columns are deliberately excluded.</p></div><div className="mapping-fields">{fieldLabels.map(field => <label key={field.key}>{field.label}{field.required && <em>Required</em>}<select value={mapping[field.key]} onChange={event => setMapping({...mapping, [field.key]: event.target.value})}><option value="">Not included</option>{parsed.headers.map(header => <option key={header} value={header}>{header}</option>)}</select></label>)}</div></div>
           <div className="import-results"><div className="result-good"><CheckCircle2/><b>{ready.length}</b><span>Ready to import</span></div><div><AlertTriangle/><b>{duplicateCount}</b><span>Duplicates skipped</span></div><div><AlertTriangle/><b>{invalidCount}</b><span>Invalid rows skipped</span></div></div>
-          <div className="preview-table-wrap"><table className="preview-table"><thead><tr><th>Status</th><th>Name</th><th>Email</th><th>Division(s)</th><th>Primary position</th><th>Second position</th><th>Trial</th></tr></thead><tbody>{analysed.slice(0,8).map(({player,duplicate,valid}, index) => <tr key={`${player.email}-${index}`}><td><span className={`row-status ${!valid?'invalid':duplicate?'duplicate':'ready'}`}>{!valid?'Invalid':duplicate?'Duplicate':'Ready'}</span></td><td>{player.name || 'Missing name'}</td><td>{player.email || 'Missing email'}</td><td>{player.interestedDivisions || player.appliedTeam}</td><td>{player.position}</td><td>{player.secondaryPosition || '—'}</td><td>{player.trialDate}</td></tr>)}</tbody></table>{analysed.length > 8 && <p className="preview-more">Showing 8 of {analysed.length} rows</p>}</div>
+          <div className="preview-table-wrap"><table className="preview-table"><thead><tr><th>Status</th><th>Name</th><th>Email</th><th>Division(s)</th><th>Primary position</th><th>Second position</th><th>Trial</th></tr></thead><tbody>{analysed.slice(0,8).map(({player,duplicate,valid}, index) => <tr key={`${player.email}-${index}`}><td><span className={`row-status ${!valid?'invalid':duplicate?'duplicate':'ready'}`}>{!valid?'Invalid':duplicate?'Duplicate':'Ready'}</span></td><td>{player.name || 'Missing name'}</td><td>{player.email || 'Missing email'}</td><td>{player.interestedDivisions || '—'}</td><td>{player.position}</td><td>{player.secondaryPosition || '—'}</td><td>{player.trialDate}</td></tr>)}</tbody></table>{analysed.length > 8 && <p className="preview-more">Showing 8 of {analysed.length} rows</p>}</div>
           {error && <div className="import-alert error"><AlertTriangle/>{error}</div>}
           <div className="modal-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || ready.length === 0} onClick={submitCsv}><Upload/>{busy ? 'Importing…' : `Import ${ready.length} players`}</button></div>
         </> : null}

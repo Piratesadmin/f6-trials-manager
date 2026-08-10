@@ -40,8 +40,8 @@ export function normaliseActivityEntry(id: string, value: unknown): ActivityLogE
 }
 
 export function describePlayerChange(before: Player | undefined, after: Player): ActivityDraft | null {
-  if (!before) return { category: 'player', action: 'created', summary: `Added ${after.name}`, detail: `${after.position} · ${after.appliedTeam} applicant`, team: after.appliedTeam, entityType: 'player', entityId: after.id }
-  const team = after.offeredTeam || after.appliedTeam
+  if (!before) return { category: 'player', action: 'created', summary: `Added ${after.name}`, detail: `${after.position} · ${after.interestedDivisions} applicant`, team: after.suitableTeams[0] || '', entityType: 'player', entityId: after.id }
+  const team = after.offeredTeam || after.suitableTeams[0] || ''
   if (before.decision !== after.decision) return { category: 'player', action: 'decision_changed', summary: `${after.name}: ${after.decision}`, detail: `Decision changed from ${before.decision} to ${after.decision}.`, team, entityType: 'player', entityId: after.id }
   if (before.recommendation !== after.recommendation) return { category: 'player', action: 'recommendation_changed', summary: `${after.name}: ${after.recommendation || 'Recommendation cleared'}`, detail: before.recommendation ? `Previous recommendation: ${before.recommendation}.` : 'Coach recommendation recorded.', team, entityType: 'player', entityId: after.id }
   if (JSON.stringify(before.offers || []) !== JSON.stringify(after.offers || [])) {
@@ -54,9 +54,9 @@ export function describePlayerChange(before: Player | undefined, after: Player):
   const removed = beforePlans.find(name => !afterPlans.includes(name))
   if (added) return { category: 'team', action: 'player_added_to_plan', summary: `${after.name} added to ${added} plan`, detail: `${after.teamConsideration[added] || after.position} position`, team: added, entityType: 'player', entityId: after.id }
   if (removed) return { category: 'team', action: 'player_removed_from_plan', summary: `${after.name} removed from ${removed} plan`, detail: afterPlans.length ? `Now being considered by ${afterPlans.join(', ')}.` : 'No longer in an active team plan.', team: removed, entityType: 'player', entityId: after.id }
-  if (before.trialSessionId !== after.trialSessionId) return { category: 'schedule', action: after.trialSessionId ? 'player_assigned' : 'player_unassigned', summary: `${after.name} ${after.trialSessionId ? 'assigned to a trial session' : 'removed from a trial session'}`, detail: after.trialDate, team: after.appliedTeam, entityType: 'player', entityId: after.id }
-  if (before.attended !== after.attended) return { category: 'schedule', action: 'attendance_changed', summary: `${after.name} marked ${after.attended ? 'attended' : 'not attended'}`, detail: after.trialDate, team: after.appliedTeam, entityType: 'player', entityId: after.id }
-  if (before.paid !== after.paid) return { category: 'finance', action: 'trial_payment_changed', summary: `${after.name} marked ${after.paid ? 'paid' : 'not paid'} for trials`, detail: after.trialDate, team: after.appliedTeam, entityType: 'player', entityId: after.id }
+  if (before.trialSessionId !== after.trialSessionId) return { category: 'schedule', action: after.trialSessionId ? 'player_assigned' : 'player_unassigned', summary: `${after.name} ${after.trialSessionId ? 'assigned to a trial session' : 'removed from a trial session'}`, detail: after.trialDate, team, entityType: 'player', entityId: after.id }
+  if (before.attended !== after.attended) return { category: 'schedule', action: 'attendance_changed', summary: `${after.name} marked ${after.attended ? 'attended' : 'not attended'}`, detail: after.trialDate, team, entityType: 'player', entityId: after.id }
+  if (before.paid !== after.paid) return { category: 'finance', action: 'trial_payment_changed', summary: `${after.name} marked ${after.paid ? 'paid' : 'not paid'} for trials`, detail: after.trialDate, team, entityType: 'player', entityId: after.id }
   return null
 }
 

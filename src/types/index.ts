@@ -97,7 +97,6 @@ export type Player = {
   email: string
   dateOfBirth: string
   interestedDivisions: string
-  appliedTeam: string
   position: string
   secondaryPosition: string
   playingExperience: string

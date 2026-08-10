@@ -125,7 +125,6 @@ function parsePlayers(rows: Row[], responseLookup: Map<string, TrialResponseStat
       email,
       dateOfBirth: cell(row, headers, 'dateOfBirth'),
       interestedDivisions,
-      appliedTeam: 'Unassigned',
       position: normalisePosition(cell(row, headers, 'position')) || 'Unassigned',
       secondaryPosition: normalisePosition(cell(row, headers, 'secondaryPosition')),
       playingExperience: cell(row, headers, 'playingExperience'),

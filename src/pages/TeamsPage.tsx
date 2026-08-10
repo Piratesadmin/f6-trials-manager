@@ -7,6 +7,7 @@ import { averageRating } from '../utils/player'
 import { assignmentForTeam, isPlannedForTeam, minimumSquadSize, minimumTargetForPosition, recommendationMatchesTeam } from '../utils/teamPlanner'
 import { confirmedPosition, confirmedTeam, effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentStatus } from '../utils/finance'
 import { defaultSquadRole, offerForTeam, primaryOffer } from '../utils/offers'
+import { teamMatchesInterestedDivisions } from '../utils/division'
 
 type Props = {
   players: Player[]
@@ -24,6 +25,7 @@ type Props = {
   finances: PlayerFinanceMap
   financeSettings: FinanceSettings
   trialsMode: boolean
+  teamDivisions: Record<string,string>
 }
 
 type CandidateGroup = {
@@ -33,7 +35,7 @@ type CandidateGroup = {
   tone: string
 }
 
-export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget, selectedTeam, setSelectedTeam, onOpenPlayer, onOpenSchedule, canEditTeam, editableTeams, isAdmin, finances, financeSettings, trialsMode }: Props) {
+export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget, selectedTeam, setSelectedTeam, onOpenPlayer, onOpenSchedule, canEditTeam, editableTeams, isAdmin, finances, financeSettings, trialsMode, teamDivisions }: Props) {
   const targets = teamPlans[selectedTeam]
   const planned = useMemo(() => players.filter(player => isPlannedForTeam(player, selectedTeam)), [players, selectedTeam])
   const confirmed = useMemo(() => players.filter(player => confirmedTeam(player) === selectedTeam), [players, selectedTeam])
@@ -57,10 +59,10 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
   const take = (predicate: (player: Player) => boolean) => unplanned.filter(player => !assigned.has(player.id) && predicate(player)).map(player => { assigned.add(player.id); return player })
   const groups: CandidateGroup[] = [
     { title: 'Recommended', description: 'Strong offer and offer recommendations relevant to this team.', players: take(player => ['Strong offer','Offer'].includes(player.recommendation) && recommendationMatchesTeam(player, selectedTeam)), tone: 'recommended' },
-    { title: 'Referred players', description: 'Players assessed as suitable for this team after applying elsewhere.', players: take(player => player.suitableTeams.includes(selectedTeam) && player.appliedTeam !== selectedTeam), tone: 'referred' },
+    { title: 'Referred players', description: 'Players assessed as suitable for this team.', players: take(player => player.suitableTeams.includes(selectedTeam)), tone: 'referred' },
     { title: 'Waiting list', description: 'Players held as a possible next choice.', players: take(player => player.recommendation === 'Waiting list' && recommendationMatchesTeam(player, selectedTeam)), tone: 'waiting' },
     { title: 'Needs discussion', description: 'Players needing a committee or coaching conversation.', players: take(player => player.recommendation === 'Needs discussion' && recommendationMatchesTeam(player, selectedTeam)), tone: 'discussion' },
-    { title: 'Other applicants', description: 'Unplanned applicants who selected this team.', players: take(player => player.appliedTeam === selectedTeam), tone: 'applicants' },
+    { title: 'Division applicants', description: `Unplanned applicants interested in ${teamDivisions[selectedTeam] || 'this team’s division'}.`, players: take(player => teamMatchesInterestedDivisions(player,selectedTeam,teamDivisions)), tone: 'applicants' },
   ].filter(group => group.players.length)
 
   const addToPlan = (player: Player) => editable && savePlayer({ ...player, teamConsideration: { ...player.teamConsideration, [selectedTeam]: player.position } })
@@ -93,7 +95,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
       const primary = player.offeredTeam === selectedTeam ? offers.find(offer => offer.team === destination) || offers[0] : primaryOffer(update)
       update.offeredTeam = primary?.team || ''
       update.offeredPosition = primary?.position || ''
-      update.decision = offers.some(offer => offer.team === player.appliedTeam) ? 'Offer planned' : 'Alternative offer'
+      update.decision = offers.some(offer => teamMatchesInterestedDivisions(player,offer.team,teamDivisions)) ? 'Offer planned' : 'Alternative offer'
       update.emailReviewStatus = 'draft'
     }
     savePlayer(update)
@@ -106,7 +108,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
     const primary = primaryOffer(player) || offers[0]
     savePlayer({
       ...player,
-      decision: offers.some(offer => offer.team === player.appliedTeam) ? 'Offer planned' : 'Alternative offer',
+      decision: offers.some(offer => teamMatchesInterestedDivisions(player,offer.team,teamDivisions)) ? 'Offer planned' : 'Alternative offer',
       offers,
       offeredTeam: primary?.team || selectedTeam,
       offeredPosition: primary?.position || position,
@@ -219,5 +221,5 @@ function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPositi
 
 function CandidateCard({ player, editable, onAdd, onOpen }: { player: Player; editable:boolean; onAdd:()=>void; onOpen:()=>void }) {
   const rating = averageRating(player)
-  return <div className="candidate-card"><button className="candidate-profile" onClick={onOpen}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{player.position} · {player.appliedTeam} applicant</span><small>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</small></div></button>{editable?<button className="add-plan" onClick={onAdd}><UserPlus/>Add to plan</button>:<button className="add-plan" onClick={onOpen}><ArrowRight/>Open player</button>}</div>
+  return <div className="candidate-card"><button className="candidate-profile" onClick={onOpen}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{player.position} · {player.interestedDivisions} applicant</span><small>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</small></div></button>{editable?<button className="add-plan" onClick={onAdd}><UserPlus/>Add to plan</button>:<button className="add-plan" onClick={onOpen}><ArrowRight/>Open player</button>}</div>
 }

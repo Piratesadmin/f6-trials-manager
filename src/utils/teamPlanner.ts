@@ -46,7 +46,7 @@ export function teamPlansNeedMinimumUpgrade(value: TeamPlans) {
 
 export function offeredTeam(player: Player) {
   if (!player.decision.includes('Offer') && player.decision !== 'Alternative offer') return ''
-  return primaryOffer(player)?.team || player.offeredTeam || player.appliedTeam
+  return primaryOffer(player)?.team || player.offeredTeam || ''
 }
 
 export function assignmentForTeam(player: Player, team: string) {
@@ -61,5 +61,5 @@ export function isPlannedForTeam(player: Player, team: string) {
 }
 
 export function recommendationMatchesTeam(player: Player, team: string) {
-  return player.appliedTeam === team || player.suitableTeams.includes(team)
+  return player.suitableTeams.includes(team)
 }

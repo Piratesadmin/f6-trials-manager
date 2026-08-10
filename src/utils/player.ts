@@ -45,6 +45,8 @@ export function normalisePlayer(player: Player): Player {
     city: _city,
     postalCode: _postalCode,
     postcode: _postcode,
+    appliedTeam: _appliedTeam,
+    appliedDivision: _appliedDivision,
     ...safePlayer
   } = unsafePlayer
   const assessment = emptyAssessment()

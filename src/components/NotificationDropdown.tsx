@@ -55,22 +55,20 @@ function dayTiming(date: string) {
 function buildPlayerNotifications(players: Player[], assignedTeams: string[], isAdmin: boolean) {
   return players.flatMap<PlayerNotification>(player => {
     if (resolvedDecisions.has(player.decision)) return []
-    const candidateTeams = isAdmin
-      ? Array.from(new Set([player.appliedTeam, ...player.suitableTeams])).filter(Boolean)
-      : assignedTeams
+    const candidateTeams = isAdmin ? player.suitableTeams : assignedTeams
     const relevantTeams = candidateTeams.filter(team => {
       if (player.teamConsideration[team]) return false
-      const referred = player.suitableTeams.includes(team) && player.appliedTeam !== team
-      const recommended = offerRecommendations.has(player.recommendation) && (player.appliedTeam === team || player.suitableTeams.includes(team))
+      const referred = player.suitableTeams.includes(team)
+      const recommended = offerRecommendations.has(player.recommendation) && player.suitableTeams.includes(team)
       return referred || recommended
     })
     if (!relevantTeams.length) return []
-    const referrals = relevantTeams.filter(team => player.suitableTeams.includes(team) && player.appliedTeam !== team)
+    const referrals = relevantTeams.filter(team => player.suitableTeams.includes(team))
     const teamLabel = relevantTeams.join(' & ')
     const title = referrals.length
       ? `${player.name} referred to ${referrals.join(' & ')}`
       : `${player.name} recommended for ${teamLabel}`
-    const detail = `${player.position} · ${player.appliedTeam} applicant · ${player.recommendation || 'Team referral'}`
+    const detail = `${player.position} · ${player.interestedDivisions} applicant · ${player.recommendation || 'Team referral'}`
     return [{ id: `player-${player.id}-${relevantTeams.join('-')}`, playerId: player.id, title, detail, teams: relevantTeams, updatedAt: player.updatedAt || 0 }]
   }).sort((a, b) => b.updatedAt - a.updatedAt || a.title.localeCompare(b.title))
 }

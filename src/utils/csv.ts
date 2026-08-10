@@ -1,7 +1,7 @@
 import type { Player } from '../types'
 import { emptyAssessment } from './player'
 
-export type CsvField = 'name' | 'firstName' | 'lastName' | 'email' | 'dateOfBirth' | 'interestedDivisions' | 'appliedTeam' | 'position' | 'secondaryPosition' | 'playingExperience' | 'highestLevelPlayed' | 'photoUrl' | 'trialDate'
+export type CsvField = 'name' | 'firstName' | 'lastName' | 'email' | 'dateOfBirth' | 'interestedDivisions' | 'position' | 'secondaryPosition' | 'playingExperience' | 'highestLevelPlayed' | 'photoUrl' | 'trialDate'
 export type CsvMapping = Record<CsvField, string>
 
 export type ParsedCsv = {
@@ -53,7 +53,6 @@ const aliases: Record<CsvField, string[]> = {
   email: ['email', 'email address', 'e-mail'],
   dateOfBirth: ['date of birth', 'dob', 'birth date'],
   interestedDivisions: ['what division(s) are you interested in playing for?', 'divisions interested', 'interested divisions', 'division(s)', 'divisions'],
-  appliedTeam: ['team', 'team preference', 'preferred team', 'team applied for', 'which team'],
   position: ['what position do you primarily play?', 'position', 'primary position', 'preferred position', 'playing position'],
   secondaryPosition: ["do you have a second position you'd like you play?", "do you have a second position you'd like to play?", 'second position', 'secondary position'],
   playingExperience: ['what is your past playing experience?', 'past playing experience', 'playing experience', 'experience'],
@@ -76,7 +75,6 @@ export function suggestMapping(headers: string[]): CsvMapping {
     email: find('email'),
     dateOfBirth: find('dateOfBirth'),
     interestedDivisions: find('interestedDivisions'),
-    appliedTeam: find('appliedTeam'),
     position: find('position'),
     secondaryPosition: find('secondaryPosition'),
     playingExperience: find('playingExperience'),
@@ -95,13 +93,11 @@ export function rowsToPlayers(rows: Record<string, string>[], mapping: CsvMappin
     const fullName = value(row, mapping.name)
     const combinedName = [value(row, mapping.firstName), value(row, mapping.lastName)].filter(Boolean).join(' ')
     const interestedDivisions = value(row, mapping.interestedDivisions)
-    const matchedTeam = interestedDivisions.split(/[,;/|]/).map(item => item.trim()).find(item => ['Aces','Ravens','Cobras','Coyotes','Llamas','Meerkats','Leopards','Pirates'].includes(item))
     return {
       name: fullName || combinedName,
       email: value(row, mapping.email).toLowerCase(),
       dateOfBirth: value(row, mapping.dateOfBirth),
       interestedDivisions,
-      appliedTeam: value(row, mapping.appliedTeam) || matchedTeam || 'Unassigned',
       position: value(row, mapping.position) || 'Unassigned',
       secondaryPosition: value(row, mapping.secondaryPosition),
       playingExperience: value(row, mapping.playingExperience),

@@ -6,7 +6,7 @@ export const defaultFinanceSettings: FinanceSettings = { nvlFee: 0, lvaFee: 0, f
 
 export function confirmedTeam(player: Player) {
   if (player.decision !== 'Offer accepted') return ''
-  return player.offeredTeam || player.appliedTeam
+  return player.offeredTeam || player.offers[0]?.team || ''
 }
 
 export function confirmedPosition(player: Player) {

@@ -7,7 +7,7 @@ Version 0.26 turns trialist cleanup into a recoverable archive, creating a searc
 ## v0.26 archived players and replacement pool
 
 - Trialist cleanup now moves matching players out of live records and into **Seasons → Archived players** instead of deleting their profile permanently.
-- The administrator-only replacement pool can be searched by name, email, experience or notes and filtered by applied team and playing position.
+- The administrator-only replacement pool can be searched by name, email, experience or notes and filtered by interested division(s) and playing position.
 - Archived profiles retain player details, trial ratings, assessment progression, recommendations, strengths, development areas, coach notes, communication history and the compressed player photo.
 - Selecting an archived player shows the information coaches need when considering a replacement, including overall rating and saved-assessment count.
 - Administrators can restore a player to the live player list with their profile and photo intact.
@@ -361,7 +361,7 @@ Trial response status is visible in the schedule roster and player Overview. It 
 
 ## v0.13 confirmed squads and finance
 
-- Set a player's Decision to **Offer accepted** to place them in the confirmed squad for their offered team (or applied team when no offered team is set).
+- Set a player's Decision to **Offer accepted** to place them in the confirmed squad for their accepted team offer.
 - Each Team Planner has a separate **Confirmed squad** section. All authenticated coaches can see confirmed names and positions.
 - Administrators receive a **Finance** navigation item and dashboard summary; coach accounts do not.
 - Administrators can set the amount owed, record the amount paid, choose **Fully paid**, **2 instalments** or **Direct debit**, and add a short payment note.
@@ -482,6 +482,8 @@ The supplied logo is stored locally as `public/flaming-six-logo.png`; the applic
 ## CSV import (v0.3)
 
 Open **Players** and choose **Import players**. Upload a CSV from Google Forms or Sheets, confirm the automatic column matching, review duplicates/invalid rows, then import. Existing players are matched by email and skipped. Imported records sync to Firebase immediately.
+
+The Spond column **What division(s) are you interested in playing for?** is stored as the player's `interestedDivisions` value. Players do not apply to a team, so there is no applied-team field or dropdown. Player and team filters map Spond's combined division choices (including NVL/LVA and Mens/Womens distinctions) to each team's **Competition / division** value in Settings.
 
 ## Build verification
 

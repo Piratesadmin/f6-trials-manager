@@ -73,7 +73,7 @@ export function emailSubjectFor(player: Player, settings: EmailSettings) {
 
 export function emailTeamsFor(player: Player) {
   const offeredTeams = activeOffers(player).map(offer => offer.team)
-  const selectedTeams = offeredTeams.length ? offeredTeams : [player.appliedTeam, ...player.suitableTeams]
+  const selectedTeams = offeredTeams.length ? offeredTeams : player.suitableTeams
   return Array.from(new Set(selectedTeams)).filter(team => teams.includes(team))
 }
 
@@ -135,7 +135,7 @@ export function emailFor(player: Player, settings: EmailSettings, deadline?: Res
   }
   if (type === 'alternative') {
     const section = offerSection(player, settings)
-    return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials and for expressing an interest in joining ${player.appliedTeam}.\n\nAlthough we are unable to offer you a place with ${player.appliedTeam}, we were impressed with your performance and would like to offer you ${section.wording}${personal}\n\n${responseParagraph(section.multiple)}\n\n${signoff}`
+    return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials and for expressing an interest in playing in ${player.interestedDivisions || 'one of our divisions'}.\n\nAlthough we are unable to offer you a place in your selected division option, we were impressed with your performance and would like to offer you ${section.wording}${personal}\n\n${responseParagraph(section.multiple)}\n\n${signoff}`
   }
   if (type === 'waiting-list') {
     return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials.\n\nWe are not yet able to confirm a place, but we would like to offer you a position on our waiting list while we finalise the squads.${personal}\n\nPlease let us know within 72 hours of receiving this email if you would like to remain under consideration. We understand that may not be possible, so please let us know as soon as you can if you need a little more time. We will contact you again as soon as a suitable place becomes available.\n\n${signoff}`

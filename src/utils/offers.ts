@@ -16,7 +16,7 @@ export function normaliseOffers(player: Player) {
     return [{ team: offer.team, position: typeof offer.position === 'string' && offer.position ? offer.position : player.position || 'All-rounder', squadRole: availableSquadRoles.includes(offer.squadRole as SquadRole) ? offer.squadRole as SquadRole : defaultSquadRole }]
   })
   if (!hasOffersField && (player.decision?.includes('Offer') || player.decision === 'Alternative offer')) {
-    const team = player.offeredTeam || player.appliedTeam
+    const team = player.offeredTeam || ''
     if (team) offers.push({ team, position: player.offeredPosition || player.position || 'All-rounder', squadRole: defaultSquadRole })
   }
   return offers
@@ -43,7 +43,7 @@ export function activeOffers(player: Player) {
 
 export function offerTeamsLabel(player: Player) {
   const offers = activeOffers(player)
-  return offers.length ? offers.map(offer => offer.team).join(' / ') : player.offeredTeam || player.appliedTeam
+  return offers.length ? offers.map(offer => offer.team).join(' / ') : player.offeredTeam || ''
 }
 
 export function squadRolePhrase(role: SquadRole) {

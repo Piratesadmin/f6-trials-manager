@@ -21,6 +21,7 @@ type Props = {
   selectedId: string
   setSelectedId: (id: string) => void
   onOpen: (id: string) => void
+  teamDivisions: Record<string,string>
 }
 
 const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
@@ -33,7 +34,7 @@ const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
 
 const statusLabel: Record<EmailQueueStatus, string> = { 'needs-info': 'Needs info', ready: 'Ready to review', reviewed: 'Reviewed', sent: 'Sent' }
 
-export function EmailsPage({ players, playersReady, teamAccessReady, assignedTeams, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen }: Props) {
+export function EmailsPage({ players, playersReady, teamAccessReady, assignedTeams, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen, teamDivisions }: Props) {
   const queue = useMemo(() => players.filter(player => emailTypeFor(player) || latestCommunication(player)), [players])
   const deadlineFor = (player: Player) => responseDeadlineDetails(player, sessions, settings.defaultResponseDeadline)
   const [statusFilter, setStatusFilter] = useState<'all' | EmailQueueStatus>('all')
@@ -52,7 +53,7 @@ export function EmailsPage({ players, playersReady, teamAccessReady, assignedTea
   const filtered = teamScopedQueue.filter(player => {
     const status = emailQueueStatus(player, settings, players, teamPlans, deadlineFor(player))
     const type = emailTypeFor(player)
-    const search = `${player.name} ${player.email} ${player.appliedTeam} ${offerTeamsLabel(player)} ${type || ''}`.toLowerCase()
+    const search = `${player.name} ${player.email} ${player.interestedDivisions} ${offerTeamsLabel(player)} ${type || ''}`.toLowerCase()
     return (statusFilter === 'all' || status === statusFilter) && (typeFilter === 'all' || type === typeFilter) && search.includes(query.trim().toLowerCase())
   })
 
@@ -120,12 +121,12 @@ export function EmailsPage({ players, playersReady, teamAccessReady, assignedTea
           {!filtered.length && <div className="email-centre-empty"><Mail/><b>No messages match</b><span>Try another status, type or search.</span></div>}
         </div>
       </aside>
-      {selected ? <EmailReview player={selected} sessions={sessions} settings={settings} players={players} teamPlans={teamPlans} save={save} markSent={markSent} onOpen={onOpen}/> : <div className="email-review-empty"><Mail/><h2>No email selected</h2><p>Prepare an offer, waiting-list or rejection decision from a player profile first.</p></div>}
+      {selected ? <EmailReview player={selected} sessions={sessions} settings={settings} players={players} teamPlans={teamPlans} save={save} markSent={markSent} onOpen={onOpen} teamDivisions={teamDivisions}/> : <div className="email-review-empty"><Mail/><h2>No email selected</h2><p>Prepare an offer, waiting-list or rejection decision from a player profile first.</p></div>}
     </section>
   </>
 }
 
-function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'|'teamAccessReady'|'assignedTeams'> & { player: Player }) {
+function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen, teamDivisions }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'|'teamAccessReady'|'assignedTeams'> & { player: Player }) {
   const [copied, setCopied] = useState<'subject' | 'body' | ''>('')
   const deadline=responseDeadlineDetails(player,sessions,settings.defaultResponseDeadline)
   const status = emailQueueStatus(player, settings, players, teamPlans, deadline)
@@ -153,7 +154,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
 
     <div className="email-review-body">
       {emailTypeFor(player)!=='rejection'&&<section className={`deadline-summary ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'The clock begins when this email is recorded as sent.'}</span></div></section>}
-      {(emailTypeFor(player)==='offer'||emailTypeFor(player)==='alternative')&&<OfferOptionsEditor player={player} save={save} compact/>}
+      {(emailTypeFor(player)==='offer'||emailTypeFor(player)==='alternative')&&<OfferOptionsEditor player={player} save={save} compact teamDivisions={teamDivisions}/>}
       <section className="email-draft-settings">
         <div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div>
         <label>Coach name<input value={player.emailDraft.coachName} placeholder={fields.coachName || 'Set a coach name'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using the signed-in or assigned team coach' : 'Signs this email'}</small></label>
