@@ -206,13 +206,19 @@ export default function App(){
     let saved:Player|undefined
     if(database&&user&&!demo){
       setSyncState('saving')
-      const result=await runTransaction(ref(database,`players/${playerId}`),current=>{
-        if(!current)return
-        const latest=normalisePlayer({id:playerId,...current} as Player)
-        if(!sameDecisionDraft(decisionDraftFor(latest),expected))return
-        const{id:_,...data}=normalisePlayer({...applyDecisionDraft(latest,next),updatedAt,updatedBy})
-        return data
-      },{applyLocally:false})
+      let result
+      try{
+        result=await runTransaction(ref(database,`players/${playerId}`),current=>{
+          if(!current)return
+          const latest=normalisePlayer({id:playerId,...current} as Player)
+          if(!sameDecisionDraft(decisionDraftFor(latest),expected))return
+          const{id:_,...data}=normalisePlayer({...applyDecisionDraft(latest,next),updatedAt,updatedBy})
+          return data
+        },{applyLocally:false})
+      }catch(error){
+        setSyncState('live')
+        throw error
+      }
       if(!result.committed){
         if(result.snapshot.exists()){
           const latest=normalisePlayer({id:playerId,...result.snapshot.val()} as Player)

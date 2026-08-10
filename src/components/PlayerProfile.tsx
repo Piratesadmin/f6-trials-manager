@@ -196,7 +196,7 @@ function DecisionPanel({ player, saveDecision }: Pick<Props, 'player' | 'saveDec
       setBase(decisionDraftFor(draftPlayer))
       setSaved(true)
       window.setTimeout(()=>setSaved(false),2200)
-    }catch(saveError){setError(saveError instanceof Error?saveError.message:'The decision changes could not be saved.')}
+    }catch(saveError){console.error('Decision transaction failed',saveError);setError('The decision changes could not be saved. Your selections are still here—please try again.')}
     finally{setBusy(false)}
   }
 
@@ -216,7 +216,7 @@ function DecisionPanel({ player, saveDecision }: Pick<Props, 'player' | 'saveDec
     {(draftPlayer.decision.includes('Offer') || draftPlayer.decision === 'Alternative offer')&&<OfferOptionsEditor player={draftPlayer} save={updateDecisionDraft} disabled={busy||remoteChanged||conflict}/>}
     {draftPlayer.decision === 'Offer accepted' && <div className="decision-callout accepted"><CheckCircle2/><div><b>Confirmed squad place</b><p>{draftPlayer.name} now appears in the confirmed squad for {draftPlayer.offeredTeam || draftPlayer.appliedTeam}{primaryOffer(draftPlayer)?` as ${primaryOffer(draftPlayer)!.position} · ${primaryOffer(draftPlayer)!.squadRole}`:''}. Administrators can manage season fees in Finance.</p></div></div>}
     <div className={`decision-save-bar ${remoteChanged||conflict?'conflict':dirty?'dirty':saved?'saved':''}`}>
-      <div><b>{remoteChanged||conflict?'Another coach updated this decision':dirty?'Unsaved decision changes':saved?'Decision changes saved':'Decision details are up to date'}</b><span>{remoteChanged||conflict?'Load the latest Decision-tab values before making your changes again.':dirty?'Your changes have not been sent to Firebase yet.':'The Decision tab matches Firebase.'}</span>{error&&<small>{error}</small>}</div>
+      <div><b>{remoteChanged||conflict?'Another coach updated this decision':dirty?'Unsaved decision changes':saved?'Decision changes saved':'Decision details are up to date'}</b><span>{remoteChanged||conflict?'Load the latest Decision-tab values before making your changes again.':dirty?'Your changes have not been sent to Firebase yet.':'The Decision tab matches Firebase.'}</span>{error&&<p className="decision-save-error" role="alert">{error}</p>}</div>
       {(remoteChanged||conflict)&&<button className="secondary" type="button" onClick={loadLatest}>Load latest</button>}
       <button className="primary" type="button" disabled={!dirty||busy||remoteChanged||conflict} onClick={submit}>{busy?<LoaderCircle className="spin"/>:saved?<CheckCircle2/>:<Save/>}{busy?'Saving…':saved?'Saved':'Save changes'}</button>
     </div>

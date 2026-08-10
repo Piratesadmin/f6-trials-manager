@@ -6,9 +6,9 @@ export function decisionDraftFor(player: Player): PlayerDecisionDraft {
     recommendation: player.recommendation,
     suitableTeams: [...player.suitableTeams],
     offers: player.offers.map(offer => ({ ...offer })),
-    offeredTeam: player.offeredTeam,
-    offeredPosition: player.offeredPosition,
-    rejectionReason: player.rejectionReason,
+    offeredTeam: player.offeredTeam || '',
+    offeredPosition: player.offeredPosition || '',
+    rejectionReason: player.rejectionReason || '',
     teamConsideration: { ...player.teamConsideration },
     emailReviewStatus: player.emailReviewStatus,
   }
