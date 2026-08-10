@@ -13,9 +13,11 @@ Version 0.26 turns trialist cleanup into a recoverable archive, creating a searc
 - Administrators can restore a player to the live player list with their profile and photo intact.
 - Finance records and personal coach-star references are intentionally removed during cleanup and are not recreated when a player is restored.
 - Every archive and restore action is recorded in administrator activity history.
+- Full organization administrators can permanently delete an individual player from the Players page after typing the player's full name. This also removes the live photo, finance record, every coach's star and event-attendance references; audit entries and completed season archives remain as historical records.
 - The current replacement pool is included in season rollover, without the image payload, and then cleared ready for the new season.
 - Existing season archives default safely to an empty archived-player collection.
 - Publish the supplied v0.26 Firebase rules before using cleanup or restore. No new GitHub secret is required.
+- Publish the supplied Firebase rules before using permanent player deletion so non-administrator accounts are prevented from deleting player records at database level.
 
 ## v0.25.1 Club Mode assessment refinement
 

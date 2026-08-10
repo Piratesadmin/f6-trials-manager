@@ -2,7 +2,11 @@
   "rules": {
     ".read": false,
     ".write": false,
-    "players": { ".read": "auth != null", ".write": "auth != null" },
+    "players": {
+      ".read": "auth != null",
+      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$playerId": { ".write": "auth != null && newData.exists()" }
+    },
     "emailSettings": { ".read": "auth != null", ".write": "auth != null" },
     "trialSessions": {
       ".read": "auth != null",

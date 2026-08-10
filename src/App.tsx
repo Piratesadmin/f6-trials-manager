@@ -556,6 +556,40 @@ export default function App(){
     await recordActivity({category:'season',action:'trialist_cleanup',summary:`Archived ${targets.length} trialist${targets.length===1?'':'s'} from live records`,detail:scope==='rejected'?'Final rejection records moved to Archived players.':'All players outside confirmed squads moved to Archived players.',team:'',entityType:'season',entityId:seasonSettings.currentSeason})
     return targets.length
   }
+  const permanentlyDeletePlayer=async(player:Player)=>{
+    if(!isAdmin)throw new Error('Organization administrator access is required.')
+    const retainedPlayers=players.filter(item=>item.id!==player.id)
+    const nextSessions=trialSessions.map(session=>{
+      if(!session.attendance[player.id])return session
+      const attendance={...session.attendance}
+      delete attendance[player.id]
+      return {...session,attendance,updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
+    })
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      const starSnapshot=await get(ref(database,'playerStars'))
+      const allStars=(starSnapshot.val()||{}) as Record<string,Record<string,boolean>>
+      const updates:Record<string,unknown>={
+        [`players/${player.id}`]:null,
+        [`playerPhotos/${player.id}`]:null,
+        [`playerFinance/${player.id}`]:null,
+        [`archivedPlayers/${player.id}`]:null,
+      }
+      Object.entries(allStars).forEach(([uid,stars])=>{if(stars?.[player.id])updates[`playerStars/${uid}/${player.id}`]=null})
+      trialSessions.forEach(session=>{if(session.attendance[player.id])updates[`trialSessions/${session.id}/attendance/${player.id}`]=null})
+      await update(ref(database),updates)
+    }else{
+      const nextFinance={...playerFinance};delete nextFinance[player.id]
+      const nextPhotos={...playerPhotos};delete nextPhotos[player.id]
+      const nextStars={...playerStars};delete nextStars[player.id]
+      const nextArchived={...archivedPlayers};delete nextArchived[player.id]
+      setPlayers(retainedPlayers);setTrialSessions(nextSessions);setPlayerFinance(nextFinance);setPlayerPhotos(nextPhotos);setPlayerStars(nextStars);setArchivedPlayers(nextArchived)
+      localStorage.setItem('f6players',JSON.stringify(retainedPlayers));localStorage.setItem('f6trialsessions',JSON.stringify(nextSessions));localStorage.setItem('f6playerfinance',JSON.stringify(nextFinance));localStorage.setItem('f6playerphotos',JSON.stringify(nextPhotos));localStorage.setItem('f6playerstars',JSON.stringify(nextStars));localStorage.setItem('f6archivedplayers',JSON.stringify(nextArchived))
+    }
+    const nextPlayer=retainedPlayers[0]
+    navigate(nextPlayer?{page:'players',playerId:nextPlayer.id,playerTab:'overview'}:{page:'players'},true)
+    await recordActivity({category:'player',action:'player_permanently_deleted',summary:`Permanently deleted ${player.name}`,detail:'Player profile, photo, finance record, coach stars and event attendance references were removed.',team:player.offeredTeam||player.suitableTeams[0]||'',entityType:'player',entityId:player.id})
+  }
   const restoreArchivedPlayer=async(record:ArchivedPlayerRecord)=>{
     if(!isAdmin)throw new Error('Administrator access is required.')
     if(players.some(player=>player.id===record.id))throw new Error('This player already exists in the live records.')
@@ -596,7 +630,7 @@ export default function App(){
     <main>
       {page==='dashboard'&&<DashboardPage players={players} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
       {page==='schedule'&&<SchedulePage sessions={trialSessions} players={players} saveSession={saveTrialSession} saveSessions={saveTrialSessionSeries} deleteSession={deleteTrialSession} savePlayer={save} openPlayer={id=>openPlayer(id,'overview')} onImport={()=>setImportOpen(true)} teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))} requestedSessionId={requestedSessionId} onRequestedSessionHandled={()=>setRequestedSessionId('')} eventPhotos={sessionPhotos[activeScheduleSessionId]||{}} uploadEventPhoto={uploadSessionPhoto} removeEventPhoto={removeSessionPhoto} onSelectedSessionChange={selectScheduleSession} editableTeams={editableTeams} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
-      {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions}/>}
       {page==='teams'&&<TeamsPage players={players} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions}/>}
       {page==='finance'&&isAdmin&&<FinancePage players={players} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} onOpenPlayer={id=>openPlayer(id,'overview')}/>} 

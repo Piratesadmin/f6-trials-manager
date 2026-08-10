@@ -23,6 +23,8 @@ type Props = {
   photo: string
   uploadPhoto: (player: Player, file: File) => Promise<void>
   removePhoto: (player: Player) => Promise<void>
+  deletePlayer: (player: Player) => Promise<void>
+  isAdmin: boolean
   trialsMode: boolean
   teamDivisions: Record<string,string>
 }
@@ -35,11 +37,18 @@ const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
 
 const recommendationClass = (recommendation: Recommendation) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, starred, toggleStar, photo, uploadPhoto, removePhoto, trialsMode, teamDivisions }: Props) {
+export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, starred, toggleStar, photo, uploadPhoto, removePhoto, deletePlayer, isAdmin, trialsMode, teamDivisions }: Props) {
   const average = averageRating(player)
   const completion = assessmentCompletion(player)
   const initials = player.name.split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2)
   const visibleTabs=trialsMode?tabs:tabs.filter(tab=>tab.key==='overview'||tab.key==='assessment')
+  const [deleteBusy,setDeleteBusy]=useState(false)
+  const removePlayer=async()=>{
+    const confirmation=window.prompt(`Permanently delete ${player.name} and all operational records? This cannot be undone.\n\nType the player’s full name to confirm:`)
+    if(confirmation!==player.name)return
+    setDeleteBusy(true)
+    try{await deletePlayer(player)}catch(error){window.alert(error instanceof Error?error.message:'The player could not be deleted.')}finally{setDeleteBusy(false)}
+  }
 
   return <article className="player-profile">
     <header className="profile-hero">
@@ -51,7 +60,7 @@ export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save,
           <span className={`recommendation-badge ${recommendationClass(player.recommendation)}`}>{player.recommendation || 'No recommendation yet'}</span>
         </div>
       </div>
-      <div className="profile-hero-actions"><button className={`profile-star ${starred?'starred':''}`} onClick={toggleStar} aria-label={starred?'Remove from my starred players':'Add to my starred players'} title={starred?'Remove from my starred players':'Add to my starred players'}><Star/></button><div className="profile-score" aria-label={average ? `Average rating ${average.toFixed(1)} out of 5` : 'Not yet rated'}>
+      <div className="profile-hero-actions">{isAdmin&&<button className="profile-delete-player" disabled={deleteBusy} onClick={removePlayer} aria-label={`Permanently delete ${player.name}`} title="Organization administrators only">{deleteBusy?<LoaderCircle className="spin"/>:<Trash2/>}<span>{deleteBusy?'Deleting…':'Delete player'}</span></button>}<button className={`profile-star ${starred?'starred':''}`} onClick={toggleStar} aria-label={starred?'Remove from my starred players':'Add to my starred players'} title={starred?'Remove from my starred players':'Add to my starred players'}><Star/></button><div className="profile-score" aria-label={average ? `Average rating ${average.toFixed(1)} out of 5` : 'Not yet rated'}>
         <div><Star/><strong>{average ? average.toFixed(1) : '—'}</strong><span>/ 5</span></div>
         <p>{completion}% assessed</p>
       </div></div>

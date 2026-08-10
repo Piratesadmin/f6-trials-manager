@@ -29,12 +29,14 @@ type Props = {
   selectedPhoto: string
   uploadPhoto: (player: Player, file: File) => Promise<void>
   removePhoto: (player: Player) => Promise<void>
+  deletePlayer: (player: Player) => Promise<void>
+  isAdmin: boolean
   trialsMode: boolean
 }
 
 const recommendationClass = (recommendation: Player['recommendation']) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayersPage({ players, sessions, selectedId, openPlayer, query, setQuery, assignedTeams, teamDivisions, save, saveDecision, saveAssessment, onImport, activeTab, setActiveTab, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, trialsMode }: Props) {
+export function PlayersPage({ players, sessions, selectedId, openPlayer, query, setQuery, assignedTeams, teamDivisions, save, saveDecision, saveAssessment, onImport, activeTab, setActiveTab, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, deletePlayer, isAdmin, trialsMode }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState<PlayerFilterValues>(emptyPlayerFilters)
   const [divisionFilter,setDivisionFilter]=useState('assigned')
@@ -97,7 +99,7 @@ export function PlayersPage({ players, sessions, selectedId, openPlayer, query, 
           {!filtered.length && <div className="empty-state compact">No players match these filters.</div>}
         </div>
       </div>
-      {selected?<PlayerProfile player={selected} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveDecision={saveDecision} saveAssessment={saveAssessment} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} trialsMode={trialsMode} teamDivisions={teamDivisions}/>:<div className="empty-state">No players match the selected division and filters.</div>}
+      {selected?<PlayerProfile player={selected} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveDecision={saveDecision} saveAssessment={saveAssessment} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} deletePlayer={deletePlayer} isAdmin={isAdmin} trialsMode={trialsMode} teamDivisions={teamDivisions}/>:<div className="empty-state">No players match the selected division and filters.</div>}
     </section>
   </>
 }
