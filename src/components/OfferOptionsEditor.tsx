@@ -21,8 +21,10 @@ export function OfferOptionsEditor({ player, save, compact = false, disabled = f
     const consideration={...player.teamConsideration}
     next.forEach(offer=>{consideration[offer.team]=offer.position})
     const changedSentOffer=player.decision==='Offer sent'
-    const decision=changedSentOffer?(next.some(offer=>teamMatchesInterestedDivisions(player,offer.team,teamDivisions))?'Offer planned':'Alternative offer'):player.decision
-    save({...player,offers:next,offeredTeam:primary?.team||'',offeredPosition:primary?.position||'',teamConsideration:consideration,decision,emailReviewStatus:changedSentOffer?'draft':player.emailReviewStatus})
+    const recommendationStartsOffer=player.decision==='Awaiting decision'&&next.length>0&&(player.recommendation==='Strong offer'||player.recommendation==='Offer'||player.recommendation==='Refer to another team')
+    const startsOrReopensOffer=changedSentOffer||recommendationStartsOffer
+    const decision=startsOrReopensOffer?(player.recommendation==='Refer to another team'||!next.some(offer=>teamMatchesInterestedDivisions(player,offer.team,teamDivisions))?'Alternative offer':'Offer planned'):player.decision
+    save({...player,offers:next,offeredTeam:primary?.team||'',offeredPosition:primary?.position||'',teamConsideration:consideration,decision,emailReviewStatus:startsOrReopensOffer?'draft':player.emailReviewStatus})
   }
   const toggleTeam=(team:string)=>{
     const current=offers.find(offer=>offer.team===team)

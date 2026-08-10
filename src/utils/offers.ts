@@ -43,7 +43,7 @@ export function activeOffers(player: Player) {
 
 export function offerTeamsLabel(player: Player) {
   const offers = activeOffers(player)
-  return offers.length ? offers.map(offer => offer.team).join(' / ') : player.offeredTeam || ''
+  return offers.length ? offers.map(offer => offer.team).join(' / ') : player.offeredTeam || player.suitableTeams.join(' / ')
 }
 
 export function squadRolePhrase(role: SquadRole) {

@@ -65,7 +65,6 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
     { title: 'Division applicants', description: `Unplanned applicants interested in ${teamDivisions[selectedTeam] || 'this team’s division'}.`, players: take(player => teamMatchesInterestedDivisions(player,selectedTeam,teamDivisions)), tone: 'applicants' },
   ].filter(group => group.players.length)
 
-  const addToPlan = (player: Player) => editable && savePlayer({ ...player, teamConsideration: { ...player.teamConsideration, [selectedTeam]: player.position } })
   const removeFromPlan = (player: Player) => {
     if(!editable)return
     const teamConsideration = { ...player.teamConsideration }
@@ -116,6 +115,19 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
       teamConsideration: { ...player.teamConsideration, [selectedTeam]: position },
     })
   }
+  const addOfferedPlayerToTeam = (player: Player) => {
+    if(!editable||player.decision!=='Offer sent')return
+    const acceptedOffer=offerForTeam(player,selectedTeam)
+    if(!acceptedOffer)return
+    if(!window.confirm(`Confirm that ${player.name} accepted the offer for ${selectedTeam} and add them to the confirmed squad?`))return
+    savePlayer({
+      ...player,
+      decision:'Offer accepted',
+      offeredTeam:selectedTeam,
+      offeredPosition:acceptedOffer.position,
+      teamConsideration:{...player.teamConsideration,[selectedTeam]:acceptedOffer.position},
+    })
+  }
 
   if(!trialsMode)return <>
     <PageHeader title="Teams" subtitle="Confirmed squads and attendance during the playing season."/>
@@ -164,18 +176,18 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
 
         <article className="planner-panel">
           <div className="planner-panel-head"><div><span className="eyebrow">PLANNED SQUAD</span><h3>{activePlan.length} player{activePlan.length === 1 ? '' : 's'} still in planning</h3><p>Confirmed players are shown above and still count towards positional targets.</p></div></div>
-          {activePlan.length ? <div className="planned-player-list">{activePlan.sort((a,b)=>(assignmentForTeam(a,selectedTeam)||a.position).localeCompare(assignmentForTeam(b,selectedTeam)||b.position)).map(player => <PlannedPlayerCard key={player.id} player={player} team={selectedTeam} editable={editable} moveTeams={editableTeams} onOpen={onOpenPlayer} onPosition={changePosition} onMove={movePlayer} onPrepareOffer={prepareOffer} onRemove={removeFromPlan}/>)}</div> : <div className="planner-empty"><Users/><h4>No players awaiting squad confirmation</h4><p>{editable?'Add candidates below or prepare offers from the plan.':'This team has no players still in planning.'}</p></div>}
+          {activePlan.length ? <div className="planned-player-list">{activePlan.sort((a,b)=>(assignmentForTeam(a,selectedTeam)||a.position).localeCompare(assignmentForTeam(b,selectedTeam)||b.position)).map(player => <PlannedPlayerCard key={player.id} player={player} team={selectedTeam} editable={editable} moveTeams={editableTeams} onOpen={onOpenPlayer} onPosition={changePosition} onMove={movePlayer} onPrepareOffer={prepareOffer} onAddToTeam={addOfferedPlayerToTeam} onRemove={removeFromPlan}/>)}</div> : <div className="planner-empty"><Users/><h4>No players awaiting squad confirmation</h4><p>{editable?'Add candidates below or prepare offers from the plan.':'This team has no players still in planning.'}</p></div>}
         </article>
       </div>
 
       <aside className="planner-sidebar">
-        <article className="planner-panel planner-guide"><span className="eyebrow">HOW IT WORKS</span><h3>Build before you offer</h3><ol><li><span>1</span>Add players to the plan.</li><li><span>2</span>Balance each position.</li><li><span>3</span>Prepare offers when ready.</li></ol><p>Adding someone to the plan does not send or mark an email.</p></article>
+        <article className="planner-panel planner-guide"><span className="eyebrow">HOW IT WORKS</span><h3>Build before you offer</h3><ol><li><span>1</span>Select Offer or Strong offer.</li><li><span>2</span>Choose every suitable team.</li><li><span>3</span>Prepare and send the offer.</li></ol><p>Offer recommendations enter each suitable team’s planned squad automatically.</p></article>
         <article className="planner-panel warnings-panel"><span className="eyebrow">SQUAD CHECK</span><h3>Position alerts</h3><div>{positionRows.filter(row => row.remaining !== 0).map(row => <div className={row.remaining < 0 ? 'warning-over' : 'warning-short'} key={row.position}>{row.remaining < 0 ? <AlertTriangle/> : <ClipboardList/>}<span><b>{row.position}</b><small>{row.remaining < 0 ? `${Math.abs(row.remaining)} above target` : `${row.remaining} still needed`}</small></span></div>)}</div>{positionRows.every(row=>row.remaining===0)&&<div className="all-balanced"><CheckCircle2/>All positions are on target.</div>}</article>
       </aside>
     </section>
 
     <section className="candidate-sections">
-      {groups.length ? groups.map(group => <article className={`candidate-group ${group.tone}`} key={group.title}><div className="candidate-group-head"><div><span className="eyebrow">{group.title.toUpperCase()}</span><h3>{group.players.length} player{group.players.length === 1 ? '' : 's'}</h3><p>{group.description}</p></div></div><div className="candidate-grid">{group.players.map(player => <CandidateCard key={player.id} player={player} editable={editable} onAdd={() => addToPlan(player)} onOpen={() => onOpenPlayer(player.id)}/>)}</div></article>) : <article className="planner-panel planner-empty"><CheckCircle2/><h4>Everyone relevant is already planned</h4><p>No additional candidates currently match {selectedTeam}.</p></article>}
+      {groups.length ? groups.map(group => <article className={`candidate-group ${group.tone}`} key={group.title}><div className="candidate-group-head"><div><span className="eyebrow">{group.title.toUpperCase()}</span><h3>{group.players.length} player{group.players.length === 1 ? '' : 's'}</h3><p>{group.description}</p></div></div><div className="candidate-grid">{group.players.map(player => <CandidateCard key={player.id} player={player} onOpen={() => onOpenPlayer(player.id)}/>)}</div></article>) : <article className="planner-panel planner-empty"><CheckCircle2/><h4>Everyone relevant is already planned</h4><p>No additional candidates currently match {selectedTeam}.</p></article>}
     </section>
   </>
 }
@@ -208,18 +220,19 @@ function ConfirmedPlayerCard({player,isAdmin,finance,financeSettings,onOpen}:{pl
   return <button className="confirmed-player-card" onClick={onOpen}><div className="confirmed-player-icon"><Check/></div><div><b>{player.name}</b><span>{confirmedPosition(player)}{player.bibNumber?` · #${player.bibNumber}`:''}</span></div>{isAdmin?<div className="confirmed-finance"><span className={`finance-status ${deadline.state==='overdue'?'overdue':status.toLowerCase().replaceAll(' ','-')}`}>{deadline.state==='overdue'?'Payment overdue':status}</span><small>{deadline.state==='overdue'?deadline.label:`${formatCurrency(outstandingAmount(record,amountOwed))} outstanding`}</small></div>:<span className="confirmed-private">Confirmed</span>}<ArrowRight/></button>
 }
 
-function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPosition, onMove, onPrepareOffer, onRemove }: { player: Player; team: string; editable:boolean; moveTeams:string[]; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onRemove:(player:Player)=>void }) {
+function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPosition, onMove, onPrepareOffer, onAddToTeam, onRemove }: { player: Player; team: string; editable:boolean; moveTeams:string[]; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onAddToTeam:(player:Player)=>void; onRemove:(player:Player)=>void }) {
   const rating = averageRating(player)
   const isOffered = Boolean(offerForTeam(player, team))
+  const automaticallyPlanned=(player.recommendation==='Offer'||player.recommendation==='Strong offer')&&player.suitableTeams.includes(team)
   return <div className="planned-player-card">
     <button className="planner-player-identity" onClick={() => onOpen(player.id)}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</span></div><ArrowRight/></button>
     <label>Position<select disabled={!editable} aria-label={`${player.name} planned position`} value={assignmentForTeam(player,team)||player.position} onChange={event => onPosition(player,event.target.value)}>{positions.map(position=><option key={position}>{position}</option>)}</select></label>
     <label>Team<select disabled={!editable} aria-label={`Move ${player.name} to team`} value={team} onChange={event => onMove(player,event.target.value)}><option>{team}</option>{moveTeams.filter(item=>item!==team).map(item=><option key={item}>{item}</option>)}</select></label>
-    <div className="planned-actions">{isOffered ? <span className="offer-ready-chip"><Check/> {player.decision}</span> : editable?<button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>:<span className="view-only-chip"><Lock/>View only</span>}{!isOffered && editable && <button className="remove-plan" aria-label={`Remove ${player.name} from plan`} title="Remove from plan" onClick={() => onRemove(player)}><X/></button>}</div>
+    <div className="planned-actions">{isOffered ? <><span className="offer-ready-chip"><Check/> {player.decision}</span>{editable&&player.decision==='Offer sent'&&<button className="accept-offer" onClick={()=>onAddToTeam(player)}><UserPlus/>Add to team</button>}</> : editable?<button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>:<span className="view-only-chip"><Lock/>View only</span>}{!isOffered && editable && !automaticallyPlanned && <button className="remove-plan" aria-label={`Remove ${player.name} from plan`} title="Remove from plan" onClick={() => onRemove(player)}><X/></button>}</div>
   </div>
 }
 
-function CandidateCard({ player, editable, onAdd, onOpen }: { player: Player; editable:boolean; onAdd:()=>void; onOpen:()=>void }) {
+function CandidateCard({ player, onOpen }: { player: Player; onOpen:()=>void }) {
   const rating = averageRating(player)
-  return <div className="candidate-card"><button className="candidate-profile" onClick={onOpen}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{player.position} · {player.interestedDivisions} applicant</span><small>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</small></div></button>{editable?<button className="add-plan" onClick={onAdd}><UserPlus/>Add to plan</button>:<button className="add-plan" onClick={onOpen}><ArrowRight/>Open player</button>}</div>
+  return <div className="candidate-card"><button className="candidate-profile" onClick={onOpen}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{player.position} · {player.interestedDivisions} applicant</span><small>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</small></div></button><button className="add-plan" onClick={onOpen}><ArrowRight/>Open player</button></div>
 }

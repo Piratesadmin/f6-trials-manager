@@ -53,7 +53,9 @@ export function assignmentForTeam(player: Player, team: string) {
   const offer = offerForTeam(player, team)
   if (offer) return offer.position
   if (player.decision === 'Offer accepted') return ''
-  return player.teamConsideration[team] || ''
+  if (player.teamConsideration[team]) return player.teamConsideration[team]
+  if ((player.recommendation === 'Offer' || player.recommendation === 'Strong offer') && player.suitableTeams.includes(team)) return player.position
+  return ''
 }
 
 export function isPlannedForTeam(player: Player, team: string) {

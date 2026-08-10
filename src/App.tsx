@@ -436,9 +436,11 @@ export default function App(){
     await recordActivity({category:'schedule',action:'session_deleted',summary:`Deleted ${trialSessions.find(session=>session.id===sessionId)?.title||'club event'}`,detail:`${affected.length} player assignment${affected.length===1?'':'s'} cleared.`,team:'',entityType:'session',entityId:sessionId})
   }
   const markEmailSent=async(player:Player)=>{
+    const sentDecision=sentDecisionFor(player)
+    if(!sentDecision)return
     const deadline=responseDeadlineDetails(player,trialSessions,activeEmailSettings.defaultResponseDeadline)
     const entry=buildCommunication(player,activeEmailSettings,signedInCoachName||user?.email||'Local demo',deadline)
-    await save({ ...player, decision: sentDecisionFor(player), emailReviewStatus: 'sent', communicationHistory: { ...player.communicationHistory, [entry.id]: entry } },{category:'email',action:'email_sent',summary:`${entry.type.replace('-',' ')} email marked sent to ${player.name}`,detail:entry.subject,team:player.offeredTeam||player.suitableTeams[0]||'',entityType:'player',entityId:player.id})
+    await save({ ...player, decision: sentDecision, emailReviewStatus: 'sent', communicationHistory: { ...player.communicationHistory, [entry.id]: entry } },{category:'email',action:'email_sent',summary:`${entry.type.replace('-',' ')} email marked sent to ${player.name}`,detail:entry.subject,team:player.offeredTeam||player.suitableTeams[0]||'',entityType:'player',entityId:player.id})
   }
   const togglePlayerStar=async(playerId:string)=>{
     const next={...playerStars}

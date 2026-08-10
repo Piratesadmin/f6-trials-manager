@@ -39,6 +39,12 @@ export function emailTypeFor(player: Player): EmailType | null {
   if (player.decision === 'Alternative offer') return 'alternative'
   if (player.decision === 'Rejection planned' || player.decision === 'Rejection sent') return 'rejection'
   if (player.decision === 'Waiting list planned' || player.decision === 'Waiting list sent') return 'waiting-list'
+  if (player.decision === 'Awaiting decision' && player.suitableTeams.length) {
+    if (player.recommendation === 'Strong offer' || player.recommendation === 'Offer') return 'offer'
+    if (player.recommendation === 'Refer to another team') return 'alternative'
+    if (player.recommendation === 'Waiting list') return 'waiting-list'
+    if (player.recommendation === 'Not suitable') return 'rejection'
+  }
   return null
 }
 
@@ -158,6 +164,7 @@ export function emailValidation(player: Player, settings: EmailSettings, players
   const { coachName } = effectiveEmailFields(player, settings, deadline)
   if (!isValidEmail(player.email)) issues.push({ level: 'blocker', message: 'Add a valid recipient email address.' })
   if (!type) issues.push({ level: 'blocker', message: 'Choose an offer, waiting-list or rejection decision.' })
+  if (type && !sentDecisionFor(player)) issues.push({ level: 'blocker', message: 'Only Offer/Strong offer recommendations and rejection emails can be marked as sent.' })
   if (!coachName) issues.push({ level: 'blocker', message: 'Add the coach name in this draft or Email settings.' })
   const offers = activeOffers(player)
   const contactEmails = [
@@ -198,8 +205,8 @@ export function buildCommunication(player: Player, settings: EmailSettings, sent
 export function sentDecisionFor(player: Player) {
   const type = emailTypeFor(player)
   if (type === 'rejection') return 'Rejection sent' as const
-  if (type === 'waiting-list') return 'Waiting list sent' as const
-  return 'Offer sent' as const
+  if ((type === 'offer' || type === 'alternative') && (player.recommendation === 'Offer' || player.recommendation === 'Strong offer')) return 'Offer sent' as const
+  return null
 }
 
 export function mailtoFor(player: Player, settings: EmailSettings, deadline?: ResponseDeadlineDetails) {

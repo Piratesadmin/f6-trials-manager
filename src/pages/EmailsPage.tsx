@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
 import type { EmailSettings, Player, TeamPlans, TrialSession } from '../types'
 import { PageHeader } from '../components/PageHeader'
-import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, latestCommunication, mailtoFor, type EmailQueueStatus } from '../utils/email'
+import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, mailtoFor, type EmailQueueStatus } from '../utils/email'
 import { deadlineStateLabel, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
 import { offerTeamsLabel } from '../utils/offers'
 import { OfferOptionsEditor } from '../components/OfferOptionsEditor'
-import { teams } from '../data/constants'
+import { reasons, teams } from '../data/constants'
 
 type Props = {
   players: Player[]
@@ -35,7 +35,7 @@ const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
 const statusLabel: Record<EmailQueueStatus, string> = { 'needs-info': 'Needs info', ready: 'Ready to review', reviewed: 'Reviewed', sent: 'Sent' }
 
 export function EmailsPage({ players, playersReady, teamAccessReady, assignedTeams, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen, teamDivisions }: Props) {
-  const queue = useMemo(() => players.filter(player => emailTypeFor(player) || latestCommunication(player)), [players])
+  const queue = useMemo(() => players.filter(player => player.suitableTeams.length > 0), [players])
   const deadlineFor = (player: Player) => responseDeadlineDetails(player, sessions, settings.defaultResponseDeadline)
   const [statusFilter, setStatusFilter] = useState<'all' | EmailQueueStatus>('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -128,6 +128,7 @@ export function EmailsPage({ players, playersReady, teamAccessReady, assignedTea
 function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen, teamDivisions }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'|'teamAccessReady'|'assignedTeams'> & { player: Player }) {
   const [copied, setCopied] = useState<'subject' | 'body' | ''>('')
   const deadline=responseDeadlineDetails(player,sessions,settings.defaultResponseDeadline)
+  const emailType=emailTypeFor(player)
   const status = emailQueueStatus(player, settings, players, teamPlans, deadline)
   const issues = emailValidation(player, settings, players, teamPlans, deadline)
   const blockers = issues.filter(issue => issue.level === 'blocker')
@@ -143,20 +144,23 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
     window.setTimeout(() => setCopied(''), 1600)
   }
   const updateDraft = (field: keyof Player['emailDraft'], value: string) => save({ ...player, emailReviewStatus: player.emailReviewStatus === 'sent' ? 'sent' : 'draft', emailDraft: { ...player.emailDraft, [field]: value } })
+  const updateRejectionReason = (rejectionReason: string) => save({ ...player, rejectionReason, emailReviewStatus: player.emailReviewStatus === 'sent' ? 'sent' : 'draft' })
   const confirmSent = () => {
-    if (blockers.length || !window.confirm('This records the email as sent but does not send it. Continue only after sending from your email app.')) return
+    const confirmation=emailType==='rejection'?'This records the rejection email as sent and marks the player as rejected. Continue?':'This records the offer email as sent but does not send it. Continue only after sending from your email app.'
+    if (blockers.length || !window.confirm(confirmation)) return
     markSent(player)
   }
 
   return <article className="email-review-panel">
-    <header className="email-review-header"><div><span className="eyebrow">{emailTypeLabel(emailTypeFor(player)).toUpperCase()}</span><h2>{player.name}</h2><p>{player.email}</p></div><div><span className={`email-status large ${status}`}>{statusLabel[status]}</span><button className="text-button" onClick={() => onOpen(player.id)}>Open player profile</button></div></header>
+    <header className="email-review-header"><div><span className="eyebrow">{emailTypeLabel(emailType).toUpperCase()}</span><h2>{player.name}</h2><p>{player.email}</p></div><div><span className={`email-status large ${status}`}>{statusLabel[status]}</span><button className="text-button" onClick={() => onOpen(player.id)}>Open player profile</button></div></header>
 
     <div className="email-review-body">
-      {emailTypeFor(player)!=='rejection'&&<section className={`deadline-summary ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'The clock begins when this email is recorded as sent.'}</span></div></section>}
-      {(emailTypeFor(player)==='offer'||emailTypeFor(player)==='alternative')&&<OfferOptionsEditor player={player} save={save} compact teamDivisions={teamDivisions}/>}
+      {emailType!=='rejection'&&<section className={`deadline-summary ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'The clock begins when this email is recorded as sent.'}</span></div></section>}
+      {(emailType==='offer'||emailType==='alternative')&&<OfferOptionsEditor player={player} save={save} compact teamDivisions={teamDivisions}/>}
       <section className="email-draft-settings">
         <div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div>
         <label>Coach name<input value={player.emailDraft.coachName} placeholder={fields.coachName || 'Set a coach name'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using the signed-in or assigned team coach' : 'Signs this email'}</small></label>
+        {emailType==='rejection'&&<label>Rejection reason<select value={player.rejectionReason||''} onChange={event=>updateRejectionReason(event.target.value)}><option value="">Choose a reason</option>{reasons.map(reason=><option key={reason}>{reason}</option>)}</select><small>Used to produce constructive rejection wording</small></label>}
         <label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label>
       </section>
 
@@ -173,7 +177,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
         <button className="secondary" onClick={() => copy('body')}><Copy/>{copied === 'body' ? 'Copied' : 'Copy body'}</button>
         <a className={`secondary ${blockers.length ? 'disabled' : ''}`} href={blockers.length ? undefined : mailtoFor(player, settings, deadline)}><ExternalLink/>Open in email app</a>
         {status !== 'sent' && <button className="review-button" disabled={Boolean(blockers.length)} onClick={() => save({ ...player, emailReviewStatus: 'reviewed' })}><Check/>Mark reviewed</button>}
-        <button className="primary" disabled={Boolean(blockers.length) || status === 'sent'} onClick={confirmSent}><Send/>{status === 'sent' ? 'Sent recorded' : 'Mark as sent'}</button>
+        <button className="primary" disabled={Boolean(blockers.length) || status === 'sent'} onClick={confirmSent}><Send/>{status === 'sent' ? 'Sent recorded' : emailType==='rejection'?'Mark rejected':'Mark as sent'}</button>
       </div>
       <p className="manual-send-note"><AlertTriangle/>“Open in email app” creates a draft. “Mark as sent” only records your completed action; this portal does not send email automatically.</p>
 
