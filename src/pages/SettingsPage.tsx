@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Banknote, CalendarClock, Check, Lock, Mail, Plus, ShieldCheck, ToggleLeft, ToggleRight, Trash2, UserPlus, Users } from 'lucide-react'
+import { AlertTriangle, Banknote, CalendarClock, Check, DatabaseBackup, Download, FileJson, Lock, Mail, Plus, ShieldCheck, ToggleLeft, ToggleRight, Trash2, Upload, UserPlus, Users } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { teams } from '../data/constants'
 import type { CoachProfile, EmailSettings, FinanceSettings, SeasonSettings } from '../types'
 import { formatCurrency } from '../utils/finance'
+import { parseSystemBackup, systemBackupSummary, type SystemBackup } from '../utils/backup'
 
 type Props = {
   settings: EmailSettings
@@ -16,14 +17,21 @@ type Props = {
   saveFinanceSettings: (settings: FinanceSettings) => void | Promise<void>
   seasonSettings: SeasonSettings
   saveSeasonSettings: (settings: SeasonSettings) => void | Promise<void>
+  exportSystemBackup: () => void | Promise<unknown>
+  restoreSystemBackup: (backup: SystemBackup) => void | Promise<void>
 }
 
-export function SettingsPage({ settings, save, coachProfiles, isAdmin, currentUid, saveCoachProfile, financeSettings, saveFinanceSettings, seasonSettings, saveSeasonSettings }: Props) {
+export function SettingsPage({ settings, save, coachProfiles, isAdmin, currentUid, saveCoachProfile, financeSettings, saveFinanceSettings, seasonSettings, saveSeasonSettings, exportSystemBackup, restoreSystemBackup }: Props) {
   const [draft, setDraft] = useState(settings)
   const [saved, setSaved] = useState(false)
   const [feeDraft,setFeeDraft]=useState(financeSettings)
   const [feesSaved,setFeesSaved]=useState(false)
   const [modeBusy,setModeBusy]=useState(false)
+  const [backupBusy,setBackupBusy]=useState<'export'|'restore'|''>('')
+  const [backupCandidate,setBackupCandidate]=useState<SystemBackup|null>(null)
+  const [backupFilename,setBackupFilename]=useState('')
+  const [backupConfirmation,setBackupConfirmation]=useState('')
+  const [backupError,setBackupError]=useState('')
   useEffect(() => setDraft(settings), [settings])
   useEffect(()=>setFeeDraft(financeSettings),[financeSettings])
   const updateTeam = (team: string, field: keyof EmailSettings['teamDetails'][string], value: string) => setDraft(current => ({ ...current, teamDetails: { ...current.teamDetails, [team]: { ...current.teamDetails[team], [field]: value } } }))
@@ -33,9 +41,14 @@ export function SettingsPage({ settings, save, coachProfiles, isAdmin, currentUi
   const addDirectDebitDate=()=>setFeeDraft(current=>({...current,directDebitDueDates:[...current.directDebitDueDates,'']}))
   const setDirectDebitDate=(index:number,value:string)=>setFeeDraft(current=>({...current,directDebitDueDates:current.directDebitDueDates.map((date,itemIndex)=>itemIndex===index?value:date)}))
   const removeDirectDebitDate=(index:number)=>setFeeDraft(current=>({...current,directDebitDueDates:current.directDebitDueDates.filter((_,itemIndex)=>itemIndex!==index)}))
+  const exportBackup=async()=>{setBackupBusy('export');setBackupError('');try{await exportSystemBackup()}catch(error){setBackupError(error instanceof Error?error.message:'The system backup could not be exported.')}finally{setBackupBusy('')}}
+  const chooseBackup=async(file:File|undefined)=>{setBackupCandidate(null);setBackupFilename('');setBackupConfirmation('');setBackupError('');if(!file)return;try{const backup=parseSystemBackup(await file.text());setBackupCandidate(backup);setBackupFilename(file.name)}catch(error){setBackupError(error instanceof Error?error.message:'The selected backup could not be read.')}}
+  const restoreBackup=async()=>{if(!backupCandidate||backupConfirmation!=='RESTORE')return;if(!window.confirm('Restore this backup now? A current pre-restore backup will download first, then all backed-up application data will replace the live data.'))return;setBackupBusy('restore');setBackupError('');try{await restoreSystemBackup(backupCandidate)}catch(error){setBackupError(error instanceof Error?error.message:'The system backup could not be restored.');setBackupBusy('')}}
+  const backupSummary=backupCandidate?systemBackupSummary(backupCandidate):null
 
   return <><PageHeader title="Settings" subtitle="Shared communication, team and calendar details used by every coach." action={<button className="primary" onClick={submit}>{saved ? <Check/> : null}{saved ? 'Saved' : 'Save club settings'}</button>}/>
     {isAdmin&&<section className={`panel trials-mode-panel ${seasonSettings.trialsMode?'enabled':'disabled'}`}><div className="trials-mode-icon">{seasonSettings.trialsMode?<ToggleRight/>:<ToggleLeft/>}</div><div><span className="eyebrow">ADMINISTRATOR MODE CONTROL</span><h2>Trials Mode is {seasonSettings.trialsMode?'on':'off'}</h2><p>{seasonSettings.trialsMode?'All trial assessment, decision, email and squad-planning features are available.':'The portal is simplified for normal club operations: emails and trial planning are hidden, while schedules, confirmed squads, attendance and finance remain available.'}</p></div><button className={seasonSettings.trialsMode?'danger-outline':'primary'} disabled={modeBusy} onClick={toggleTrialsMode}>{modeBusy?'Updating…':seasonSettings.trialsMode?'Turn Trials Mode off':'Turn Trials Mode on'}</button></section>}
+    {isAdmin&&<section className="panel system-backup-panel"><div className="panel-head"><div><span className="eyebrow">SYSTEM BACKUP</span><h2>Export or restore all application data</h2><p>Includes players, assessments, decisions, emails, schedules, attendance, teams, finance, settings, archives, account permissions, photos, stars and activity history.</p></div><DatabaseBackup/></div><div className="system-backup-grid"><article><Download/><div><h3>Download a backup</h3><p>Save a timestamped JSON snapshot somewhere secure. Firebase Authentication login credentials are not included.</p><button className="primary" disabled={Boolean(backupBusy)} onClick={exportBackup}>{backupBusy==='export'?'Preparing backup…':<><Download/>Export system data</>}</button></div></article><article className="restore-backup-card"><Upload/><div><h3>Restore from a backup</h3><p>Selecting a file only validates and previews it. Nothing changes until you confirm the restore.</p><label className="backup-file-picker"><FileJson/>{backupFilename||'Choose backup JSON'}<input type="file" accept="application/json,.json" disabled={Boolean(backupBusy)} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void chooseBackup(file)}}/></label>{backupCandidate&&backupSummary&&<div className="backup-preview"><b>{new Date(backupCandidate.exportedAt).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})}</b><span>{backupSummary.players} players · {backupSummary.events} events · {backupSummary.archives} season archives · {backupSummary.photos} photos</span></div>}{backupCandidate&&<div className="backup-restore-confirm"><AlertTriangle/><p>This replaces current application data. A pre-restore backup downloads automatically first.</p><label>Type <strong>RESTORE</strong> to continue<input value={backupConfirmation} onChange={event=>setBackupConfirmation(event.target.value.toUpperCase())} placeholder="RESTORE" autoComplete="off"/></label><button className="danger" disabled={backupConfirmation!=='RESTORE'||Boolean(backupBusy)} onClick={restoreBackup}>{backupBusy==='restore'?'Restoring…':'Restore system data'}</button></div>}</div></article></div>{backupError&&<p className="system-backup-error"><AlertTriangle/>{backupError}</p>}</section>}
     <section className="settings-grid email-settings-grid">
       <div className="panel settings-card"><span className="eyebrow">EMAIL DEFAULTS</span><h2>Club communication</h2><p>Individual coach accounts now sign emails with their saved display name automatically.</p><label>Club name<input value={draft.clubName} onChange={event => setDraft({ ...draft, clubName: event.target.value })}/></label><label>Club contact email<input type="email" value={draft.clubEmail} onChange={event => setDraft({ ...draft, clubEmail: event.target.value })} placeholder="Added to CC on generated emails"/></label><label>Shared-login coach name<input value={draft.defaultCoachName} onChange={event => setDraft({ ...draft, defaultCoachName: event.target.value })} placeholder="Used only by the shared PIN account"/></label><div className="settings-note"><Mail/><span>The club contact and relevant team administrator contacts are added to CC when a coach opens a generated email draft.</span></div></div>
       <div className="panel settings-card"><span className="eyebrow">ACCESS</span><h2>Club accounts</h2><p>Coaches and team administrators can work with player profiles. Team Planner changes remain limited to their assigned teams.</p><ol className="coach-account-steps"><li><span>1</span>Create the person in Firebase Authentication.</li><li><span>2</span>Ask them to sign in once.</li><li><span>3</span>Return here, choose their role and assign their team.</li></ol><div className="settings-note secure"><ShieldCheck/><span>The shared PIN account remains a full administrator with access to every team and Finance.</span></div><div className="settings-note"><UserPlus/><span>Disable or delete the Firebase user when they leave the role.</span></div></div>

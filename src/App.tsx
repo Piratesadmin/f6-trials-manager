@@ -17,6 +17,7 @@ import { createSeasonArchive, defaultSeasonSettings, normaliseSeasonArchive, nor
 import { createArchivedPlayerRecord, normaliseArchivedPlayerRecord } from './utils/archivedPlayers'
 import { applyDecisionDraft, decisionDraftFor, sameDecisionDraft } from './utils/decision'
 import { appHashFor, parseAppHash, type AppRoute } from './utils/navigation'
+import { createSystemBackup, downloadSystemBackup, parseSystemBackup, systemBackupPaths, type SystemBackup, type SystemBackupData } from './utils/backup'
 import { Login } from './components/Login'
 import { CsvImportModal } from './components/CsvImportModal'
 import { Sidebar } from './components/Sidebar'
@@ -33,6 +34,18 @@ import './App.css'
 
 function firebaseSafeValue<T>(value:T):T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function recordValue(value:unknown):Record<string,unknown>{
+  return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{}
+}
+
+function recordsWithoutId<T extends {id:string}>(items:T[]){
+  return Object.fromEntries(items.map(item=>{const{id,...value}=item;return[id,value]}))
+}
+
+function recordsWithId(value:unknown){
+  return Object.entries(recordValue(value)).map(([id,item])=>({...recordValue(item),id}))
 }
 
 export default function App(){
@@ -260,6 +273,71 @@ export default function App(){
   const recordActivity=async(draft:ActivityDraft)=>{
     const entry=createActivityEntry(draft,activityActor,seasonSettings.currentSeason)
     if(database&&user&&!demo){try{await set(ref(database,`auditLog/${entry.id}`),entry)}catch(error){console.warn('Activity record could not be saved. Publish the v0.20 Firebase rules.',error)}}else{setActivityLog(current=>{const next=[entry,...current].slice(0,500);localStorage.setItem('f6activitylog',JSON.stringify(next));return next})}
+  }
+  const exportSystemBackup=async(prefix='f6-system-backup')=>{
+    if(!isAdmin)throw new Error('Administrator access is required.')
+    let data:SystemBackupData
+    const activeDatabase=database
+    if(activeDatabase&&user&&!demo){
+      const snapshots=await Promise.all(systemBackupPaths.map(path=>get(ref(activeDatabase,path))))
+      data=Object.fromEntries(systemBackupPaths.map((path,index)=>[path,snapshots[index].val()??null])) as SystemBackupData
+    }else{
+      data={
+        players:recordsWithoutId(players),
+        trialSessions:recordsWithoutId(trialSessions),
+        teamPlans,
+        emailSettings,
+        financeSettings,
+        seasonSettings,
+        playerFinance,
+        playerStars:{[currentCoachId]:playerStars},
+        playerPhotos,
+        sessionPhotos,
+        coachProfiles:Object.fromEntries(coachProfiles.map(profile=>[profile.uid,profile])),
+        archivedPlayers,
+        seasonArchives:Object.fromEntries(seasonArchives.map(archive=>[archive.id,archive])),
+        auditLog:Object.fromEntries(activityLog.map(entry=>[entry.id,entry])),
+      }
+    }
+    const backup=createSystemBackup(firebaseSafeValue(data))
+    downloadSystemBackup(backup,prefix)
+    return backup
+  }
+  const restoreSystemBackup=async(candidate:SystemBackup)=>{
+    if(!isAdmin)throw new Error('Administrator access is required.')
+    const backup=parseSystemBackup(JSON.stringify(candidate))
+    await exportSystemBackup('f6-pre-restore-backup')
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      const currentAudit=(await get(ref(database,'auditLog'))).val()
+      const data={...backup.data}
+      if(coachProfile)data.coachProfiles={...recordValue(data.coachProfiles),[user.uid]:coachProfile}
+      const updates=Object.fromEntries(systemBackupPaths.filter(path=>path!=='auditLog').map(path=>[path,data[path]]))
+      await update(ref(database),firebaseSafeValue(updates))
+      const currentAuditEntries=recordValue(currentAudit)
+      const missingAuditEntries=Object.fromEntries(Object.entries(recordValue(data.auditLog)).filter(([id])=>!Object.hasOwn(currentAuditEntries,id)))
+      if(Object.keys(missingAuditEntries).length){try{await update(ref(database,'auditLog'),firebaseSafeValue(missingAuditEntries))}catch(error){console.warn('Historical audit entries could not be restored because the activity log is append-only.',error)}}
+      await recordActivity({category:'settings',action:'system_backup_restored',summary:'Restored a full system backup',detail:`Backup exported ${new Date(backup.exportedAt).toLocaleString('en-GB')}. A pre-restore backup was downloaded first.`,team:'',entityType:'settings',entityId:'system-backup'})
+    }else{
+      const starsByAccount=recordValue(backup.data.playerStars)
+      const localValues:Record<string,unknown>={
+        f6players:recordsWithId(backup.data.players),
+        f6trialsessions:recordsWithId(backup.data.trialSessions),
+        f6teamplans:backup.data.teamPlans||{},
+        f6emailsettings:backup.data.emailSettings,
+        f6financesettings:backup.data.financeSettings,
+        f6seasonsettings:backup.data.seasonSettings,
+        f6playerfinance:backup.data.playerFinance||{},
+        f6playerstars:starsByAccount[currentCoachId]||{},
+        f6playerphotos:backup.data.playerPhotos||{},
+        f6sessionphotos:backup.data.sessionPhotos||{},
+        f6archivedplayers:backup.data.archivedPlayers||{},
+        f6seasonarchives:recordsWithId(backup.data.seasonArchives),
+        f6activitylog:recordsWithId(backup.data.auditLog),
+      }
+      Object.entries(localValues).forEach(([key,value])=>localStorage.setItem(key,JSON.stringify(value)))
+    }
+    window.setTimeout(()=>window.location.reload(),700)
   }
   const save=async(updated:Player,activityOverride?:ActivityDraft|null)=>{const previous=players.find(player=>player.id===updated.id);const stamped={...normalisePlayer(updated),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'};if(database&&user&&!demo){setSyncState('saving');const{id,...data}=stamped;await update(ref(database,`players/${id}`),data)}else{const next=players.map(p=>p.id===stamped.id?stamped:p);setPlayers(next);localStorage.setItem('f6players',JSON.stringify(next))}const activity=activityOverride===undefined?describePlayerChange(previous,stamped):activityOverride;if(activity)await recordActivity(activity)}
   const savePlayerDecision=async(playerId:string,expected:PlayerDecisionDraft,next:PlayerDecisionDraft):Promise<PlayerDecisionSaveResult>=>{
@@ -671,7 +749,20 @@ export default function App(){
       {page==='finance'&&isAdmin&&<FinancePage players={players} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} onOpenPlayer={id=>openPlayer(id,'overview')}/>} 
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
       {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
-      {page==='settings'&&isAdmin&&<SettingsPage settings={emailSettings} save={saveEmailSettings} financeSettings={financeSettings} saveFinanceSettings={saveFinanceSettings} seasonSettings={seasonSettings} saveSeasonSettings={saveSeasonSettings} coachProfiles={coachProfiles} isAdmin={isAdmin} currentUid={user?.uid||'demo'} saveCoachProfile={saveCoachProfile}/>}
+      {page==='settings'&&isAdmin&&<SettingsPage
+        settings={emailSettings}
+        save={saveEmailSettings}
+        financeSettings={financeSettings}
+        saveFinanceSettings={saveFinanceSettings}
+        seasonSettings={seasonSettings}
+        saveSeasonSettings={saveSeasonSettings}
+        coachProfiles={coachProfiles}
+        isAdmin={isAdmin}
+        currentUid={user?.uid||'demo'}
+        saveCoachProfile={saveCoachProfile}
+        exportSystemBackup={exportSystemBackup}
+        restoreSystemBackup={restoreSystemBackup}
+      />}
     </main>
     {importOpen&&<CsvImportModal existingPlayers={players} onClose={()=>setImportOpen(false)} onImport={importPlayers} onWorkbookImport={importTrialWorkbook}/>} 
   </div>
