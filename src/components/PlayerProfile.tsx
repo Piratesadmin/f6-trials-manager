@@ -6,7 +6,7 @@ import { positions, reasons, recommendations, teams } from '../data/constants'
 import { assessmentCompletion, assessmentFields, averageRating } from '../utils/player'
 import { StarRating } from './StarRating'
 import { formatSessionDate, trialDateLabel } from '../utils/schedule'
-import { primaryOffer } from '../utils/offers'
+import { defaultSquadRole, primaryOffer } from '../utils/offers'
 import { decisionDraftFor, sameDecisionDraft } from '../utils/decision'
 
 type Props = {
@@ -99,6 +99,20 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
     if(status==="Can't go")save({...player,trialResponseStatus:status,trialSessionId:'',trialDate:'Not assigned',paid:false,attended:false})
     else save({...player,trialResponseStatus:status})
   }
+  const changePrimaryPosition=(position:string)=>{
+    if(player.decision!=='Offer accepted'){
+      save({...player,position})
+      return
+    }
+    const acceptedTeam=player.offeredTeam||primaryOffer(player)?.team||''
+    const hasAcceptedOffer=Boolean(acceptedTeam&&player.offers.some(offer=>offer.team===acceptedTeam))
+    const offers=acceptedTeam
+      ? hasAcceptedOffer
+        ? player.offers.map(offer=>offer.team===acceptedTeam?{...offer,position}:offer)
+        : [...player.offers,{team:acceptedTeam,position,squadRole:defaultSquadRole,includeSquadRole:true}]
+      : player.offers
+    save({...player,position,offeredPosition:position,offers,teamConsideration:acceptedTeam?{...player.teamConsideration,[acceptedTeam]:position}:player.teamConsideration})
+  }
   return <div className="profile-section">
     <div className="section-heading"><div><span className="eyebrow">PLAYER DETAILS</span><h3>Trial overview</h3><p>Playing information only—phone numbers and home addresses are not stored.</p></div></div>
     <div className="player-photo-card"><div className={`player-photo-preview ${photo?'has-photo':''}`}>{photo?<img src={photo} alt={`${player.name} profile`}/>:<UserRound/>}</div><div><b>Player photo</b><span>Optional. Only a small resized thumbnail is stored; the original file is not retained.</span>{photoError&&<small>{photoError}</small>}</div><input ref={photoInput} hidden type="file" accept="image/*" onChange={event=>choosePhoto(event.target.files?.[0])}/><button className="secondary" disabled={photoBusy} onClick={()=>photoInput.current?.click()}>{photoBusy?<LoaderCircle className="spin"/>:<Camera/>}{photo?'Change photo':'Add photo'}</button>{photo&&<button className="photo-remove" disabled={photoBusy} onClick={remove} aria-label={`Remove ${player.name} photo`}><Trash2/></button>}</div>
@@ -110,7 +124,7 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
       <label>Trial / bib number<input inputMode="numeric" value={player.bibNumber} onChange={event => save({ ...player, bibNumber: event.target.value.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 12) })} placeholder="e.g. 17"/></label>
       <label>Trial session<select value={player.trialSessionId} onChange={event=>changeSession(event.target.value)}><option value="">Not assigned</option>{[...sessions].filter(session=>session.eventType==='trial').sort((a,b)=>a.date.localeCompare(b.date)).map(session=><option key={session.id} value={session.id}>{formatSessionDate(session.date)} · {session.title}</option>)}</select>{!player.trialSessionId&&player.trialDate&&player.trialDate!=='Not assigned'&&<small>Previous date: {player.trialDate}</small>}</label>
       <label>Trial response<select value={player.trialResponseStatus} onChange={event=>changeResponse(event.target.value as TrialResponseStatus)}><option value="">No response recorded</option><option value="Going">Going</option><option value="Not answered">Not answered</option><option value="Can't go">Can’t go</option></select></label>
-      <label>Primary position<select value={player.position} onChange={event => save({ ...player, position: event.target.value })}>{['Unassigned', ...positions].map(position => <option key={position}>{position}</option>)}</select></label>
+      <label>Primary position<select value={player.position} onChange={event => changePrimaryPosition(event.target.value)}>{['Unassigned', ...positions].map(position => <option key={position}>{position}</option>)}</select></label>
       <label>Second position<select value={player.secondaryPosition} onChange={event => save({ ...player, secondaryPosition: event.target.value })}>{['', ...positions].map(position => <option key={position||'none'} value={position}>{position||'None specified'}</option>)}</select></label>
       <label>Highest level played<input value={player.highestLevelPlayed} onChange={event => save({ ...player, highestLevelPlayed: event.target.value })} placeholder="England or international level"/></label>
       <label className="attendance-field">Payment<div className="segmented-control"><button type="button" className={player.paid ? 'active' : ''} onClick={() => save({ ...player, paid: true })}><CreditCard/> Paid</button><button type="button" className={!player.paid ? 'active' : ''} onClick={() => save({ ...player, paid: false })}>Not paid</button></div></label>

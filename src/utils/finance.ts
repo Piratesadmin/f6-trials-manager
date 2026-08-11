@@ -10,7 +10,7 @@ export function confirmedTeam(player: Player) {
 }
 
 export function confirmedPosition(player: Player) {
-  return player.offeredPosition || player.position
+  return player.position || player.offeredPosition || 'Unassigned'
 }
 
 export function emptyPlayerFinance(playerId: string): PlayerFinance {
