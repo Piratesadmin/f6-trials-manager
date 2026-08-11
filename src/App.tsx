@@ -404,6 +404,15 @@ export default function App(){
     }
     await recordActivity({category:'schedule',action:previous?'session_updated':'session_created',summary:`${previous?'Updated':'Created'} ${stamped.title}`,detail:`${trialDateLabel(stamped.date)} · ${stamped.startTime||'Time not set'}`,team:stamped.teams.join(', '),entityType:'session',entityId:stamped.id})
   }
+  const saveTrialSessionNotes=async(sessionId:string,notes:string)=>{
+    const session=trialSessions.find(item=>item.id===sessionId)
+    if(!session)return
+    const updatedAt=Date.now()
+    const updatedBy=user?.email||'Local demo'
+    if(database&&user&&!demo){setSyncState('saving');await update(ref(database,`trialSessions/${sessionId}`),{notes,updatedAt,updatedBy})}
+    else{const next=trialSessions.map(item=>item.id===sessionId?{...item,notes,updatedAt,updatedBy}:item);setTrialSessions(next);localStorage.setItem('f6trialsessions',JSON.stringify(next))}
+    await recordActivity({category:'schedule',action:'session_notes_updated',summary:`Updated notes for ${session.title}`,detail:`${trialDateLabel(session.date)} · ${session.startTime||'Time not set'}`,team:session.teams.join(', '),entityType:'session',entityId:session.id})
+  }
   const saveTrialSessionSeries=async(sessions:TrialSession[])=>{
     if(!sessions.length)return
     const now=Date.now()
@@ -635,7 +644,27 @@ export default function App(){
     <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={Boolean(user?.email && user.email === sharedLoginEmail)} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions}/>
     <main>
       {page==='dashboard'&&<DashboardPage players={players} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
-      {page==='schedule'&&<SchedulePage sessions={trialSessions} players={players} saveSession={saveTrialSession} saveSessions={saveTrialSessionSeries} deleteSession={deleteTrialSession} savePlayer={save} openPlayer={id=>openPlayer(id,'overview')} onImport={()=>setImportOpen(true)} teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))} requestedSessionId={requestedSessionId} onRequestedSessionHandled={()=>setRequestedSessionId('')} eventPhotos={sessionPhotos[activeScheduleSessionId]||{}} uploadEventPhoto={uploadSessionPhoto} removeEventPhoto={removeSessionPhoto} onSelectedSessionChange={selectScheduleSession} editableTeams={editableTeams} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='schedule'&&<SchedulePage
+        sessions={trialSessions}
+        players={players}
+        saveSession={saveTrialSession}
+        saveSessionNotes={saveTrialSessionNotes}
+        saveSessions={saveTrialSessionSeries}
+        deleteSession={deleteTrialSession}
+        savePlayer={save}
+        openPlayer={id=>openPlayer(id,'overview')}
+        onImport={()=>setImportOpen(true)}
+        teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))}
+        requestedSessionId={requestedSessionId}
+        onRequestedSessionHandled={()=>setRequestedSessionId('')}
+        eventPhotos={sessionPhotos[activeScheduleSessionId]||{}}
+        uploadEventPhoto={uploadSessionPhoto}
+        removeEventPhoto={removeSessionPhoto}
+        onSelectedSessionChange={selectScheduleSession}
+        editableTeams={editableTeams}
+        isAdmin={isAdmin}
+        trialsMode={seasonSettings.trialsMode}
+      />}
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions}/>}
       {page==='teams'&&<TeamsPage players={players} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions}/>}
