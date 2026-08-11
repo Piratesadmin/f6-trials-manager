@@ -34,7 +34,7 @@ const navItems = [
   { key: 'finance' as const, label: 'Finance', icon: WalletCards, adminOnly: true },
   { key: 'activity' as const, label: 'Activity', icon: History, adminOnly: true },
   { key: 'archive' as const, label: 'Seasons', icon: Archive, adminOnly: true },
-  { key: 'settings' as const, label: 'Settings', icon: Settings },
+  { key: 'settings' as const, label: 'Settings', icon: Settings, adminOnly: true },
 ]
 
 export function Sidebar({page,setPage,players,selectedTeam,openTeam,syncState,signedIn,accountEmail,accountName,sharedAccount,assignedTeams,isAdmin,accountRole,currentSeason,trialsMode,onSignOut,teamDivisions}:Props){
