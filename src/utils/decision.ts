@@ -30,7 +30,7 @@ export function sameDecisionDraft(left: PlayerDecisionDraft, right: PlayerDecisi
     && left.offers.length === right.offers.length
     && left.offers.every((offer, index) => {
       const other = right.offers[index]
-      return other?.team === offer.team && other.position === offer.position && other.squadRole === offer.squadRole
+      return other?.team === offer.team && other.position === offer.position && other.squadRole === offer.squadRole && other.includeSquadRole === offer.includeSquadRole
     })
     && (left.offeredTeam || '') === (right.offeredTeam || '')
     && (left.offeredPosition || '') === (right.offeredPosition || '')

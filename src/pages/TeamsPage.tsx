@@ -97,7 +97,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
     if(!editable)return
     const position = assignmentForTeam(player, selectedTeam) || player.position
     const existing = offerForTeam(player, selectedTeam)
-    const offers = existing ? player.offers : [...player.offers, { team: selectedTeam, position, squadRole: defaultSquadRole }]
+    const offers = existing ? player.offers : [...player.offers, { team: selectedTeam, position, squadRole: defaultSquadRole, includeSquadRole: true }]
     const primary = primaryOffer(player) || offers[0]
     savePlayer({
       ...player,

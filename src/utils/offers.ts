@@ -13,11 +13,11 @@ export function normaliseOffers(player: Player) {
     const offer = value as Partial<PlayerOffer>
     if (typeof offer.team !== 'string' || !offer.team || seen.has(offer.team)) return []
     seen.add(offer.team)
-    return [{ team: offer.team, position: typeof offer.position === 'string' && offer.position ? offer.position : player.position || 'All-rounder', squadRole: availableSquadRoles.includes(offer.squadRole as SquadRole) ? offer.squadRole as SquadRole : defaultSquadRole }]
+    return [{ team: offer.team, position: typeof offer.position === 'string' && offer.position ? offer.position : player.position || 'All-rounder', squadRole: availableSquadRoles.includes(offer.squadRole as SquadRole) ? offer.squadRole as SquadRole : defaultSquadRole, includeSquadRole: offer.includeSquadRole !== false }]
   })
   if (!hasOffersField && (player.decision?.includes('Offer') || player.decision === 'Alternative offer')) {
     const team = player.offeredTeam || ''
-    if (team) offers.push({ team, position: player.offeredPosition || player.position || 'All-rounder', squadRole: defaultSquadRole })
+    if (team) offers.push({ team, position: player.offeredPosition || player.position || 'All-rounder', squadRole: defaultSquadRole, includeSquadRole: true })
   }
   return offers
 }

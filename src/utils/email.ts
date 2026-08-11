@@ -117,13 +117,13 @@ function offerSection(player: Player, settings: EmailSettings) {
   if (offers.length === 1) {
     const offer = offers[0]
     const details = teamDetailsParagraph(offer.team, settings)
-    const role = squadRolePhrase(offer.squadRole)
+    const role = offer.includeSquadRole ? `, with ${squadRolePhrase(offer.squadRole)}` : ''
     return {
       multiple: false,
-      wording: `a place with ${offer.team} for the upcoming season, primarily playing as a ${offer.position}, with ${role}.${details ? `\n\n${details}` : ''}`,
+      wording: `a place with ${offer.team} for the upcoming season, primarily playing as a ${offer.position}${role}.${details ? `\n\n${details}` : ''}`,
     }
   }
-  const options = offers.map(offer => `• ${offer.team} — ${offer.position} — ${offer.squadRole}`).join('\n')
+  const options = offers.map(offer => `• ${offer.team} — ${offer.position}${offer.includeSquadRole ? ` — ${offer.squadRole}` : ''}`).join('\n')
   const details = offers.map(offer => teamDetailsParagraph(offer.team, settings)).filter(Boolean).join('\n')
   return {
     multiple: true,

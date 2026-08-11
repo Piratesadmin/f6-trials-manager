@@ -53,6 +53,7 @@ export type PlayerOffer = {
   team: string
   position: string
   squadRole: SquadRole
+  includeSquadRole: boolean
 }
 
 export type PlayerEmailDraft = {
