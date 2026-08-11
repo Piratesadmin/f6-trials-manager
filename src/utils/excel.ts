@@ -39,6 +39,8 @@ function normalisePosition(value: string) {
 
 const headerAliases = {
   name: ['name', 'full name', 'player name'],
+  firstName: ['first name', 'firstname', 'given name'],
+  lastName: ['last name', 'lastname', 'surname', 'family name'],
   email: ['email', 'email address', 'e-mail'],
   dateOfBirth: ['date of birth', 'dob', 'birth date'],
   interestedDivisions: ['what division(s) are you interested in playing for?', 'interested divisions', 'division(s)', 'divisions'],
@@ -58,7 +60,7 @@ function headerMap(row: Row): HeaderMap | null {
     const index = values.findIndex(value => aliases.includes(value))
     if (index >= 0) result[key] = index
   }
-  return result.name != null && result.email != null ? result : null
+  return result.email != null && (result.name != null || result.firstName != null || result.lastName != null) ? result : null
 }
 
 function cell(row: Row, headers: HeaderMap, key: HeaderKey) {
@@ -116,7 +118,7 @@ function parsePlayers(rows: Row[], responseLookup: Map<string, TrialResponseStat
       continue
     }
     if (!headers) continue
-    const name = cell(row, headers, 'name')
+    const name = cell(row, headers, 'name') || [cell(row, headers, 'firstName'), cell(row, headers, 'lastName')].filter(Boolean).join(' ')
     const email = clean(cell(row, headers, 'email'))
     if (!name && !email) continue
     const status = responseLookup.get(`email:${email}`) || responseLookup.get(`name:${clean(name)}`) || sectionStatus

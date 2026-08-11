@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { AlertTriangle, ArrowRight, CalendarDays, Check, CheckCircle2, ClipboardList, Lock, MailPlus, Minus, Plus, RotateCcw, Star, TrendingUp, UserPlus, Users } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CalendarDays, Check, CheckCircle2, ClipboardList, FileSpreadsheet, Lock, MailPlus, Minus, Plus, RotateCcw, Star, TrendingUp, UserPlus, Users } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { positions, teams } from '../data/constants'
 import type { FinanceSettings, Player, PlayerFinanceMap, TeamPlans, TrialSession } from '../types'
@@ -26,6 +26,7 @@ type Props = {
   financeSettings: FinanceSettings
   trialsMode: boolean
   teamDivisions: Record<string,string>
+  onImportReturningPlayers: (team: string) => void
 }
 
 type CandidateGroup = {
@@ -35,7 +36,7 @@ type CandidateGroup = {
   tone: string
 }
 
-export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget, selectedTeam, setSelectedTeam, onOpenPlayer, onOpenSchedule, canEditTeam, editableTeams, isAdmin, finances, financeSettings, trialsMode, teamDivisions }: Props) {
+export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget, selectedTeam, setSelectedTeam, onOpenPlayer, onOpenSchedule, canEditTeam, editableTeams, isAdmin, finances, financeSettings, trialsMode, teamDivisions, onImportReturningPlayers }: Props) {
   const targets = teamPlans[selectedTeam]
   const planned = useMemo(() => players.filter(player => isPlannedForTeam(player, selectedTeam)), [players, selectedTeam])
   const confirmed = useMemo(() => players.filter(player => confirmedTeam(player) === selectedTeam), [players, selectedTeam])
@@ -141,7 +142,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
   }
 
   if(!trialsMode)return <>
-    <PageHeader title="Teams" subtitle="Confirmed squads and attendance during the playing season."/>
+    <PageHeader title="Teams" subtitle="Confirmed squads and attendance during the playing season." action={editable?<button className="secondary returning-player-import-button" onClick={()=>onImportReturningPlayers(selectedTeam)}><FileSpreadsheet/>Import returning players</button>:undefined}/>
     <section className="planner-team-strip" aria-label="Choose a team">{teams.map(team=>{const teamConfirmed=players.filter(player=>confirmedTeam(player)===team).length;return <button key={team} className={`${selectedTeam===team?'active':''} ${canEditTeam(team)?'':'view-only'}`} onClick={()=>setSelectedTeam(team)}><span>{team}{!canEditTeam(team)&&<Lock/>}</span><b>{teamConfirmed}</b><small>{canEditTeam(team)?'Confirmed squad':'View only'}</small></button>})}</section>
     {!editable&&<div className="team-access-banner"><Lock/><div><b>{selectedTeam} is view only</b><span>You can see the confirmed squad and attendance, but only its assigned coach, Team administrator or a full administrator can change team records.</span></div></div>}
     <section className="confirmed-squad-panel"><div className="planner-panel-head"><div><span className="eyebrow">CONFIRMED SQUAD</span><h3>{confirmed.length} accepted player{confirmed.length===1?'':'s'}</h3><p>The active playing squad for {selectedTeam}.</p></div>{isAdmin&&<span className="admin-finance-label">Administrator finance view</span>}</div>{confirmed.length?<div className="confirmed-squad-grid">{confirmed.sort((a,b)=>confirmedPosition(a).localeCompare(confirmedPosition(b))||a.name.localeCompare(b.name)).map(player=><ConfirmedPlayerCard key={player.id} player={player} isAdmin={isAdmin} finance={finances[player.id]} financeSettings={financeSettings} onOpen={()=>onOpenPlayer(player.id)}/>)}</div>:<div className="planner-empty compact"><CheckCircle2/><h4>No confirmed players yet</h4><p>No active players are currently assigned to {selectedTeam}.</p></div>}</section>
@@ -149,7 +150,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
   </>
 
   return <>
-    <PageHeader title="Team planner" subtitle="Build balanced squads from coach assessments, referrals and planned offers."/>
+    <PageHeader title="Team planner" subtitle="Build balanced squads from coach assessments, referrals and planned offers." action={editable?<button className="secondary returning-player-import-button" onClick={()=>onImportReturningPlayers(selectedTeam)}><FileSpreadsheet/>Import returning players</button>:undefined}/>
 
     <section className="planner-team-strip" aria-label="Choose a team">
       {teams.map(team => {

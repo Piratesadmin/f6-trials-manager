@@ -20,6 +20,7 @@ import { appHashFor, parseAppHash, type AppRoute } from './utils/navigation'
 import { createSystemBackup, downloadSystemBackup, parseSystemBackup, systemBackupPaths, type SystemBackup, type SystemBackupData } from './utils/backup'
 import { Login } from './components/Login'
 import { CsvImportModal } from './components/CsvImportModal'
+import { ReturningPlayersImportModal } from './components/ReturningPlayersImportModal'
 import { Sidebar } from './components/Sidebar'
 import { DashboardPage } from './pages/DashboardPage'
 import { SchedulePage } from './pages/SchedulePage'
@@ -30,6 +31,7 @@ import { FinancePage } from './pages/FinancePage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { ArchivePage } from './pages/ArchivePage'
+import { defaultSquadRole } from './utils/offers'
 import './App.css'
 
 function firebaseSafeValue<T>(value:T):T {
@@ -65,6 +67,7 @@ export default function App(){
   const [query,setQuery]=useState('')
   const [syncState,setSyncState]=useState<SyncState>(firebaseConfigured?'saving':'offline')
   const [importOpen,setImportOpen]=useState(false)
+  const [returningImportTeam,setReturningImportTeam]=useState('')
   const [playerTab,setPlayerTabState]=useState<PlayerTab>(initialRoute.playerTab||'decision')
   const [selectedTeam,setSelectedTeamState]=useState(initialRoute.team&&teams.includes(initialRoute.team)?initialRoute.team:teams[0])
   const [teamPlans,setTeamPlans]=useState<TeamPlans>(()=>{
@@ -449,6 +452,63 @@ export default function App(){
     navigate({page:'schedule',sessionId})
     await recordActivity({category:'import',action:'trial_workbook_imported',summary:`Imported ${prepared.length} players into ${sessionRecord.title}`,detail:`${trialDateLabel(sessionRecord.date)} · Trial workbook`,team:'',entityType:'session',entityId:sessionRecord.id})
   }
+  const importReturningPlayers=async(team:string,importedPlayers:Omit<Player,'id'>[])=>{
+    if(!editableTeams.includes(team))throw new Error(`You do not have permission to import players into ${team}.`)
+    const now=Date.now()
+    const actor=user?.email||'Local demo'
+    const existingByEmail=new Map(players.filter(player=>player.email).map(player=>[player.email.trim().toLowerCase(),player]))
+    const seen=new Set<string>()
+    const uniquePlayers=importedPlayers.filter(player=>{
+      const email=player.email.trim().toLowerCase()
+      if(!email||seen.has(email))return false
+      seen.add(email)
+      return true
+    })
+    const existingIds=new Set<string>()
+    const prepared=uniquePlayers.map(incoming=>{
+      const existing=existingByEmail.get(incoming.email.trim().toLowerCase())
+      if(existing)existingIds.add(existing.id)
+      const base=existing||normalisePlayer({...incoming,id:crypto.randomUUID()})
+      const importedPosition=incoming.position&&incoming.position!=='Unassigned'?incoming.position:''
+      const position=importedPosition||base.position||'Unassigned'
+      const previousTeamOffer=base.offers.find(offer=>offer.team===team)
+      return normalisePlayer({
+        ...base,
+        name:incoming.name.trim()||base.name,
+        email:incoming.email.trim().toLowerCase()||base.email,
+        dateOfBirth:incoming.dateOfBirth||base.dateOfBirth,
+        interestedDivisions:incoming.interestedDivisions||base.interestedDivisions||teamDivisions[team]||'',
+        position,
+        secondaryPosition:incoming.secondaryPosition||base.secondaryPosition,
+        playingExperience:incoming.playingExperience||base.playingExperience,
+        highestLevelPlayed:incoming.highestLevelPlayed||base.highestLevelPlayed,
+        photoUrl:incoming.photoUrl||base.photoUrl,
+        decision:'Offer accepted',
+        offeredTeam:team,
+        offeredPosition:position,
+        offers:[{team,position,squadRole:previousTeamOffer?.squadRole||defaultSquadRole,includeSquadRole:previousTeamOffer?.includeSquadRole!==false}],
+        rejectionReason:'',
+        suitableTeams:[team],
+        teamConsideration:{[team]:position},
+        emailReviewStatus:'sent',
+        updatedAt:now,
+        updatedBy:actor,
+      })
+    })
+    if(!prepared.length)throw new Error('There are no valid returning players to import.')
+    const importedIds=new Set(prepared.map(player=>player.id))
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      const updates=Object.fromEntries(prepared.map(({id,...data})=>[`players/${id}`,firebaseSafeValue(data)]))
+      await update(ref(database),updates)
+    }else{
+      const merged=[...players.filter(player=>!importedIds.has(player.id)),...prepared]
+      setPlayers(merged)
+      localStorage.setItem('f6players',JSON.stringify(merged))
+    }
+    navigate({page:'teams',team})
+    await recordActivity({category:'import',action:'returning_players_imported',summary:`Imported ${prepared.length} returning player${prepared.length===1?'':'s'} into ${team}`,detail:`${prepared.length-existingIds.size} new · ${existingIds.size} existing updated · confirmed automatically.`,team,entityType:'team',entityId:team})
+  }
   const saveTeamTarget=async(team:string,position:string,target:number)=>{
     if(!editableTeams.includes(team))return
     const safeTarget=Math.max(minimumTargetForPosition(teamPlans[team],position),Math.min(99,target))
@@ -745,7 +805,7 @@ export default function App(){
       />}
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions}/>}
-      {page==='teams'&&<TeamsPage players={players} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions}/>}
+      {page==='teams'&&<TeamsPage players={players} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
       {page==='finance'&&isAdmin&&<FinancePage players={players} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} onOpenPlayer={id=>openPlayer(id,'overview')}/>} 
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
       {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
@@ -765,5 +825,6 @@ export default function App(){
       />}
     </main>
     {importOpen&&<CsvImportModal existingPlayers={players} onClose={()=>setImportOpen(false)} onImport={importPlayers} onWorkbookImport={importTrialWorkbook}/>} 
+    {returningImportTeam&&<ReturningPlayersImportModal team={returningImportTeam} existingPlayers={players} onClose={()=>setReturningImportTeam('')} onImport={importReturningPlayers}/>}
   </div>
 }
