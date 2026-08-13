@@ -34,6 +34,7 @@ export function latestCommunication(player: Player) {
 }
 
 export function emailTypeFor(player: Player): EmailType | null {
+  if (player.returningPlayer && player.decision === 'Offer accepted') return 'squad-confirmation'
   if (player.decision === 'Offer accepted') return latestCommunication(player)?.type || null
   if (player.decision === 'Offer sent') return latestCommunication(player)?.type || 'offer'
   if (player.decision === 'Rejection sent') return 'rejection'
@@ -52,6 +53,7 @@ export function emailTypeFor(player: Player): EmailType | null {
 }
 
 export function emailTypeLabel(type: EmailType | null) {
+  if (type === 'squad-confirmation') return 'Squad confirmation'
   if (type === 'alternative') return 'Alternative offer'
   if (type === 'waiting-list') return 'Waiting list'
   if (type === 'rejection') return 'Rejection'
@@ -74,6 +76,7 @@ export function effectiveEmailFields(player: Player, settings: EmailSettings, de
 export function emailSubjectFor(player: Player, settings: EmailSettings) {
   const type = emailTypeFor(player)
   const multipleTeams = activeOffers(player).length > 1
+  if (type === 'squad-confirmation') return `${settings.clubName} – Squad confirmation`
   if (type === 'offer') return `${settings.clubName} – ${multipleTeams ? 'Team options' : 'Team offer'}`
   if (type === 'alternative') return `${settings.clubName} – ${multipleTeams ? 'Alternative team options' : 'Alternative team offer'}`
   if (type === 'waiting-list') return `${settings.clubName} – Trials waiting list`
@@ -138,6 +141,14 @@ export function emailFor(player: Player, settings: EmailSettings, deadline?: Res
   const signoff = `Kind regards,\n${coachName || '[Coach name]'}\n${settings.clubName}`
   const personal = personalMessage ? `\n\n${personalMessage}` : ''
 
+  if (type === 'squad-confirmation') {
+    const offer = activeOffers(player)[0]
+    const team = offer?.team || player.offeredTeam || player.suitableTeams[0] || 'your team'
+    const position = offer?.position || player.offeredPosition || player.position
+    const details = teamDetailsParagraph(team, settings)
+    return `Hi ${first},\n\nWe are pleased to confirm your place in the ${team} squad for the upcoming season${position && position !== 'Unassigned' ? `, primarily playing as a ${position}` : ''}.${details ? `\n\n${details}` : ''}${personal}\n\nWe are delighted to welcome you back to ${settings.clubName} and look forward to the season ahead.\n\n${signoff}`
+  }
+
   if (type === 'offer') {
     const section = offerSection(player, settings)
     return `Hi ${first},\n\nThank you for attending the ${settings.clubName} trials.\n\nWe were really impressed with your performance and would like to offer you ${section.wording}${personal}\n\n${responseParagraph(section.multiple)}\n\n${signoff}`
@@ -167,7 +178,7 @@ export function emailValidation(player: Player, settings: EmailSettings, players
   const { coachName } = effectiveEmailFields(player, settings, deadline)
   if (!isValidEmail(player.email)) issues.push({ level: 'blocker', message: 'Add a valid recipient email address.' })
   if (!type) issues.push({ level: 'blocker', message: 'Choose an offer, waiting-list or rejection decision.' })
-  if (type && !sentDecisionFor(player)) issues.push({ level: 'blocker', message: 'Only Offer/Strong offer recommendations and rejection emails can be marked as sent.' })
+  if (type && !sentDecisionFor(player)) issues.push({ level: 'blocker', message: 'This email cannot be marked as sent from the player’s current state.' })
   if (!coachName) issues.push({ level: 'blocker', message: 'Add the coach name in this draft or Email settings.' })
   const offers = activeOffers(player)
   const contactEmails = [
@@ -206,6 +217,7 @@ export function buildCommunication(player: Player, settings: EmailSettings, sent
 
 export function sentDecisionFor(player: Player) {
   const type = emailTypeFor(player)
+  if (type === 'squad-confirmation' && player.returningPlayer && player.decision === 'Offer accepted') return 'Offer accepted' as const
   if (type === 'rejection') return 'Rejection sent' as const
   if ((type === 'offer' || type === 'alternative') && (player.recommendation === 'Offer' || player.recommendation === 'Strong offer')) return 'Offer sent' as const
   return null

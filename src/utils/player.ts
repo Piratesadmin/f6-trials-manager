@@ -76,7 +76,17 @@ export function normalisePlayer(player: Player): Player {
       return [[id,{id,assessment:snapshotAssessment,average, recommendation:incomingSnapshot.recommendation||'',strengths:incomingSnapshot.strengths||'',developmentAreas:incomingSnapshot.developmentAreas||'',suitableTeams:Array.isArray(incomingSnapshot.suitableTeams)?incomingSnapshot.suitableTeams.filter(Boolean):[],recordedAt:typeof incomingSnapshot.recordedAt==='number'?incomingSnapshot.recordedAt:0,recordedBy:typeof incomingSnapshot.recordedBy==='string'?incomingSnapshot.recordedBy:''} as AssessmentSnapshot]]
     }))
     : {}
-  const sentDecision = player.decision === 'Offer sent' || player.decision === 'Offer accepted' || player.decision === 'Rejection sent' || player.decision === 'Waiting list sent'
+  const inferredReturningPlayer = player.decision === 'Offer accepted'
+    && player.emailReviewStatus === 'sent'
+    && !Object.keys(history).length
+    && !player.trialSessionId
+    && !player.recommendation
+  const returningPlayer = Boolean(player.returningPlayer) || inferredReturningPlayer
+  const confirmationSent = Object.values(history).some(entry => entry.type === 'squad-confirmation')
+  const sentDecision = player.decision === 'Offer sent'
+    || player.decision === 'Rejection sent'
+    || player.decision === 'Waiting list sent'
+    || (player.decision === 'Offer accepted' && (!returningPlayer || confirmationSent))
   const reviewStatus = sentDecision ? 'sent' : player.emailReviewStatus === 'reviewed' ? 'reviewed' : 'draft'
 
   return {
@@ -111,6 +121,7 @@ export function normalisePlayer(player: Player): Player {
       personalMessage: player.emailDraft?.personalMessage || '',
     },
     communicationHistory: history,
+    returningPlayer,
   }
 }
 

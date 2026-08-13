@@ -45,7 +45,7 @@ export type Recommendation =
   | 'Not suitable'
 
 export type EmailReviewStatus = 'draft' | 'reviewed' | 'sent'
-export type EmailType = 'offer' | 'alternative' | 'rejection' | 'waiting-list'
+export type EmailType = 'offer' | 'alternative' | 'rejection' | 'waiting-list' | 'squad-confirmation'
 export type TrialResponseStatus = '' | 'Going' | 'Not answered' | "Can't go"
 export type SquadRole = 'Starting six' | 'Frequent player' | 'Rotational player' | 'Development / improvement role' | 'Training squad' | 'Role to be discussed'
 
@@ -125,6 +125,7 @@ export type Player = {
   emailReviewStatus: EmailReviewStatus
   emailDraft: PlayerEmailDraft
   communicationHistory: Record<string, CommunicationHistoryEntry>
+  returningPlayer?: boolean
   updatedAt?: number
   updatedBy?: string
 }

@@ -490,7 +490,8 @@ export default function App(){
         rejectionReason:'',
         suitableTeams:[team],
         teamConsideration:{[team]:position},
-        emailReviewStatus:'sent',
+        emailReviewStatus:'draft',
+        returningPlayer:true,
         updatedAt:now,
         updatedBy:actor,
       })

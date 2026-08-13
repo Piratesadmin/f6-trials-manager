@@ -104,7 +104,7 @@ export function EmailsPage({ players, playersReady, teamAccessReady, assignedTea
       <aside className="email-queue-panel">
         <div className="email-queue-tools">
           <label><Search/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search emails"/></label>
-          <select value={typeFilter} onChange={event => changeTypeFilter(event.target.value as 'all' | EmailType)} aria-label="Filter by email type"><option value="all">All types</option><option value="offer">Offers</option><option value="alternative">Alternative offers</option><option value="waiting-list">Waiting list</option><option value="rejection">Rejections</option></select>
+          <select value={typeFilter} onChange={event => changeTypeFilter(event.target.value as 'all' | EmailType)} aria-label="Filter by email type"><option value="all">All types</option><option value="squad-confirmation">Squad confirmations</option><option value="offer">Offers</option><option value="alternative">Alternative offers</option><option value="waiting-list">Waiting list</option><option value="rejection">Rejections</option></select>
           <select className="email-team-filter" value={teamFilter} onChange={event => changeTeamFilter(event.target.value)} aria-label="Filter emails by team"><option value="assigned">My Teams</option><option value="all">All club teams</option>{teams.map(team => <option value={team} key={team}>{team}</option>)}</select>
         </div>
         <nav className="email-status-tabs" aria-label="Email status filters">{statuses.map(status => <button key={status.value} className={statusFilter === status.value ? 'active' : ''} onClick={() => setStatusFilter(status.value)}>{status.label}{status.value !== 'all' && <span>{counts[status.value]}</span>}</button>)}</nav>
@@ -139,6 +139,7 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
   const fields = effectiveEmailFields(player, settings, deadline)
   const history = Object.values(player.communicationHistory || {}).sort((a,b) => b.sentAt - a.sentAt)
   const recommendationClass=player.recommendation?`recommendation-${player.recommendation.toLowerCase().replaceAll(' ','-')}`:''
+  const tracksResponse=emailType==='offer'||emailType==='alternative'||emailType==='waiting-list'
 
   const copy = async (kind: 'subject' | 'body') => {
     await navigator.clipboard.writeText(kind === 'subject' ? subject : body)
@@ -147,7 +148,11 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
   }
   const updateDraft = (field: keyof Player['emailDraft'], value: string) => save({ ...player, emailReviewStatus: player.emailReviewStatus === 'sent' ? 'sent' : 'draft', emailDraft: { ...player.emailDraft, [field]: value } })
   const confirmSent = () => {
-    const confirmation=emailType==='rejection'?'This records the rejection email as sent and marks the player as rejected. Continue?':'This records the offer email as sent but does not send it. Continue only after sending from your email app.'
+    const confirmation=emailType==='rejection'
+      ? 'This records the rejection email as sent and marks the player as rejected. Continue?'
+      : emailType==='squad-confirmation'
+        ? 'This records the squad confirmation as sent. The player will remain confirmed in the squad. Continue only after sending from your email app.'
+        : 'This records the offer email as sent but does not send it. Continue only after sending from your email app.'
     if (blockers.length || !window.confirm(confirmation)) return
     markSent(player)
   }
@@ -156,10 +161,10 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
     <header className="email-review-header"><div><span className="eyebrow">{emailTypeLabel(emailType).toUpperCase()}</span><h2>{player.name}</h2><p>{player.email}</p></div><div><span className={`email-status large ${status}`}>{statusLabel[status]}</span><button className="text-button" onClick={() => onOpen(player.id)}>Open player profile</button></div></header>
 
     <div className="email-review-body">
-      {emailType!=='rejection'&&<section className={`deadline-summary ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'The clock begins when this email is recorded as sent.'}</span></div></section>}
+      {tracksResponse&&<section className={`deadline-summary ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'The clock begins when this email is recorded as sent.'}</span></div></section>}
       {emailType!=='rejection'&&<section className="email-decision-snapshot" aria-label="Saved player decision"><span className="email-decision-title"><ClipboardList/>Decision</span><strong className={recommendationClass}>{player.recommendation||'No recommendation'}</strong><span className="email-decision-teams">{player.suitableTeams.map(team=><b key={team}>{team}</b>)}</span></section>}
       {(emailType==='offer'||emailType==='alternative')&&<OfferOptionsEditor player={player} save={save} compact teamDivisions={teamDivisions}/>}
-      {emailType==='rejection'?<section className="email-draft-settings rejection-only"><label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label></section>:<section className="email-draft-settings"><div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div><label>Coach name<input value={player.emailDraft.coachName} placeholder={fields.coachName || 'Set a coach name'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using the signed-in or assigned team coach' : 'Signs this email'}</small></label><label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label></section>}
+      {emailType==='rejection'?<section className="email-draft-settings rejection-only"><label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label></section>:<section className={`email-draft-settings ${emailType==='squad-confirmation'?'confirmation-only':''}`}>{tracksResponse&&<div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div>}<label>Coach name<input value={player.emailDraft.coachName} placeholder={fields.coachName || 'Set a coach name'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using the signed-in or assigned team coach' : 'Signs this email'}</small></label><label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label></section>}
 
       {issues.length > 0 && <section className="email-checks"><div className="email-checks-title"><AlertTriangle/><div><b>Pre-send checks</b><span>{blockers.length ? `${blockers.length} item${blockers.length === 1 ? '' : 's'} must be fixed` : 'Warnings to review'}</span></div></div>{issues.map(issue => <div className={issue.level} key={issue.message}>{issue.level === 'blocker' ? <FileWarning/> : <AlertTriangle/>}<span>{issue.message}</span></div>)}</section>}
 

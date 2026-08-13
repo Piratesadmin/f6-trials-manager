@@ -53,7 +53,7 @@ export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save,
       <div className="profile-identity">
         <div className={`avatar profile-avatar ${photo?'has-photo':''}`}>{photo?<img src={photo} alt={`${player.name} profile`}/>:initials}</div>
         <div>
-          <div className="profile-title-row"><h2>{player.name}</h2>{player.bibNumber && <span className="bib-badge">#{player.bibNumber}</span>}</div>
+          <div className="profile-title-row"><h2>{player.name}</h2>{player.returningPlayer&&<span className="returning-player-badge">Returning player</span>}{player.bibNumber && <span className="bib-badge">#{player.bibNumber}</span>}</div>
           <p>{player.position} · {player.interestedDivisions} applicant</p>
           <span className={`recommendation-badge ${recommendationClass(player.recommendation)}`}>{player.recommendation || 'No recommendation yet'}</span>
         </div>
