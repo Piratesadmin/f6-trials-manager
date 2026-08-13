@@ -47,7 +47,7 @@ export function Login({ onDemo }: { onDemo: () => void }) {
     {mode === 'pin' ? <label>Club PIN<input className="pin-input" type="password" inputMode="numeric" pattern="[0-9]*" value={pin} onChange={event => setPin(event.target.value.replace(/\D/g, ''))} required autoComplete="current-password" maxLength={12} autoFocus placeholder="••••••"/></label> : <div className="coach-login-fields"><label>Email address<div className="login-input-with-icon"><Mail/><input type="email" value={email} onChange={event => setEmail(event.target.value)} required autoComplete="username" placeholder="coach@flamingsix.co.uk" autoFocus/></div></label><label>Password<div className="login-input-with-icon"><KeyRound/><input type="password" value={password} onChange={event => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Your password"/></div></label></div>}
     {error && <div className="login-error">{error}</div>}
     <button className="primary login-button" disabled={busy || (mode === 'pin' ? pin.length < 4 : !email.trim() || password.length < 6)}>{busy ? 'Signing in…' : mode === 'pin' ? 'Open Club Manager' : 'Sign in to Club Manager'}</button>
-    <p className="pin-help">{mode === 'pin' ? 'Use the shared PIN provided by the club committee.' : 'Coach and team-administrator accounts are created by a club administrator.'}</p>
+    <p className="pin-help">{mode === 'pin' ? 'Use the shared PIN provided by the club committee.' : 'Coach, assistant-coach and team-administrator accounts are created by a club administrator.'}</p>
     {!firebaseConfigured && <><div className="setup-warning">Firebase is not configured.</div><button type="button" className="demo-button" onClick={onDemo}>Open local demo</button></>}
   </form></div>
 }

@@ -14,7 +14,13 @@ export function createCoachProfile(uid: string, email: string, admin = false): C
 export function normaliseCoachProfile(uid: string, value: unknown, fallbackEmail = ''): CoachProfile {
   const incoming = value && typeof value === 'object' ? value as Partial<CoachProfile> : {}
   const assigned = incoming.teams && typeof incoming.teams === 'object' ? incoming.teams : {}
-  const role = incoming.role === 'admin' ? 'admin' : incoming.role === 'team-admin' ? 'team-admin' : 'coach'
+  const role = incoming.role === 'admin'
+    ? 'admin'
+    : incoming.role === 'team-admin'
+      ? 'team-admin'
+      : incoming.role === 'assistant-coach'
+        ? 'assistant-coach'
+        : 'coach'
   const assignedTeams = teams.filter(team => assigned[team] === true)
   return {
     uid,
@@ -41,9 +47,12 @@ export function assignedCoachNameForTeam(profiles: CoachProfile[], team: string,
 }
 
 export function assignedEmailSignatoriesForTeam(profiles: CoachProfile[], team: string) {
-  const roleOrder: Record<CoachProfile['role'], number> = { coach: 0, 'team-admin': 1, admin: 2 }
+  const roleOrder: Record<CoachProfile['role'], number> = { coach: 0, 'assistant-coach': 1, 'team-admin': 2, admin: 3 }
   return profiles
     .filter(profile => profile.role !== 'admin' && profile.teams[team] && profile.displayName.trim())
     .sort((left, right) => roleOrder[left.role] - roleOrder[right.role] || left.displayName.localeCompare(right.displayName))
-    .map(profile => `${profile.displayName.trim()} - ${team} ${profile.role === 'team-admin' ? 'Admin' : 'Coach'}`)
+    .map(profile => {
+      const roleLabel = profile.role === 'team-admin' ? 'Admin' : profile.role === 'assistant-coach' ? 'Assistant Coach' : 'Coach'
+      return `${profile.displayName.trim()} - ${team} ${roleLabel}`
+    })
 }
