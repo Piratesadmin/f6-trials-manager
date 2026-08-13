@@ -90,6 +90,7 @@ export type EmailSettings = {
   teamDetails: Record<string, TeamEmailDetails>
   currentCoachName?: string
   teamCoachNames?: Record<string, string>
+  teamSignatories?: Record<string, string[]>
 }
 
 export type Player = {

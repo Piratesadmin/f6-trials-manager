@@ -10,6 +10,7 @@ export type EmailQueueStatus = 'needs-info' | 'ready' | 'reviewed' | 'sent'
 export function normaliseEmailSettings(value: unknown): EmailSettings {
   const incoming = value && typeof value === 'object' ? value as Partial<EmailSettings> : {}
   const incomingTeams = incoming.teamDetails && typeof incoming.teamDetails === 'object' ? incoming.teamDetails : {}
+  const incomingSignatories = incoming.teamSignatories && typeof incoming.teamSignatories === 'object' ? incoming.teamSignatories : {}
   return {
     clubName: incoming.clubName || defaultEmailSettings.clubName,
     clubEmail: typeof incoming.clubEmail === 'string' ? incoming.clubEmail.trim() : '',
@@ -26,6 +27,9 @@ export function normaliseEmailSettings(value: unknown): EmailSettings {
         calendarColor: /^#[0-9a-f]{6}$/i.test(details?.calendarColor || '') ? details!.calendarColor : defaultTeamColours[team],
       }]
     })),
+    teamSignatories: Object.fromEntries(teams.map(team => [team, Array.isArray(incomingSignatories[team])
+      ? Array.from(new Set(incomingSignatories[team].map(name => typeof name === 'string' ? name.trim() : '').filter(Boolean)))
+      : []])),
   }
 }
 
@@ -62,13 +66,15 @@ export function emailTypeLabel(type: EmailType | null) {
 }
 
 export function effectiveEmailFields(player: Player, settings: EmailSettings, deadline?: ResponseDeadlineDetails) {
-  const assignedCoachName = emailTeamsFor(player).flatMap(team => {
-    const coachName = settings.teamCoachNames?.[team]?.trim()
-    return coachName ? [`${coachName} - ${team} Coach`] : []
-  }).join('\n')
+  const assignedSignatories = Array.from(new Set(emailTeamsFor(player).flatMap(team => {
+    const signatories = settings.teamSignatories?.[team]?.filter(name => name.trim()) || []
+    if (signatories.length) return signatories
+    const legacyCoachName = settings.teamCoachNames?.[team]?.trim()
+    return legacyCoachName ? [`${legacyCoachName} - ${team} Coach`] : []
+  }))).join('\n')
   return {
     deadline: deadline?.effectiveDeadline || '',
-    coachName: player.emailDraft.coachName || assignedCoachName || settings.currentCoachName || settings.defaultCoachName,
+    coachName: player.emailDraft.coachName || assignedSignatories || settings.currentCoachName || settings.defaultCoachName,
     personalMessage: player.emailDraft.personalMessage.trim(),
   }
 }
@@ -179,7 +185,7 @@ export function emailValidation(player: Player, settings: EmailSettings, players
   if (!isValidEmail(player.email)) issues.push({ level: 'blocker', message: 'Add a valid recipient email address.' })
   if (!type) issues.push({ level: 'blocker', message: 'Choose an offer, waiting-list or rejection decision.' })
   if (type && !sentDecisionFor(player)) issues.push({ level: 'blocker', message: 'This email cannot be marked as sent from the player’s current state.' })
-  if (!coachName) issues.push({ level: 'blocker', message: 'Add the coach name in this draft or Email settings.' })
+  if (!coachName) issues.push({ level: 'blocker', message: 'Add an email signatory in this draft or Team permissions.' })
   const offers = activeOffers(player)
   const contactEmails = [
     { label: 'Club contact', email: settings.clubEmail },

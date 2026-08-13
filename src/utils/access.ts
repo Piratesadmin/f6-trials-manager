@@ -39,3 +39,11 @@ export function assignedCoachNameForTeam(profiles: CoachProfile[], team: string,
     || assigned[0]?.displayName.trim()
     || ''
 }
+
+export function assignedEmailSignatoriesForTeam(profiles: CoachProfile[], team: string) {
+  const roleOrder: Record<CoachProfile['role'], number> = { coach: 0, 'team-admin': 1, admin: 2 }
+  return profiles
+    .filter(profile => profile.role !== 'admin' && profile.teams[team] && profile.displayName.trim())
+    .sort((left, right) => roleOrder[left.role] - roleOrder[right.role] || left.displayName.localeCompare(right.displayName))
+    .map(profile => `${profile.displayName.trim()} - ${team} ${profile.role === 'team-admin' ? 'Admin' : 'Coach'}`)
+}

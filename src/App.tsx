@@ -6,7 +6,7 @@ import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
 import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, normalisePlayer } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
-import { assignedCoachNameForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
+import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
 import { buildCommunication, normaliseEmailSettings, sentDecisionFor } from './utils/email'
 import { blobToDataUrl, prepareEventPhoto, preparePlayerPhoto } from './utils/photo'
 import { normaliseTrialSession, trialDateLabel } from './utils/schedule'
@@ -112,9 +112,10 @@ export default function App(){
   const defaultTeam=editableTeams[0]||teams[0]
   const currentCoachId=user?.uid||'local-demo'
   const signedInCoachName=user?.email&&user.email!==sharedLoginEmail?coachProfile?.displayName.trim()||'':''
-  const teamCoachNames=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,assignedCoachNameForTeam(coachProfiles,team,emailSettings.teamDetails[team]?.adminEmail)]))
+  const derivedTeamSignatories=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,assignedEmailSignatoriesForTeam(coachProfiles,team)]))
+  const teamSignatories=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,derivedTeamSignatories[team]?.length?derivedTeamSignatories[team]:emailSettings.teamSignatories?.[team]||[]]))
   const teamDivisions=Object.fromEntries(teams.map(team=>[team,emailSettings.teamDetails[team]?.competition||'']))
-  const activeEmailSettings={...emailSettings,currentCoachName:signedInCoachName,teamCoachNames}
+  const activeEmailSettings={...emailSettings,currentCoachName:signedInCoachName,teamSignatories}
 
   const applyRoute=useCallback((route:AppRoute)=>{
     setPageState(route.page)
@@ -226,6 +227,15 @@ export default function App(){
       setCoachProfiles(value?Object.entries(value).map(([uid,profile])=>normaliseCoachProfile(uid,profile)):[])
     })
   },[user,demo,isAdmin])
+
+  useEffect(()=>{
+    if(!isAdmin||!coachProfiles.length)return
+    const next=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,assignedEmailSignatoriesForTeam(coachProfiles,team)]))
+    if(JSON.stringify(next)===JSON.stringify(emailSettings.teamSignatories||{}))return
+    setEmailSettings(current=>({...current,teamSignatories:next}))
+    if(database&&user&&!demo)set(ref(database,'emailSettings/teamSignatories'),next)
+    else localStorage.setItem('f6emailsettings',JSON.stringify({...emailSettings,teamSignatories:next}))
+  },[coachProfiles,isAdmin,emailSettings,teamPlans,user,demo])
 
   useEffect(()=>{
     if(demo)return
