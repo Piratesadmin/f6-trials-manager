@@ -138,6 +138,7 @@ function parsePlayers(rows: Row[], responseLookup: Map<string, TrialResponseStat
       trialResponseStatus: status,
       paid: false,
       attended: false,
+      trialRegistrations: {},
       decision: 'Awaiting decision',
       notes: '',
       assessment: emptyAssessment(),

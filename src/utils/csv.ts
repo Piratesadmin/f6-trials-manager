@@ -108,6 +108,7 @@ export function rowsToPlayers(rows: Record<string, string>[], mapping: CsvMappin
       trialResponseStatus: '',
       paid: false,
       attended: false,
+      trialRegistrations: {},
       decision: 'Awaiting decision',
       notes: '',
       assessment: emptyAssessment(),

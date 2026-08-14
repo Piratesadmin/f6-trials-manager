@@ -1,4 +1,5 @@
 import type { Player, TrialSession } from '../types'
+import { trialRegistrationFor } from './player'
 
 export type DeadlineState = 'none' | 'on-track' | 'approaching' | 'due-soon' | 'overdue'
 export type DecisionReminderState = 'none' | 'needed' | 'pending' | 'overdue'
@@ -44,8 +45,10 @@ export type DecisionReminderDetails = {
 }
 
 export function decisionReminderDetails(player: Player, sessions: TrialSession[], now = new Date()): DecisionReminderDetails {
-  const session = sessions.find(item => item.id === player.trialSessionId && item.eventType === 'trial')
-  if (!session || !player.attended || player.decision !== 'Awaiting decision') return { state: 'none', label: '', hoursSinceSession: 0, session }
+  const session = sessions
+    .filter(item => item.eventType === 'trial' && trialRegistrationFor(player,item.id)?.attended)
+    .sort((left,right)=>`${right.date} ${right.endTime||right.startTime}`.localeCompare(`${left.date} ${left.endTime||left.startTime}`))[0]
+  if (!session || player.decision !== 'Awaiting decision') return { state: 'none', label: '', hoursSinceSession: 0, session }
   const finish = sessionFinishDate(session)
   if (!finish) return { state: 'none', label: '', hoursSinceSession: 0, session }
   const hoursSinceSession = (now.getTime() - finish.getTime()) / 3_600_000

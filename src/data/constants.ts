@@ -25,6 +25,7 @@ const assessmentDefaults = () => ({
   trialSessionId: '',
   trialResponseStatus: '' as const,
   paid: false,
+  trialRegistrations: {},
   assessment: emptyAssessment(),
   recommendation: '' as const,
   strengths: '',

@@ -4,7 +4,7 @@ import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, r
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
 import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
-import { averageRating, normalisePlayer } from './utils/player'
+import { averageRating, normalisePlayer, setTrialRegistration, trialRegistrationFor, trialRegistrationsFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
 import { buildCommunication, normaliseEmailSettings, sentDecisionFor } from './utils/email'
@@ -425,6 +425,7 @@ export default function App(){
       const existing=existingByEmail.get(incoming.email.toLowerCase())
       const assigned=incoming.trialResponseStatus!=="Can't go"
       const base=existing||{...incoming,id:crypto.randomUUID()}
+      const trialRegistrations=trialRegistrationsFor(base)
       importedIds.add(base.id)
       return normalisePlayer({
         ...base,
@@ -438,11 +439,7 @@ export default function App(){
         highestLevelPlayed:incoming.highestLevelPlayed,
         recommendation:existing?base.recommendation:'',
         suitableTeams:existing?[...base.suitableTeams]:[],
-        trialSessionId:assigned?sessionId:base.trialSessionId,
-        trialDate:assigned?trialDateLabel(sessionRecord.date):base.trialDate,
-        trialResponseStatus:incoming.trialResponseStatus,
-        paid:assigned&&base.trialSessionId!==sessionId?false:base.paid,
-        attended:assigned&&base.trialSessionId!==sessionId?false:base.attended,
+        trialRegistrations:assigned?{...trialRegistrations,[sessionId]:{responseStatus:incoming.trialResponseStatus,paid:false,attended:false}}:trialRegistrations,
         updatedAt:now,
         updatedBy:actor,
       })
@@ -581,15 +578,15 @@ export default function App(){
     await recordActivity({category:'schedule',action:'recurring_series_created',summary:`Created ${stamped.length} recurring sessions`,detail:stamped[0]?`${stamped[0].title} from ${trialDateLabel(stamped[0].date)}`:'Recurring training series',team:stamped[0]?.teams.join(', ')||'',entityType:'session',entityId:stamped[0]?.id||''})
   }
   const deleteTrialSession=async(sessionId:string)=>{
-    const affected=players.filter(player=>player.trialSessionId===sessionId)
+    const affected=players.filter(player=>Boolean(trialRegistrationFor(player,sessionId)))
     if(database&&user&&!demo){
       setSyncState('saving')
       const updates:Record<string,unknown>={[`trialSessions/${sessionId}`]:null,[`sessionPhotos/${sessionId}`]:null}
-      affected.forEach(player=>{const updated={...normalisePlayer(player),trialSessionId:'',trialDate:'Not assigned',trialResponseStatus:'',paid:false,attended:false,updatedAt:Date.now(),updatedBy:user.email||'Coach'};const{id,...data}=updated;updates[`players/${id}`]=data})
+      affected.forEach(player=>{const updated={...setTrialRegistration(normalisePlayer(player),sessionId,null),updatedAt:Date.now(),updatedBy:user.email||'Coach'};const{id,...data}=updated;updates[`players/${id}`]=data})
       await update(ref(database),updates)
     }else{
       const nextSessions=trialSessions.filter(session=>session.id!==sessionId)
-      const nextPlayers=players.map(player=>player.trialSessionId===sessionId?{...player,trialSessionId:'',trialDate:'Not assigned',trialResponseStatus:'' as const,paid:false,attended:false}:player)
+      const nextPlayers=players.map(player=>trialRegistrationFor(player,sessionId)?setTrialRegistration(player,sessionId,null):player)
       const nextPhotos={...sessionPhotos};delete nextPhotos[sessionId]
       setTrialSessions(nextSessions);setPlayers(nextPlayers);setSessionPhotos(nextPhotos)
       localStorage.setItem('f6trialsessions',JSON.stringify(nextSessions));localStorage.setItem('f6players',JSON.stringify(nextPlayers));localStorage.setItem('f6sessionphotos',JSON.stringify(nextPhotos))

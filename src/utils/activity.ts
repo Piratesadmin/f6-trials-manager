@@ -1,4 +1,5 @@
 import type { ActivityDraft, ActivityLogEntry, Player } from '../types'
+import { trialRegistrationsFor } from './player'
 
 export function createActivityEntry(draft: ActivityDraft, actor: { uid: string; name: string; email: string }, season: string): ActivityLogEntry {
   return {
@@ -54,9 +55,19 @@ export function describePlayerChange(before: Player | undefined, after: Player):
   const removed = beforePlans.find(name => !afterPlans.includes(name))
   if (added) return { category: 'team', action: 'player_added_to_plan', summary: `${after.name} added to ${added} plan`, detail: `${after.teamConsideration[added] || after.position} position`, team: added, entityType: 'player', entityId: after.id }
   if (removed) return { category: 'team', action: 'player_removed_from_plan', summary: `${after.name} removed from ${removed} plan`, detail: afterPlans.length ? `Now being considered by ${afterPlans.join(', ')}.` : 'No longer in an active team plan.', team: removed, entityType: 'player', entityId: after.id }
-  if (before.trialSessionId !== after.trialSessionId) return { category: 'schedule', action: after.trialSessionId ? 'player_assigned' : 'player_unassigned', summary: `${after.name} ${after.trialSessionId ? 'assigned to a trial session' : 'removed from a trial session'}`, detail: after.trialDate, team, entityType: 'player', entityId: after.id }
-  if (before.attended !== after.attended) return { category: 'schedule', action: 'attendance_changed', summary: `${after.name} marked ${after.attended ? 'attended' : 'not attended'}`, detail: after.trialDate, team, entityType: 'player', entityId: after.id }
-  if (before.paid !== after.paid) return { category: 'finance', action: 'trial_payment_changed', summary: `${after.name} marked ${after.paid ? 'paid' : 'not paid'} for trials`, detail: after.trialDate, team, entityType: 'player', entityId: after.id }
+  const beforeRegistrations=trialRegistrationsFor(before)
+  const afterRegistrations=trialRegistrationsFor(after)
+  const addedSession=Object.keys(afterRegistrations).find(sessionId=>!beforeRegistrations[sessionId])
+  const removedSession=Object.keys(beforeRegistrations).find(sessionId=>!afterRegistrations[sessionId])
+  if (addedSession) return { category: 'schedule', action: 'player_assigned', summary: `${after.name} assigned to a trial event`, detail: `Event ${addedSession}`, team, entityType: 'player', entityId: after.id }
+  if (removedSession) return { category: 'schedule', action: 'player_unassigned', summary: `${after.name} removed from a trial event`, detail: `Event ${removedSession}`, team, entityType: 'player', entityId: after.id }
+  const updatedSession=Object.keys(afterRegistrations).find(sessionId=>JSON.stringify(beforeRegistrations[sessionId])!==JSON.stringify(afterRegistrations[sessionId]))
+  if (updatedSession) {
+    const previous=beforeRegistrations[updatedSession]
+    const current=afterRegistrations[updatedSession]
+    if (previous?.attended!==current.attended) return { category: 'schedule', action: 'attendance_changed', summary: `${after.name} marked ${current.attended ? 'attended' : 'not attended'}`, detail: `Event ${updatedSession}`, team, entityType: 'player', entityId: after.id }
+    if (previous?.paid!==current.paid) return { category: 'finance', action: 'trial_payment_changed', summary: `${after.name} marked ${current.paid ? 'paid' : 'not paid'} for a trial event`, detail: `Event ${updatedSession}`, team, entityType: 'player', entityId: after.id }
+  }
   return null
 }
 

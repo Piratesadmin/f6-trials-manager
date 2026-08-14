@@ -1,4 +1,4 @@
-import type { Assessment, AssessmentKey, AssessmentSnapshot, Player } from '../types'
+import type { Assessment, AssessmentKey, AssessmentSnapshot, Player, TrialRegistration, TrialResponseStatus } from '../types'
 import { normaliseOffers } from './offers'
 
 export const assessmentFields: { key: AssessmentKey; label: string; hint: string }[] = [
@@ -32,6 +32,53 @@ export function emptyAssessment(): Assessment {
 function normaliseScore(value: unknown) {
   const score = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(score) ? Math.min(5, Math.max(0, Math.round(score))) : 0
+}
+
+function normaliseTrialResponseStatus(value: unknown): TrialResponseStatus {
+  return value === 'Going' || value === 'Not answered' || value === "Can't go" ? value : ''
+}
+
+function normaliseTrialRegistration(value: unknown): TrialRegistration | null {
+  if (!value || typeof value !== 'object') return null
+  const incoming = value as Partial<TrialRegistration>
+  return {
+    responseStatus: normaliseTrialResponseStatus(incoming.responseStatus),
+    paid: Boolean(incoming.paid),
+    attended: Boolean(incoming.attended),
+  }
+}
+
+export function trialRegistrationsFor(player: Player): Record<string, TrialRegistration> {
+  const registrations = player.trialRegistrations && typeof player.trialRegistrations === 'object'
+    ? Object.fromEntries(Object.entries(player.trialRegistrations).flatMap(([sessionId, value]) => {
+      const registration = normaliseTrialRegistration(value)
+      return sessionId && registration ? [[sessionId, registration]] : []
+    }))
+    : {}
+  if (player.trialSessionId && !registrations[player.trialSessionId]) {
+    registrations[player.trialSessionId] = {
+      responseStatus: normaliseTrialResponseStatus(player.trialResponseStatus),
+      paid: Boolean(player.paid),
+      attended: Boolean(player.attended),
+    }
+  }
+  return registrations
+}
+
+export function trialRegistrationFor(player: Player, sessionId: string) {
+  return trialRegistrationsFor(player)[sessionId]
+}
+
+export function setTrialRegistration(player: Player, sessionId: string, registration: TrialRegistration | null): Player {
+  const trialRegistrations = trialRegistrationsFor(player)
+  if (registration) trialRegistrations[sessionId] = registration
+  else delete trialRegistrations[sessionId]
+  const clearsLegacyRegistration = !registration && player.trialSessionId === sessionId
+  return {
+    ...player,
+    trialRegistrations,
+    ...(clearsLegacyRegistration ? { trialSessionId: '', trialDate: 'Not assigned', trialResponseStatus: '' as const, paid: false, attended: false } : {}),
+  }
 }
 
 export function normalisePlayer(player: Player): Player {
@@ -76,10 +123,11 @@ export function normalisePlayer(player: Player): Player {
       return [[id,{id,assessment:snapshotAssessment,average, recommendation:incomingSnapshot.recommendation||'',strengths:incomingSnapshot.strengths||'',developmentAreas:incomingSnapshot.developmentAreas||'',suitableTeams:Array.isArray(incomingSnapshot.suitableTeams)?incomingSnapshot.suitableTeams.filter(Boolean):[],recordedAt:typeof incomingSnapshot.recordedAt==='number'?incomingSnapshot.recordedAt:0,recordedBy:typeof incomingSnapshot.recordedBy==='string'?incomingSnapshot.recordedBy:''} as AssessmentSnapshot]]
     }))
     : {}
+  const trialRegistrations = trialRegistrationsFor(player)
   const inferredReturningPlayer = player.decision === 'Offer accepted'
     && player.emailReviewStatus === 'sent'
     && !Object.keys(history).length
-    && !player.trialSessionId
+    && !Object.keys(trialRegistrations).length
     && !player.recommendation
   const returningPlayer = Boolean(player.returningPlayer) || inferredReturningPlayer
   const confirmationSent = Object.values(history).some(entry => entry.type === 'squad-confirmation')
@@ -99,9 +147,10 @@ export function normalisePlayer(player: Player): Player {
     photoUrl: player.photoUrl || '',
     trialDate: player.trialDate || 'Not assigned',
     trialSessionId: player.trialSessionId || '',
-    trialResponseStatus: player.trialResponseStatus === 'Going' || player.trialResponseStatus === 'Not answered' || player.trialResponseStatus === "Can't go" ? player.trialResponseStatus : '',
+    trialResponseStatus: normaliseTrialResponseStatus(player.trialResponseStatus),
     paid: Boolean(player.paid),
     attended: Boolean(player.attended),
+    trialRegistrations,
     notes: player.notes || '',
     offers,
     offeredTeam: player.offeredTeam || primary?.team || '',

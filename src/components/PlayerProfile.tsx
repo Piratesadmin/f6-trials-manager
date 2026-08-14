@@ -3,9 +3,9 @@ import type { CSSProperties } from 'react'
 import { BarChart3, Camera, Check, CheckCircle2, ClipboardList, CreditCard, LoaderCircle, Save, Star, Trash2, TrendingUp, UserRound } from 'lucide-react'
 import type { Assessment, AssessmentSnapshot, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerTab, Recommendation, TrialResponseStatus, TrialSession } from '../types'
 import { positions, reasons, recommendations, teams } from '../data/constants'
-import { assessmentCompletion, assessmentFields, averageRating } from '../utils/player'
+import { assessmentCompletion, assessmentFields, averageRating, setTrialRegistration, trialRegistrationsFor } from '../utils/player'
 import { StarRating } from './StarRating'
-import { formatSessionDate, trialDateLabel } from '../utils/schedule'
+import { formatSessionDate } from '../utils/schedule'
 import { defaultSquadRole, primaryOffer } from '../utils/offers'
 import { decisionDraftFor, sameDecisionDraft } from '../utils/decision'
 
@@ -90,15 +90,11 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
     setPhotoBusy(true);setPhotoError('')
     try{await removePhoto(player)}catch(error){setPhotoError(error instanceof Error?error.message:'The photo could not be removed.')}finally{setPhotoBusy(false)}
   }
-  const changeSession=(sessionId:string)=>{
-    const session=sessions.find(item=>item.id===sessionId)
-    const changed=sessionId!==player.trialSessionId
-    save({...player,trialSessionId:sessionId,trialDate:session?trialDateLabel(session.date):'Not assigned',trialResponseStatus:session?(player.trialResponseStatus==='Not answered'?'Not answered':'Going'):'',paid:changed?false:player.paid,attended:changed?false:player.attended})
-  }
-  const changeResponse=(status:TrialResponseStatus)=>{
-    if(status==="Can't go")save({...player,trialResponseStatus:status,trialSessionId:'',trialDate:'Not assigned',paid:false,attended:false})
-    else save({...player,trialResponseStatus:status})
-  }
+  const registrations=trialRegistrationsFor(player)
+  const trialSessions=[...sessions].filter(session=>session.eventType==='trial').sort((a,b)=>`${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`))
+  const assignedTrialSessions=trialSessions.filter(session=>registrations[session.id])
+  const availableTrialSessions=trialSessions.filter(session=>!registrations[session.id])
+  const addTrialSession=(sessionId:string)=>{if(sessionId)save(setTrialRegistration(player,sessionId,{responseStatus:'Going',paid:false,attended:false}))}
   const changePrimaryPosition=(position:string)=>{
     if(player.decision!=='Offer accepted'){
       save({...player,position})
@@ -122,13 +118,10 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
       <label>Date of birth<input value={player.dateOfBirth} onChange={event => save({ ...player, dateOfBirth: event.target.value })} placeholder="e.g. 14/03/2002"/></label>
       <label>Interested division(s)<input value={player.interestedDivisions} onChange={event => save({ ...player, interestedDivisions: event.target.value })} placeholder="As entered on the registration form"/></label>
       <label>Trial / bib number<input inputMode="numeric" value={player.bibNumber} onChange={event => save({ ...player, bibNumber: event.target.value.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 12) })} placeholder="e.g. 17"/></label>
-      <label>Trial session<select value={player.trialSessionId} onChange={event=>changeSession(event.target.value)}><option value="">Not assigned</option>{[...sessions].filter(session=>session.eventType==='trial').sort((a,b)=>a.date.localeCompare(b.date)).map(session=><option key={session.id} value={session.id}>{formatSessionDate(session.date)} · {session.title}</option>)}</select>{!player.trialSessionId&&player.trialDate&&player.trialDate!=='Not assigned'&&<small>Previous date: {player.trialDate}</small>}</label>
-      <label>Trial response<select value={player.trialResponseStatus} onChange={event=>changeResponse(event.target.value as TrialResponseStatus)}><option value="">No response recorded</option><option value="Going">Going</option><option value="Not answered">Not answered</option><option value="Can't go">Can’t go</option></select></label>
       <label>Primary position<select value={player.position} onChange={event => changePrimaryPosition(event.target.value)}>{['Unassigned', ...positions].map(position => <option key={position}>{position}</option>)}</select></label>
       <label>Second position<select value={player.secondaryPosition} onChange={event => save({ ...player, secondaryPosition: event.target.value })}>{['', ...positions].map(position => <option key={position||'none'} value={position}>{position||'None specified'}</option>)}</select></label>
       <label>Highest level played<input value={player.highestLevelPlayed} onChange={event => save({ ...player, highestLevelPlayed: event.target.value })} placeholder="England or international level"/></label>
-      <label className="attendance-field">Payment<div className="segmented-control"><button type="button" className={player.paid ? 'active' : ''} onClick={() => save({ ...player, paid: true })}><CreditCard/> Paid</button><button type="button" className={!player.paid ? 'active' : ''} onClick={() => save({ ...player, paid: false })}>Not paid</button></div></label>
-      <label className="attendance-field">Attendance<div className="segmented-control"><button type="button" className={player.attended ? 'active' : ''} onClick={() => save({ ...player, attended: true })}><Check/> Attended</button><button type="button" className={!player.attended ? 'active' : ''} onClick={() => save({ ...player, attended: false })}>Not attended</button></div></label>
+      <div className="player-trial-registrations"><div className="player-trial-registration-head"><span><b>Trial events</b><small>A player can remain assigned to any number of events.</small></span><select value="" disabled={!availableTrialSessions.length} onChange={event=>addTrialSession(event.target.value)}><option value="">{availableTrialSessions.length?'Add another event…':'All trial events assigned'}</option>{availableTrialSessions.map(session=><option key={session.id} value={session.id}>{formatSessionDate(session.date)} · {session.title}</option>)}</select></div>{assignedTrialSessions.length?<div className="player-trial-registration-list">{assignedTrialSessions.map(session=>{const registration=registrations[session.id];return <div className="player-trial-registration" key={session.id}><span><b>{session.title}</b><small>{formatSessionDate(session.date)}{session.startTime?` · ${session.startTime}`:''}</small></span><label>Response<select value={registration.responseStatus} onChange={event=>save(setTrialRegistration(player,session.id,{...registration,responseStatus:event.target.value as TrialResponseStatus}))}><option value="">No response</option><option value="Going">Going</option><option value="Not answered">Not answered</option><option value="Can't go">Can’t go</option></select></label><button type="button" className={registration.paid?'complete':''} onClick={()=>save(setTrialRegistration(player,session.id,{...registration,paid:!registration.paid}))}><CreditCard/>{registration.paid?'Paid':'Not paid'}</button><button type="button" className={registration.attended?'complete':''} onClick={()=>save(setTrialRegistration(player,session.id,{...registration,attended:!registration.attended}))}><Check/>{registration.attended?'Attended':'Not attended'}</button><button type="button" className="remove" onClick={()=>save(setTrialRegistration(player,session.id,null))} aria-label={`Remove ${player.name} from ${session.title}`}><Trash2/></button></div>})}</div>:<p>No trial events assigned.</p>}</div>
       <label className="full-width">Past playing experience<textarea value={player.playingExperience} onChange={event => save({ ...player, playingExperience: event.target.value })} placeholder="Previous clubs, leagues, years played and relevant experience…"/></label>
       <label className="full-width">Coach notes<textarea value={player.notes} onChange={event => save({ ...player, notes: event.target.value })} placeholder="General notes that do not fit the assessment categories…"/></label>
     </div>

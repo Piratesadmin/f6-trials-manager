@@ -93,6 +93,12 @@ export type EmailSettings = {
   teamSignatories?: Record<string, string[]>
 }
 
+export type TrialRegistration = {
+  responseStatus: TrialResponseStatus
+  paid: boolean
+  attended: boolean
+}
+
 export type Player = {
   id: string
   name: string
@@ -109,6 +115,7 @@ export type Player = {
   trialResponseStatus: TrialResponseStatus
   paid: boolean
   attended: boolean
+  trialRegistrations: Record<string, TrialRegistration>
   decision: Decision
   offeredTeam?: string
   offeredPosition?: string
