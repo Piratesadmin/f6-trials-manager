@@ -4,7 +4,7 @@ import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, r
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
 import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
-import { averageRating, normalisePlayer, setTrialRegistration, trialRegistrationFor, trialRegistrationsFor } from './utils/player'
+import { averageRating, normalisePlayer, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
 import { buildCommunication, normaliseEmailSettings, sentDecisionFor } from './utils/email'
@@ -414,21 +414,28 @@ export default function App(){
     navigate({page:'players',playerId:stamped[0]?.id,playerTab:'overview'})
     await recordActivity({category:'import',action:'players_imported',summary:`Imported ${stamped.length} player${stamped.length===1?'':'s'}`,detail:'CSV or Excel player import completed.',team:'',entityType:'settings',entityId:''})
   }
-  const importTrialWorkbook=async(session:Omit<TrialSession,'id'>,importedPlayers:Omit<Player,'id'>[])=>{
-    const sessionId=crypto.randomUUID()
+  const importTrialWorkbook=async(session:Omit<TrialSession,'id'>,importedPlayers:Omit<Player,'id'>[],existingSessionId?:string)=>{
+    const existingSession=existingSessionId?trialSessions.find(item=>item.id===existingSessionId):undefined
+    if(existingSessionId&&!existingSession)throw new Error('The matching event no longer exists. Close the import and try again.')
+    const sessionId=existingSession?.id||crypto.randomUUID()
     const now=Date.now()
     const actor=user?.email||'Local demo'
-    const sessionRecord:TrialSession={...normaliseTrialSession(sessionId,session),createdAt:now,updatedAt:now,updatedBy:actor}
+    const sessionRecord:TrialSession={...normaliseTrialSession(sessionId,{...existingSession,...session,notes:existingSession?.notes||session.notes,attendance:existingSession?.attendance||session.attendance}),createdAt:existingSession?.createdAt||now,updatedAt:now,updatedBy:actor}
     const existingByEmail=new Map(players.filter(player=>player.email).map(player=>[player.email.toLowerCase(),player]))
     const importedIds=new Set<string>()
     const prepared=importedPlayers.map(incoming=>{
       const existing=existingByEmail.get(incoming.email.toLowerCase())
       const assigned=incoming.trialResponseStatus!=="Can't go"
       const base=existing||{...incoming,id:crypto.randomUUID()}
-      const trialRegistrations=trialRegistrationsFor(base)
+      const previousRegistration=trialRegistrationFor(base,sessionId)
+      const registrationBase=assigned
+        ? setTrialRegistration(base,sessionId,{responseStatus:incoming.trialResponseStatus,paid:previousRegistration?.paid||false,attended:previousRegistration?.attended||false})
+        : existingSession&&previousRegistration
+          ? setTrialRegistration(base,sessionId,null)
+          : base
       importedIds.add(base.id)
       return normalisePlayer({
-        ...base,
+        ...registrationBase,
         name:incoming.name||base.name,
         email:incoming.email||base.email,
         dateOfBirth:incoming.dateOfBirth,
@@ -439,7 +446,6 @@ export default function App(){
         highestLevelPlayed:incoming.highestLevelPlayed,
         recommendation:existing?base.recommendation:'',
         suitableTeams:existing?[...base.suitableTeams]:[],
-        trialRegistrations:assigned?{...trialRegistrations,[sessionId]:{responseStatus:incoming.trialResponseStatus,paid:false,attended:false}}:trialRegistrations,
         updatedAt:now,
         updatedBy:actor,
       })
@@ -452,12 +458,12 @@ export default function App(){
       await update(ref(database),updates)
     }else{
       const merged=[...players.filter(player=>!importedIds.has(player.id)),...prepared]
-      const nextSessions=[...trialSessions,sessionRecord]
+      const nextSessions=existingSession?trialSessions.map(item=>item.id===sessionId?sessionRecord:item):[...trialSessions,sessionRecord]
       setPlayers(merged);setTrialSessions(nextSessions)
       localStorage.setItem('f6players',JSON.stringify(merged));localStorage.setItem('f6trialsessions',JSON.stringify(nextSessions))
     }
     navigate({page:'schedule',sessionId})
-    await recordActivity({category:'import',action:'trial_workbook_imported',summary:`Imported ${prepared.length} players into ${sessionRecord.title}`,detail:`${trialDateLabel(sessionRecord.date)} · Trial workbook`,team:'',entityType:'session',entityId:sessionRecord.id})
+    await recordActivity({category:'import',action:existingSession?'trial_workbook_updated':'trial_workbook_imported',summary:`${existingSession?'Updated':'Imported'} ${prepared.length} players ${existingSession?'in':'into'} ${sessionRecord.title}`,detail:`${trialDateLabel(sessionRecord.date)} · ${existingSession?'Existing event updated':'Trial event created from workbook'}`,team:'',entityType:'session',entityId:sessionRecord.id})
   }
   const importReturningPlayers=async(team:string,importedPlayers:Omit<Player,'id'>[])=>{
     if(!editableTeams.includes(team))throw new Error(`You do not have permission to import players into ${team}.`)
@@ -832,7 +838,7 @@ export default function App(){
         restoreSystemBackup={restoreSystemBackup}
       />}
     </main>
-    {importOpen&&<CsvImportModal existingPlayers={players} onClose={()=>setImportOpen(false)} onImport={importPlayers} onWorkbookImport={importTrialWorkbook}/>} 
+    {importOpen&&<CsvImportModal existingPlayers={players} existingSessions={trialSessions} onClose={()=>setImportOpen(false)} onImport={importPlayers} onWorkbookImport={importTrialWorkbook}/>}
     {returningImportTeam&&<ReturningPlayersImportModal team={returningImportTeam} existingPlayers={players} onClose={()=>setReturningImportTeam('')} onImport={importReturningPlayers}/>}
   </div>
 }
