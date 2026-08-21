@@ -3,7 +3,8 @@ import { AlertTriangle, Banknote, BarChart3, CheckCircle2, Download, Search, Wal
 import { PageHeader } from '../components/PageHeader'
 import { teams } from '../data/constants'
 import type { FinanceSettings, PaymentPlan, Player, PlayerFinance, PlayerFinanceMap } from '../types'
-import { confirmedPosition, confirmedTeam, effectiveAmountOwed, emptyPlayerFinance, feeBandForTeam, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentPlans, paymentStatus, standardFeeForTeam } from '../utils/finance'
+import { confirmedTeam, effectiveAmountOwed, emptyPlayerFinance, feeBandForTeam, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentPlans, paymentStatus, standardFeeForPlayer, standardFeeForTeam } from '../utils/finance'
+import { confirmedPositionForTeam, confirmedTeamNames, isConfirmedForTeam } from '../utils/player'
 
 type Props = {
   players: Player[]
@@ -42,10 +43,10 @@ export function FinancePage({ players, finances, financeSettings, saveFinance, o
   })
   const filtered = entries.filter(({player,finance,deadline}) => {
     const matchesDeadline=deadlineFilter==='All deadlines'||(deadlineFilter==='Overdue'&&deadline.state==='overdue')||(deadlineFilter==='Due soon'&&deadline.state==='due-soon')||(deadlineFilter==='On track'&&!['overdue','none'].includes(deadline.state))
-    return (team === 'All teams' || confirmedTeam(player) === team)
+    return (team === 'All teams' || isConfirmedForTeam(player,team))
       && (plan === 'All plans' || finance.paymentPlan === plan)
       && matchesDeadline
-      && `${player.name} ${player.email} ${confirmedTeam(player)} ${confirmedPosition(player)}`.toLowerCase().includes(search)
+      && `${player.name} ${player.email} ${confirmedTeamNames(player).map(name=>`${name} ${confirmedPositionForTeam(player,name)}`).join(' ')}`.toLowerCase().includes(search)
   })
   const billed=entries.reduce((total,entry)=>total+entry.owed,0)
   const collected=entries.reduce((total,entry)=>total+entry.finance.amountPaid,0)
@@ -53,15 +54,20 @@ export function FinancePage({ players, finances, financeSettings, saveFinance, o
   const collectionRate=billed?Math.min(100,Math.round((collected/billed)*100)):0
   const overdueEntries=entries.filter(entry=>entry.deadline.state==='overdue')
   const teamMetrics=teams.map((teamName,index)=>{
-    const rows=entries.filter(entry=>confirmedTeam(entry.player)===teamName)
-    return{team:teamName,colour:chartColours[index],players:rows.length,billed:rows.reduce((sum,row)=>sum+row.owed,0),paid:rows.reduce((sum,row)=>sum+row.finance.amountPaid,0),outstanding:rows.reduce((sum,row)=>sum+row.outstanding,0)}
+    const memberships=entries.filter(entry=>isConfirmedForTeam(entry.player,teamName)).map(entry=>{
+      const teamCount=Math.max(1,confirmedTeamNames(entry.player).length)
+      const billed=entry.finance.usesStandardFee?standardFeeForTeam(teamName,financeSettings):entry.owed/teamCount
+      const paid=entry.owed?entry.finance.amountPaid*(billed/entry.owed):entry.finance.amountPaid/teamCount
+      return{billed,paid,outstanding:Math.max(0,billed-paid)}
+    })
+    return{team:teamName,colour:chartColours[index],players:memberships.length,billed:memberships.reduce((sum,row)=>sum+row.billed,0),paid:memberships.reduce((sum,row)=>sum+row.paid,0),outstanding:memberships.reduce((sum,row)=>sum+row.outstanding,0)}
   })
   const arrangementMetrics=[...paymentPlans,'Not selected' as const].map((item,index)=>({label:item,colour:chartColours[[3,1,4,7][index]],count:entries.filter(entry=>item==='Not selected'?!entry.finance.paymentPlan:entry.finance.paymentPlan===item).length}))
 
   const exportCsv = () => {
     const quote = (value: string | number) => `"${String(value).replaceAll('"','""')}"`
-    const lines = [['Player','Email','Team','Position','Fee band','Fee basis','Payment plan','Amount owed','Amount paid','Outstanding','Payment schedule','Next / missed date','Status','Notes'].map(quote).join(',')]
-    entries.forEach(({player,finance,owed,outstanding:balance,deadline}) => lines.push([player.name,player.email,confirmedTeam(player),confirmedPosition(player),feeBandForTeam(confirmedTeam(player)),finance.usesStandardFee?'Standard':'Custom',finance.paymentPlan,owed.toFixed(2),finance.amountPaid.toFixed(2),balance.toFixed(2),deadline.label,deadline.nextDueDate,paymentStatus(finance,owed),finance.notes].map(quote).join(',')))
+    const lines = [['Player','Email','Teams / positions','Fee bands','Fee basis','Payment plan','Amount owed','Amount paid','Outstanding','Payment schedule','Next / missed date','Status','Notes'].map(quote).join(',')]
+    entries.forEach(({player,finance,owed,outstanding:balance,deadline}) => lines.push([player.name,player.email,confirmedTeamNames(player).map(name=>`${name} (${confirmedPositionForTeam(player,name)})`).join(' / '),confirmedTeamNames(player).map(feeBandForTeam).join(' + '),finance.usesStandardFee?'Standard per team':'Custom total',finance.paymentPlan,owed.toFixed(2),finance.amountPaid.toFixed(2),balance.toFixed(2),deadline.label,deadline.nextDueDate,paymentStatus(finance,owed),finance.notes].map(quote).join(',')))
     const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a'); link.href=url; link.download='f6-confirmed-squad-finance.csv'; link.click(); URL.revokeObjectURL(url)
   }
@@ -93,7 +99,8 @@ function FinanceRow({ player, finance, financeSettings, saveFinance, onOpen }: {
   const [draft,setDraft]=useState(finance)
   useEffect(()=>setDraft(finance),[finance])
   const commit=(updates:Partial<PlayerFinance>={})=>saveFinance({...draft,...updates,playerId:player.id})
-  const standardFee=standardFeeForTeam(confirmedTeam(player),financeSettings)
+  const standardFee=standardFeeForPlayer(player,financeSettings)
+  const feeBands=confirmedTeamNames(player).map(feeBandForTeam).join(' + ')
   const owed=draft.usesStandardFee?standardFee:draft.amountOwed
   const status=paymentStatus(draft,owed)
   const deadline=paymentDeadlineDetails(draft,owed,financeSettings)
@@ -103,9 +110,9 @@ function FinanceRow({ player, finance, financeSettings, saveFinance, onOpen }: {
     setDraft(next);saveFinance(next)
   }
   return <tr>
-    <td><button className="finance-player" onClick={onOpen}><span>{player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</span><div><b>{player.name}</b><small>{confirmedTeam(player)} · {confirmedPosition(player)}</small></div></button></td>
+    <td><button className="finance-player" onClick={onOpen}><span>{player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</span><div><b>{player.name}</b><small>{confirmedTeamNames(player).map(team=>`${team} · ${confirmedPositionForTeam(player,team)}`).join(' / ')}</small></div></button></td>
     <td><select value={draft.paymentPlan} onChange={event=>{const paymentPlan=event.target.value as PaymentPlan;setDraft(current=>({...current,paymentPlan}));commit({paymentPlan})}}><option value="">Select plan</option>{paymentPlans.map(item=><option key={item}>{item}</option>)}</select></td>
-    <td><select className="fee-basis-select" value={draft.usesStandardFee?'standard':'custom'} onChange={event=>changeFeeBasis(event.target.value==='standard')}><option value="standard">Standard {feeBandForTeam(confirmedTeam(player))}</option><option value="custom">Custom amount</option></select><div className={`money-input ${draft.usesStandardFee?'standard':''}`}><span>£</span><input aria-label={`${player.name} amount owed`} disabled={draft.usesStandardFee} min="0" step="0.01" type="number" value={owed||''} onChange={event=>setDraft(current=>({...current,amountOwed:Number(event.target.value)}))} onBlur={()=>commit()}/></div></td>
+    <td><select className="fee-basis-select" value={draft.usesStandardFee?'standard':'custom'} onChange={event=>changeFeeBasis(event.target.value==='standard')}><option value="standard">Standard {feeBands}</option><option value="custom">Custom total</option></select><div className={`money-input ${draft.usesStandardFee?'standard':''}`}><span>£</span><input aria-label={`${player.name} amount owed`} disabled={draft.usesStandardFee} min="0" step="0.01" type="number" value={owed||''} onChange={event=>setDraft(current=>({...current,amountOwed:Number(event.target.value)}))} onBlur={()=>commit()}/></div></td>
     <td><div className="money-input"><span>£</span><input aria-label={`${player.name} amount paid`} min="0" step="0.01" type="number" value={draft.amountPaid||''} onChange={event=>setDraft(current=>({...current,amountPaid:Number(event.target.value)}))} onBlur={()=>commit()}/></div><input className="finance-notes" value={draft.notes} onChange={event=>setDraft(current=>({...current,notes:event.target.value}))} onBlur={()=>commit()} placeholder="Payment note…"/></td>
     <td><strong>{formatCurrency(outstandingAmount(draft,owed))}</strong></td>
     <td><span className={`payment-deadline-status ${deadline.state}`}>{deadline.state==='overdue'&&<AlertTriangle/>}{deadline.label}</span></td>

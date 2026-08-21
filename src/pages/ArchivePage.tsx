@@ -3,7 +3,7 @@ import { AlertTriangle, Archive, CalendarDays, CheckCircle2, Download, FileArchi
 import { PageHeader } from '../components/PageHeader'
 import type { ArchivedPlayerRecord, Player, SeasonArchive, SeasonSettings, TrialSession } from '../types'
 import { formatCurrency } from '../utils/finance'
-import { averageRating } from '../utils/player'
+import { averageRating, confirmedTeamNames } from '../utils/player'
 
 type Props = {
   seasonSettings: SeasonSettings
@@ -94,7 +94,7 @@ function ArchivedPlayerDetail({record,restore,busy,error}:{record:ArchivedPlayer
 }
 
 function ArchiveDetail({archive,download}:{archive:SeasonArchive;download:()=>void}){
-  const squads=useMemo(()=>Object.values(archive.snapshot.players||{}).filter(player=>player.decision==='Offer accepted').reduce<Record<string,number>>((totals,player)=>{const team=player.offeredTeam||player.offers[0]?.team||'';if(team)totals[team]=(totals[team]||0)+1;return totals},{}),[archive])
+  const squads=useMemo(()=>Object.values(archive.snapshot.players||{}).reduce<Record<string,number>>((totals,player)=>{confirmedTeamNames(player).forEach(team=>{totals[team]=(totals[team]||0)+1});return totals},{}),[archive])
   const archivedTrialists=Object.keys(archive.snapshot.archivedPlayers||{}).length
   return <><div className="archive-detail-heading"><div><span className="eyebrow">ARCHIVED SEASON</span><h2>{archive.seasonName}</h2><p>Archived by {archive.archivedBy} on {new Date(archive.archivedAt).toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'})}</p></div><button className="secondary" onClick={download}><Download/>Download JSON</button></div><div className="archive-summary-grid"><span><Users/><b>{archive.summary.players}</b><small>Live players</small></span><span><FileArchive/><b>{archivedTrialists}</b><small>Archived trialists</small></span><span><CheckCircle2/><b>{archive.summary.confirmedPlayers}</b><small>Confirmed</small></span><span><CalendarDays/><b>{archive.summary.sessions}</b><small>Events</small></span><span><WalletCards/><b>{formatCurrency(archive.summary.amountBilled)}</b><small>Billed</small></span><span><WalletCards/><b>{formatCurrency(archive.summary.amountPaid)}</b><small>Paid</small></span></div><div className="archived-squads"><h3>Final confirmed squads</h3>{Object.keys(squads).length?<div>{Object.entries(squads).sort().map(([team,count])=><span key={team}><b>{team}</b><em>{count} players</em></span>)}</div>:<p>No confirmed squads were recorded.</p>}</div></>
 }

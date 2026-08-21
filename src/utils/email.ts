@@ -148,11 +148,15 @@ export function emailFor(player: Player, settings: EmailSettings, deadline?: Res
   const personal = personalMessage ? `\n\n${personalMessage}` : ''
 
   if (type === 'squad-confirmation') {
-    const offer = activeOffers(player)[0]
-    const team = offer?.team || player.offeredTeam || player.suitableTeams[0] || 'your team'
-    const position = offer?.position || player.offeredPosition || player.position
-    const details = teamDetailsParagraph(team, settings)
-    return `Hi ${first},\n\nWe are pleased to confirm your place in the ${team} squad for the upcoming season${position && position !== 'Unassigned' ? `, primarily playing as a ${position}` : ''}.${details ? `\n\n${details}` : ''}${personal}\n\nWe are delighted to welcome you back to ${settings.clubName} and look forward to the season ahead.\n\n${signoff}`
+    const offers = activeOffers(player)
+    const fallbackTeam = player.offeredTeam || player.suitableTeams[0] || 'your team'
+    const fallbackPosition = player.offeredPosition || player.position
+    const squadWording=offers.length>1
+      ? `your places in the following squads for the upcoming season:\n\n${offers.map(offer=>`• ${offer.team} — ${offer.position}`).join('\n')}`
+      : `your place in the ${offers[0]?.team||fallbackTeam} squad for the upcoming season${(offers[0]?.position||fallbackPosition) && (offers[0]?.position||fallbackPosition) !== 'Unassigned' ? `, primarily playing as a ${offers[0]?.position||fallbackPosition}` : ''}`
+    const detailTeams=offers.length?offers.map(offer=>offer.team):[fallbackTeam]
+    const details=detailTeams.map(team=>teamDetailsParagraph(team,settings)).filter(Boolean).join('\n')
+    return `Hi ${first},\n\nWe are pleased to confirm ${squadWording}.${details ? `\n\n${details}` : ''}${personal}\n\nWe are delighted to welcome you back to ${settings.clubName} and look forward to the season ahead.\n\n${signoff}`
   }
 
   if (type === 'offer') {

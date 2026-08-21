@@ -3,10 +3,10 @@ import type { CSSProperties } from 'react'
 import { BarChart3, Camera, Check, CheckCircle2, ClipboardList, CreditCard, LoaderCircle, Save, Star, Trash2, TrendingUp, UserRound } from 'lucide-react'
 import type { Assessment, AssessmentSnapshot, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerTab, Recommendation, TrialResponseStatus, TrialSession } from '../types'
 import { positions, reasons, recommendations, teams } from '../data/constants'
-import { assessmentCompletion, assessmentFields, averageRating, setTrialRegistration, trialRegistrationsFor } from '../utils/player'
+import { assessmentCompletion, assessmentFields, averageRating, confirmedTeamAssignments, setConfirmedTeam, setTrialRegistration, trialRegistrationsFor } from '../utils/player'
 import { StarRating } from './StarRating'
 import { formatSessionDate } from '../utils/schedule'
-import { defaultSquadRole, primaryOffer } from '../utils/offers'
+import { defaultSquadRole } from '../utils/offers'
 import { decisionDraftFor, sameDecisionDraft } from '../utils/decision'
 
 type Props = {
@@ -100,14 +100,15 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
       save({...player,position})
       return
     }
-    const acceptedTeam=player.offeredTeam||primaryOffer(player)?.team||''
+    const acceptedTeam=player.offeredTeam||Object.keys(confirmedTeamAssignments(player))[0]||''
     const hasAcceptedOffer=Boolean(acceptedTeam&&player.offers.some(offer=>offer.team===acceptedTeam))
     const offers=acceptedTeam
       ? hasAcceptedOffer
         ? player.offers.map(offer=>offer.team===acceptedTeam?{...offer,position}:offer)
         : [...player.offers,{team:acceptedTeam,position,squadRole:defaultSquadRole,includeSquadRole:true}]
       : player.offers
-    save({...player,position,offeredPosition:position,offers,teamConsideration:acceptedTeam?{...player.teamConsideration,[acceptedTeam]:position}:player.teamConsideration})
+    const updated={...player,position,offeredPosition:position,offers,teamConsideration:acceptedTeam?{...player.teamConsideration,[acceptedTeam]:position}:player.teamConsideration}
+    save(acceptedTeam?setConfirmedTeam(updated,acceptedTeam,position):updated)
   }
   return <div className="profile-section">
     <div className="section-heading"><div><span className="eyebrow">PLAYER DETAILS</span><h3>Trial overview</h3><p>Playing information only—phone numbers and home addresses are not stored.</p></div></div>
@@ -180,6 +181,7 @@ function DecisionPanel({ player, saveDecision }: Pick<Props, 'player' | 'saveDec
   const dirty=!sameDecisionDraft(base,draft)
   const remoteChanged=dirty&&!sameDecisionDraft(base,latest)
   const draftPlayer={...player,...draft}
+  const confirmedAssignments=Object.entries(confirmedTeamAssignments(draftPlayer))
 
   useEffect(()=>{
     if(dirty)return
@@ -219,7 +221,7 @@ function DecisionPanel({ player, saveDecision }: Pick<Props, 'player' | 'saveDec
       <div className="team-options">{teams.map(team => <button type="button" key={team} disabled={busy||remoteChanged||conflict} className={draft.suitableTeams.includes(team) ? 'selected' : ''} onClick={() => toggleTeam(team)}>{draft.suitableTeams.includes(team) && <Check/>}{team}</button>)}</div>
     </div>
     {draftPlayer.decision.includes('Rejection') && <div className="form-card profile-form-grid"><label className="full-width">Rejection reason<select disabled={busy||remoteChanged||conflict} value={draftPlayer.rejectionReason || reasons[0]} onChange={event => updateDecisionDraft({ ...draftPlayer, rejectionReason: event.target.value })}>{reasons.map(reason => <option key={reason}>{reason}</option>)}</select></label></div>}
-    {draftPlayer.decision === 'Offer accepted' && <div className="decision-callout accepted"><CheckCircle2/><div><b>Confirmed squad place</b><p>{draftPlayer.name} now appears in the confirmed squad for {draftPlayer.offeredTeam || 'the accepted team'}{primaryOffer(draftPlayer)?` as ${primaryOffer(draftPlayer)!.position} · ${primaryOffer(draftPlayer)!.squadRole}`:''}. Administrators can manage season fees in Finance.</p></div></div>}
+    {draftPlayer.decision === 'Offer accepted' && <div className="decision-callout accepted"><CheckCircle2/><div><b>Confirmed squad place{confirmedAssignments.length===1?'':'s'}</b><p>{confirmedAssignments.length?confirmedAssignments.map(([team,position])=>`${team} as ${position}`).join(' · '):'No confirmed team assignment is recorded yet.'} Administrators can manage the player’s season fee in Finance.</p></div></div>}
     <div className={`decision-save-bar ${remoteChanged||conflict?'conflict':dirty?'dirty':saved?'saved':''}`}>
       <div><b>{remoteChanged||conflict?'Another coach updated this decision':dirty?'Unsaved decision changes':saved?'Decision changes saved':'Decision details are up to date'}</b><span>{remoteChanged||conflict?'Load the latest Decision-tab values before making your changes again.':dirty?'Your changes have not been sent to Firebase yet.':'The Decision tab matches Firebase.'}</span>{error&&<p className="decision-save-error" role="alert">{error}</p>}</div>
       {(remoteChanged||conflict)&&<button className="secondary" type="button" onClick={loadLatest}>Load latest</button>}

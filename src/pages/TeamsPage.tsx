@@ -3,9 +3,9 @@ import { AlertTriangle, ArrowRight, CalendarDays, Check, CheckCircle2, Clipboard
 import { PageHeader } from '../components/PageHeader'
 import { positions, teams } from '../data/constants'
 import type { FinanceSettings, Player, PlayerFinanceMap, TeamPlans, TrialSession } from '../types'
-import { averageRating } from '../utils/player'
+import { averageRating, confirmedTeamAssignments, confirmedTeamNames, isConfirmedForTeam, setConfirmedTeam } from '../utils/player'
 import { assignmentForTeam, isPlannedForTeam, minimumSquadSize, minimumTargetForPosition, recommendationMatchesTeam } from '../utils/teamPlanner'
-import { confirmedPosition, confirmedTeam, effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentStatus } from '../utils/finance'
+import { confirmedPosition, effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentStatus } from '../utils/finance'
 import { defaultSquadRole, offerForTeam, primaryOffer } from '../utils/offers'
 import { teamMatchesInterestedDivisions } from '../utils/division'
 
@@ -39,10 +39,11 @@ type CandidateGroup = {
 export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget, selectedTeam, setSelectedTeam, onOpenPlayer, onOpenSchedule, canEditTeam, editableTeams, isAdmin, finances, financeSettings, trialsMode, teamDivisions, onImportReturningPlayers }: Props) {
   const targets = teamPlans[selectedTeam]
   const planned = useMemo(() => players.filter(player => isPlannedForTeam(player, selectedTeam)), [players, selectedTeam])
-  const confirmed = useMemo(() => players.filter(player => confirmedTeam(player) === selectedTeam), [players, selectedTeam])
-  const activePlan = planned.filter(player => player.decision !== 'Offer accepted')
+  const confirmed = useMemo(() => players.filter(player => isConfirmedForTeam(player,selectedTeam)), [players, selectedTeam])
+  const existingClubPlayers = useMemo(() => players.filter(player => confirmedTeamNames(player).length && !isConfirmedForTeam(player,selectedTeam)).sort((a,b)=>a.name.localeCompare(b.name)), [players, selectedTeam])
+  const activePlan = planned.filter(player => !isConfirmedForTeam(player,selectedTeam))
   const targetTotal = positions.reduce((total, position) => total + (targets?.[position] || 0), 0)
-  const offered = planned.filter(player => player.decision !== 'Offer accepted' && Boolean(offerForTeam(player, selectedTeam)))
+  const offered = planned.filter(player => !isConfirmedForTeam(player,selectedTeam) && Boolean(offerForTeam(player, selectedTeam)))
   const editable = canEditTeam(selectedTeam)
 
   const positionRows = positions.map(position => {
@@ -50,7 +51,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
     const positionFor = (player: Player) => assignmentForTeam(player, selectedTeam) || player.position
     const plannedCount = planned.filter(player => positionFor(player) === position).length
     const offeredCount = offered.filter(player => (offerForTeam(player, selectedTeam)?.position || positionFor(player)) === position).length
-    const acceptedCount = confirmed.filter(player => confirmedPosition(player) === position).length
+    const acceptedCount = confirmed.filter(player => confirmedPosition(player,selectedTeam) === position).length
     const remaining = target - plannedCount
     return { position, target, plannedCount, offeredCount, acceptedCount, remaining }
   })
@@ -102,7 +103,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
     const primary = primaryOffer(player) || offers[0]
     savePlayer({
       ...player,
-      decision: offers.some(offer => teamMatchesInterestedDivisions(player,offer.team,teamDivisions)) ? 'Offer planned' : 'Alternative offer',
+      decision: player.decision === 'Offer accepted' ? 'Offer accepted' : offers.some(offer => teamMatchesInterestedDivisions(player,offer.team,teamDivisions)) ? 'Offer planned' : 'Alternative offer',
       offers,
       offeredTeam: primary?.team || selectedTeam,
       offeredPosition: primary?.position || position,
@@ -111,28 +112,58 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
     })
   }
   const addOfferedPlayerToTeam = (player: Player) => {
-    if(!editable||player.decision!=='Offer sent')return
+    if(!editable||isConfirmedForTeam(player,selectedTeam)||!['Offer sent','Offer accepted'].includes(player.decision))return
     const acceptedOffer=offerForTeam(player,selectedTeam)
     if(!acceptedOffer)return
     if(!window.confirm(`Confirm that ${player.name} accepted the offer for ${selectedTeam} and add them to the confirmed squad?`))return
-    savePlayer({
+    savePlayer(setConfirmedTeam({
       ...player,
       decision:'Offer accepted',
-      offeredTeam:selectedTeam,
-      offeredPosition:acceptedOffer.position,
       teamConsideration:{...player.teamConsideration,[selectedTeam]:acceptedOffer.position},
-    })
+    },selectedTeam,acceptedOffer.position))
+  }
+  const addExistingClubPlayerToTeam = (playerId: string) => {
+    if(!editable)return
+    const player=players.find(item=>item.id===playerId)
+    if(!player||!confirmedTeamNames(player).length||isConfirmedForTeam(player,selectedTeam))return
+    const position=player.teamConsideration[selectedTeam]||player.position||'Unassigned'
+    if(!window.confirm(`Add ${player.name} to the confirmed ${selectedTeam} squad as ${position}?\n\nTheir existing squad assignments will be kept.`))return
+    const hasTeamOffer=player.offers.some(offer=>offer.team===selectedTeam)
+    const offers=hasTeamOffer?player.offers:[...player.offers,{team:selectedTeam,position,squadRole:defaultSquadRole,includeSquadRole:true}]
+    savePlayer(setConfirmedTeam({
+      ...player,
+      decision:'Offer accepted',
+      offers,
+      suitableTeams:player.suitableTeams.includes(selectedTeam)?player.suitableTeams:[...player.suitableTeams,selectedTeam],
+      teamConsideration:{...player.teamConsideration,[selectedTeam]:position},
+    },selectedTeam,position))
   }
   const changeConfirmedPosition = (player: Player, position: string) => {
-    if(!editable||player.decision!=='Offer accepted'||confirmedTeam(player)!==selectedTeam)return
+    if(!editable||!isConfirmedForTeam(player,selectedTeam))return
     const hasTeamOffer=player.offers.some(offer=>offer.team===selectedTeam)
     const offers=hasTeamOffer
       ? player.offers.map(offer=>offer.team===selectedTeam?{...offer,position}:offer)
       : [...player.offers,{team:selectedTeam,position,squadRole:defaultSquadRole,includeSquadRole:true}]
-    savePlayer({...player,position,offeredPosition:position,offers,teamConsideration:{...player.teamConsideration,[selectedTeam]:position}})
+    const updated=setConfirmedTeam({...player,offers,teamConsideration:{...player.teamConsideration,[selectedTeam]:position}},selectedTeam,position)
+    savePlayer(player.offeredTeam===selectedTeam?{...updated,position,offeredPosition:position}:updated)
   }
   const resetPlayerWorkflow = (player: Player) => {
     if(!editable)return
+    const confirmedTeams=confirmedTeamAssignments(player)
+    const confirmedHere=Boolean(confirmedTeams[selectedTeam])
+    const otherConfirmedTeams=Object.keys(confirmedTeams).filter(team=>team!==selectedTeam)
+    if(confirmedHere&&otherConfirmedTeams.length){
+      if(!window.confirm(`Remove ${player.name} from ${selectedTeam}?\n\nThey will remain confirmed for ${otherConfirmedTeams.join(', ')}. Their ${selectedTeam} offer stays available in planning so they can be added again if needed.`))return
+      savePlayer(setConfirmedTeam(player,selectedTeam,null))
+      return
+    }
+    if(!confirmedHere&&otherConfirmedTeams.length){
+      if(!window.confirm(`Remove ${player.name} from the ${selectedTeam} plan?\n\nThey will remain confirmed for ${otherConfirmedTeams.join(', ')}.`))return
+      const teamConsideration={...player.teamConsideration};delete teamConsideration[selectedTeam]
+      const offers=player.offers.filter(offer=>offer.team!==selectedTeam)
+      savePlayer({...player,offers,teamConsideration})
+      return
+    }
     if(!window.confirm(`Reset ${player.name} to their initial recruitment state?\n\nThis removes all recommendations, suitable teams, offer options and team-planning assignments. Their profile, assessments, notes and communication history will be kept.`))return
     savePlayer({
       ...player,
@@ -142,6 +173,7 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
       offers:[],
       offeredTeam:'',
       offeredPosition:'',
+      confirmedTeams:{},
       rejectionReason:'',
       teamConsideration:{},
       emailReviewStatus:'draft',
@@ -151,9 +183,9 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
 
   if(!trialsMode)return <>
     <PageHeader title="Teams" subtitle="Confirmed squads and attendance during the playing season." action={editable?<button className="secondary returning-player-import-button" onClick={()=>onImportReturningPlayers(selectedTeam)}><FileSpreadsheet/>Import returning players</button>:undefined}/>
-    <section className="planner-team-strip" aria-label="Choose a team">{teams.map(team=>{const teamConfirmed=players.filter(player=>confirmedTeam(player)===team).length;return <button key={team} className={`${selectedTeam===team?'active':''} ${canEditTeam(team)?'':'view-only'}`} onClick={()=>setSelectedTeam(team)}><span>{team}{!canEditTeam(team)&&<Lock/>}</span><b>{teamConfirmed}</b><small>{canEditTeam(team)?'Confirmed squad':'View only'}</small></button>})}</section>
+    <section className="planner-team-strip" aria-label="Choose a team">{teams.map(team=>{const teamConfirmed=players.filter(player=>isConfirmedForTeam(player,team)).length;return <button key={team} className={`${selectedTeam===team?'active':''} ${canEditTeam(team)?'':'view-only'}`} onClick={()=>setSelectedTeam(team)}><span>{team}{!canEditTeam(team)&&<Lock/>}</span><b>{teamConfirmed}</b><small>{canEditTeam(team)?'Confirmed squad':'View only'}</small></button>})}</section>
     {!editable&&<div className="team-access-banner"><Lock/><div><b>{selectedTeam} is view only</b><span>You can see the confirmed squad and attendance, but only its assigned coach, Team administrator or a full administrator can change team records.</span></div></div>}
-    <section className="confirmed-squad-panel"><div className="planner-panel-head"><div><span className="eyebrow">CONFIRMED SQUAD</span><h3>{confirmed.length} accepted player{confirmed.length===1?'':'s'}</h3><p>The active playing squad for {selectedTeam}. Coaches can adjust each player’s squad position below.</p></div>{isAdmin&&<span className="admin-finance-label">Administrator finance view</span>}</div>{confirmed.length?<div className="confirmed-squad-grid">{confirmed.sort((a,b)=>confirmedPosition(a).localeCompare(confirmedPosition(b))||a.name.localeCompare(b.name)).map(player=><ConfirmedPlayerCard key={player.id} player={player} editable={editable} isAdmin={isAdmin} finance={finances[player.id]} financeSettings={financeSettings} onOpen={()=>onOpenPlayer(player.id)} onPosition={position=>changeConfirmedPosition(player,position)} onReset={()=>resetPlayerWorkflow(player)}/>)}</div>:<div className="planner-empty compact"><CheckCircle2/><h4>No confirmed players yet</h4><p>No active players are currently assigned to {selectedTeam}.</p></div>}</section>
+    <section className="confirmed-squad-panel"><div className="planner-panel-head"><div><span className="eyebrow">CONFIRMED SQUAD</span><h3>{confirmed.length} accepted player{confirmed.length===1?'':'s'}</h3><p>The active playing squad for {selectedTeam}. Coaches can adjust each player’s squad position below.</p></div><ConfirmedSquadActions editable={editable} isAdmin={isAdmin} players={existingClubPlayers} team={selectedTeam} onAdd={addExistingClubPlayerToTeam}/></div>{confirmed.length?<div className="confirmed-squad-grid">{confirmed.sort((a,b)=>confirmedPosition(a,selectedTeam).localeCompare(confirmedPosition(b,selectedTeam))||a.name.localeCompare(b.name)).map(player=><ConfirmedPlayerCard key={player.id} player={player} team={selectedTeam} editable={editable} isAdmin={isAdmin} finance={finances[player.id]} financeSettings={financeSettings} onOpen={()=>onOpenPlayer(player.id)} onPosition={position=>changeConfirmedPosition(player,position)} onReset={()=>resetPlayerWorkflow(player)}/>)}</div>:<div className="planner-empty compact"><CheckCircle2/><h4>No confirmed players yet</h4><p>No active players are currently assigned to {selectedTeam}.</p></div>}</section>
     <TeamAttendancePanel team={selectedTeam} players={confirmed} sessions={sessions} onOpenPlayer={onOpenPlayer} onOpenSchedule={onOpenSchedule}/>
   </>
 
@@ -181,8 +213,8 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
     </section>
 
     <section className="confirmed-squad-panel">
-      <div className="planner-panel-head"><div><span className="eyebrow">CONFIRMED SQUAD</span><h3>{confirmed.length} accepted player{confirmed.length===1?'':'s'}</h3><p>Players appear here as soon as their decision is changed to Offer accepted.</p></div>{isAdmin&&<span className="admin-finance-label">Administrator finance view</span>}</div>
-      {confirmed.length?<div className="confirmed-squad-grid">{confirmed.sort((a,b)=>confirmedPosition(a).localeCompare(confirmedPosition(b))||a.name.localeCompare(b.name)).map(player=><ConfirmedPlayerCard key={player.id} player={player} editable={editable} isAdmin={isAdmin} finance={finances[player.id]} financeSettings={financeSettings} onOpen={()=>onOpenPlayer(player.id)} onPosition={position=>changeConfirmedPosition(player,position)} onReset={()=>resetPlayerWorkflow(player)}/>)}</div>:<div className="planner-empty compact"><CheckCircle2/><h4>No confirmed players yet</h4><p>Accepted offers for {selectedTeam} will be collected here automatically.</p></div>}
+      <div className="planner-panel-head"><div><span className="eyebrow">CONFIRMED SQUAD</span><h3>{confirmed.length} accepted player{confirmed.length===1?'':'s'}</h3><p>Players appear here as soon as their offer is accepted for this team.</p></div><ConfirmedSquadActions editable={editable} isAdmin={isAdmin} players={existingClubPlayers} team={selectedTeam} onAdd={addExistingClubPlayerToTeam}/></div>
+      {confirmed.length?<div className="confirmed-squad-grid">{confirmed.sort((a,b)=>confirmedPosition(a,selectedTeam).localeCompare(confirmedPosition(b,selectedTeam))||a.name.localeCompare(b.name)).map(player=><ConfirmedPlayerCard key={player.id} player={player} team={selectedTeam} editable={editable} isAdmin={isAdmin} finance={finances[player.id]} financeSettings={financeSettings} onOpen={()=>onOpenPlayer(player.id)} onPosition={position=>changeConfirmedPosition(player,position)} onReset={()=>resetPlayerWorkflow(player)}/>)}</div>:<div className="planner-empty compact"><CheckCircle2/><h4>No confirmed players yet</h4><p>Accepted offers for {selectedTeam} will be collected here automatically.</p></div>}
     </section>
 
     <TeamAttendancePanel team={selectedTeam} players={confirmed} sessions={sessions} onOpenPlayer={onOpenPlayer} onOpenSchedule={onOpenSchedule}/>
@@ -212,6 +244,10 @@ export function TeamsPage({ players, sessions, teamPlans, savePlayer, saveTarget
   </>
 }
 
+function ConfirmedSquadActions({editable,isAdmin,players,team,onAdd}:{editable:boolean;isAdmin:boolean;players:Player[];team:string;onAdd:(playerId:string)=>void}){
+  return <div className="confirmed-squad-head-actions">{isAdmin&&<span className="admin-finance-label">Administrator finance view</span>}{editable&&players.length>0&&<label className="add-existing-player"><span>Add existing club player</span><select aria-label={`Add an existing club player to ${team}`} value="" onChange={event=>onAdd(event.target.value)}><option value="">Choose player…</option>{players.map(player=><option value={player.id} key={player.id}>{player.name} · {confirmedTeamNames(player).join(' / ')}</option>)}</select></label>}</div>
+}
+
 function TeamAttendancePanel({team,players,sessions,onOpenPlayer,onOpenSchedule}:{team:string;players:Player[];sessions:TrialSession[];onOpenPlayer:(id:string)=>void;onOpenSchedule:(id:string)=>void}){
   const today=new Date().toISOString().slice(0,10)
   const events=sessions.filter(session=>session.eventType!=='trial'&&session.teams.includes(team)&&session.date<=today).sort((a,b)=>`${b.date} ${b.startTime}`.localeCompare(`${a.date} ${a.startTime}`))
@@ -232,22 +268,23 @@ function TeamAttendancePanel({team,players,sessions,onOpenPlayer,onOpenSchedule}
   return <section className="team-attendance-panel"><header><div><span className="eyebrow">TEAM ATTENDANCE</span><h3>Training and game attendance</h3><p>Live statistics from completed calendar sessions for {team}. Excused absences are not counted against attendance rate.</p></div><TrendingUp/></header>{events.length?<><div className="team-attendance-stats"><span><CalendarDays/><b>{events.length}</b><small>Sessions</small></span><span><CheckCircle2/><b>{present}</b><small>Present marks</small></span><span><TrendingUp/><b>{rate}%</b><small>Attendance</small></span><span><ClipboardList/><b>{Math.max(0,events.length*players.length-recorded)}</b><small>Unmarked</small></span></div><div className="team-attendance-layout"><div className="attendance-history"><h4>Recent sessions</h4>{events.slice(0,8).map(event=>{const teamPlayers=players.filter(player=>event.attendance[player.id]);const eventPresent=teamPlayers.filter(player=>event.attendance[player.id]==='present').length;return <button key={event.id} onClick={()=>onOpenSchedule(event.id)}><span className={`event-kind ${event.eventType}`}>{event.eventType==='game'?'Game':'Training'}</span><span><b>{event.title}</b><small>{new Date(`${event.date}T12:00:00`).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</small></span><strong>{eventPresent}/{players.length}</strong><ArrowRight/></button>})}</div><div className="attendance-player-table"><h4>Player overview</h4><div className="attendance-table-wrap"><table><thead><tr><th>Player</th><th>Present</th><th>Absent</th><th>Excused</th><th>Rate</th></tr></thead><tbody>{playerRows.map(row=><tr key={row.player.id}><td><button onClick={()=>onOpenPlayer(row.player.id)}>{row.player.name}<small>{row.recorded}/{events.length} marked</small></button></td><td>{row.present}</td><td>{row.absent}</td><td>{row.excused}</td><td><strong className={row.rate>=80?'good':row.rate<60&&row.recorded?'low':''}>{row.recorded?`${row.rate}%`:'—'}</strong></td></tr>)}</tbody></table></div></div></div></>:<div className="planner-empty compact"><CalendarDays/><h4>No completed sessions yet</h4><p>Add training or games to the calendar, then record attendance inside the full-screen event.</p></div>}</section>
 }
 
-function ConfirmedPlayerCard({player,editable,isAdmin,finance,financeSettings,onOpen,onPosition,onReset}:{player:Player;editable:boolean;isAdmin:boolean;finance:PlayerFinanceMap[string]|undefined;financeSettings:FinanceSettings;onOpen:()=>void;onPosition:(position:string)=>void;onReset:()=>void}){
+function ConfirmedPlayerCard({player,team,editable,isAdmin,finance,financeSettings,onOpen,onPosition,onReset}:{player:Player;team:string;editable:boolean;isAdmin:boolean;finance:PlayerFinanceMap[string]|undefined;financeSettings:FinanceSettings;onOpen:()=>void;onPosition:(position:string)=>void;onReset:()=>void}){
   const record=finance||emptyPlayerFinance(player.id)
   const amountOwed=effectiveAmountOwed(player,record,financeSettings)
   const status=paymentStatus(record,amountOwed)
   const deadline=paymentDeadlineDetails(record,amountOwed,financeSettings)
-  return <div className={`confirmed-player-card ${editable?'position-editable':''}`}><button className="confirmed-player-summary" onClick={onOpen}><div className="confirmed-player-icon"><Check/></div><div><b>{player.name}{player.returningPlayer&&<span className="returning-player-badge compact">Returning</span>}</b><span>{confirmedPosition(player)}{player.bibNumber?` · #${player.bibNumber}`:''}</span></div><ArrowRight/></button>{editable&&<label className="confirmed-position-control"><span>Squad position</span><select aria-label={`${player.name} squad position`} value={confirmedPosition(player)} onChange={event=>onPosition(event.target.value)}>{['Unassigned',...positions].map(position=><option key={position}>{position}</option>)}</select></label>}<div className="confirmed-card-actions">{isAdmin?<div className="confirmed-finance"><span className={`finance-status ${deadline.state==='overdue'?'overdue':status.toLowerCase().replaceAll(' ','-')}`}>{deadline.state==='overdue'?'Payment overdue':status}</span><small>{deadline.state==='overdue'?deadline.label:`${formatCurrency(outstandingAmount(record,amountOwed))} outstanding`}</small></div>:<span className="confirmed-private">Confirmed</span>}{editable&&<button className="confirmed-reset-player" onClick={onReset} title="Remove from the confirmed squad and reset recruitment"><RotateCcw/><span>Reset</span></button>}</div></div>
+  return <div className={`confirmed-player-card ${editable?'position-editable':''}`}><button className="confirmed-player-summary" onClick={onOpen}><div className="confirmed-player-icon"><Check/></div><div><b>{player.name}{player.returningPlayer&&<span className="returning-player-badge compact">Returning</span>}</b><span>{confirmedPosition(player,team)}{player.bibNumber?` · #${player.bibNumber}`:''}</span></div><ArrowRight/></button>{editable&&<label className="confirmed-position-control"><span>Squad position</span><select aria-label={`${player.name} ${team} squad position`} value={confirmedPosition(player,team)} onChange={event=>onPosition(event.target.value)}>{['Unassigned',...positions].map(position=><option key={position}>{position}</option>)}</select></label>}<div className="confirmed-card-actions">{isAdmin?<div className="confirmed-finance"><span className={`finance-status ${deadline.state==='overdue'?'overdue':status.toLowerCase().replaceAll(' ','-')}`}>{deadline.state==='overdue'?'Payment overdue':status}</span><small>{deadline.state==='overdue'?deadline.label:`${formatCurrency(outstandingAmount(record,amountOwed))} outstanding`}</small></div>:<span className="confirmed-private">Confirmed</span>}{editable&&<button className="confirmed-reset-player" onClick={onReset} title={`Remove from ${team}`}><RotateCcw/><span>Remove</span></button>}</div></div>
 }
 
 function PlannedPlayerCard({ player, team, editable, moveTeams, onOpen, onPosition, onMove, onPrepareOffer, onAddToTeam, onReset }: { player: Player; team: string; editable:boolean; moveTeams:string[]; onOpen: (id:string)=>void; onPosition:(player:Player,position:string)=>void; onMove:(player:Player,team:string)=>void; onPrepareOffer:(player:Player)=>void; onAddToTeam:(player:Player)=>void; onReset:(player:Player)=>void }) {
   const rating = averageRating(player)
   const isOffered = Boolean(offerForTeam(player, team))
+  const canConfirm = isOffered && !isConfirmedForTeam(player,team) && (player.decision === 'Offer sent' || player.decision === 'Offer accepted')
   return <div className="planned-player-card">
     <button className="planner-player-identity" onClick={() => onOpen(player.id)}><div className="planner-avatar">{player.bibNumber ? `#${player.bibNumber}` : player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</span></div><ArrowRight/></button>
     <label>Position<select disabled={!editable} aria-label={`${player.name} planned position`} value={assignmentForTeam(player,team)||player.position} onChange={event => onPosition(player,event.target.value)}>{positions.map(position=><option key={position}>{position}</option>)}</select></label>
     <label>Team<select disabled={!editable} aria-label={`Move ${player.name} to team`} value={team} onChange={event => onMove(player,event.target.value)}><option>{team}</option>{moveTeams.filter(item=>item!==team).map(item=><option key={item}>{item}</option>)}</select></label>
-    <div className="planned-actions">{isOffered ? <><span className="offer-ready-chip"><Check/> {player.decision}</span>{editable&&player.decision==='Offer sent'&&<button className="accept-offer" onClick={()=>onAddToTeam(player)}><UserPlus/>Add to team</button>}</> : editable?<button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>:<span className="view-only-chip"><Lock/>View only</span>}{editable&&<button className="reset-player-workflow" onClick={()=>onReset(player)} title="Reset recruitment workflow"><RotateCcw/>Reset</button>}</div>
+    <div className="planned-actions">{isOffered ? <><span className="offer-ready-chip"><Check/> {player.decision === 'Offer accepted' ? 'Confirmed for another team' : player.decision}</span>{editable&&canConfirm&&<button className="accept-offer" onClick={()=>onAddToTeam(player)}><UserPlus/>Add to team</button>}</> : editable?<button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>:<span className="view-only-chip"><Lock/>View only</span>}{editable&&<button className="reset-player-workflow" onClick={()=>onReset(player)} title="Remove from this team workflow"><RotateCcw/>Remove</button>}</div>
   </div>
 }
 

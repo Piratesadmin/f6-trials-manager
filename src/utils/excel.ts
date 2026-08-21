@@ -148,6 +148,7 @@ function parsePlayers(rows: Row[], responseLookup: Map<string, TrialResponseStat
       suitableTeams: [],
       bibNumber: '',
       teamConsideration: {},
+      confirmedTeams: {},
       offers: [],
       emailReviewStatus: 'draft',
       emailDraft: { responseDeadline: '', coachName: '', personalMessage: '' },

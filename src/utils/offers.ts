@@ -27,15 +27,18 @@ export function primaryOffer(player: Player) {
 }
 
 export function offerForTeam(player: Player, team: string) {
-  if (player.decision === 'Offer accepted') return player.offeredTeam === team ? primaryOffer(player) : undefined
+  if (player.decision === 'Offer accepted') return player.offers.find(offer => offer.team === team)
   if (!player.decision.includes('Offer') && player.decision !== 'Alternative offer') return undefined
   return player.offers.find(offer => offer.team === team)
 }
 
 export function activeOffers(player: Player) {
   if (player.decision === 'Offer accepted') {
-    const accepted = primaryOffer(player)
-    return accepted ? [accepted] : []
+    const confirmedTeams=Object.keys(player.confirmedTeams||{})
+    const accepted=confirmedTeams.length?player.offers.filter(offer=>confirmedTeams.includes(offer.team)):[]
+    if(accepted.length)return accepted
+    const primary=primaryOffer(player)
+    return primary?[primary]:[]
   }
   if (!player.decision.includes('Offer') && player.decision !== 'Alternative offer') return []
   return player.offers

@@ -4,7 +4,7 @@ import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, r
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
 import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
-import { averageRating, normalisePlayer, setTrialRegistration, trialRegistrationFor } from './utils/player'
+import { averageRating, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
 import { buildCommunication, normaliseEmailSettings, sentDecisionFor } from './utils/email'
@@ -485,29 +485,30 @@ export default function App(){
       const importedPosition=incoming.position&&incoming.position!=='Unassigned'?incoming.position:''
       const position=importedPosition||base.position||'Unassigned'
       const previousTeamOffer=base.offers.find(offer=>offer.team===team)
-      return normalisePlayer({
+      const teamOffer={team,position,squadRole:previousTeamOffer?.squadRole||defaultSquadRole,includeSquadRole:previousTeamOffer?.includeSquadRole!==false}
+      const offers=previousTeamOffer?base.offers.map(offer=>offer.team===team?teamOffer:offer):[...base.offers,teamOffer]
+      const prepared=setConfirmedTeam({
         ...base,
         name:incoming.name.trim()||base.name,
         email:incoming.email.trim().toLowerCase()||base.email,
         dateOfBirth:incoming.dateOfBirth||base.dateOfBirth,
         interestedDivisions:incoming.interestedDivisions||base.interestedDivisions||teamDivisions[team]||'',
-        position,
+        position:base.decision==='Offer accepted'?base.position:position,
         secondaryPosition:incoming.secondaryPosition||base.secondaryPosition,
         playingExperience:incoming.playingExperience||base.playingExperience,
         highestLevelPlayed:incoming.highestLevelPlayed||base.highestLevelPlayed,
         photoUrl:incoming.photoUrl||base.photoUrl,
         decision:'Offer accepted',
-        offeredTeam:team,
-        offeredPosition:position,
-        offers:[{team,position,squadRole:previousTeamOffer?.squadRole||defaultSquadRole,includeSquadRole:previousTeamOffer?.includeSquadRole!==false}],
+        offers,
         rejectionReason:'',
-        suitableTeams:[team],
-        teamConsideration:{[team]:position},
+        suitableTeams:[...new Set([...base.suitableTeams,team])],
+        teamConsideration:{...base.teamConsideration,[team]:position},
         emailReviewStatus:'draft',
         returningPlayer:true,
         updatedAt:now,
         updatedBy:actor,
-      })
+      },team,position)
+      return normalisePlayer(prepared)
     })
     if(!prepared.length)throw new Error('There are no valid returning players to import.')
     const importedIds=new Set(prepared.map(player=>player.id))

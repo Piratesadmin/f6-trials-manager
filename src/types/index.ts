@@ -119,6 +119,7 @@ export type Player = {
   decision: Decision
   offeredTeam?: string
   offeredPosition?: string
+  confirmedTeams: Record<string, string>
   offers: PlayerOffer[]
   rejectionReason?: string
   notes: string

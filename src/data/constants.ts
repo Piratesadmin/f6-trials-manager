@@ -33,6 +33,7 @@ const assessmentDefaults = () => ({
   suitableTeams: [] as string[],
   bibNumber: '',
   teamConsideration: {} as Record<string, string>,
+  confirmedTeams: {} as Record<string, string>,
   offers: [],
   emailReviewStatus: 'draft' as const,
   emailDraft: { responseDeadline: '', coachName: '', personalMessage: '' },

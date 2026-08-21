@@ -81,6 +81,45 @@ export function setTrialRegistration(player: Player, sessionId: string, registra
   }
 }
 
+export function confirmedTeamAssignments(player: Player): Record<string, string> {
+  const incoming = player.confirmedTeams && typeof player.confirmedTeams === 'object' ? player.confirmedTeams : {}
+  const assignments = Object.fromEntries(Object.entries(incoming).filter(([team, position]) => Boolean(team) && typeof position === 'string' && Boolean(position)))
+  if (player.decision === 'Offer accepted') {
+    const legacyTeam = player.offeredTeam || player.offers?.[0]?.team || ''
+    if (legacyTeam && !assignments[legacyTeam]) {
+      const offer = player.offers?.find(item => item.team === legacyTeam)
+      assignments[legacyTeam] = offer?.position || player.offeredPosition || player.position || 'Unassigned'
+    }
+  }
+  return assignments
+}
+
+export function confirmedTeamNames(player: Player) {
+  return Object.keys(confirmedTeamAssignments(player))
+}
+
+export function isConfirmedForTeam(player: Player, team: string) {
+  return Boolean(confirmedTeamAssignments(player)[team])
+}
+
+export function confirmedPositionForTeam(player: Player, team: string) {
+  return confirmedTeamAssignments(player)[team] || player.offers?.find(offer => offer.team === team)?.position || player.position || 'Unassigned'
+}
+
+export function setConfirmedTeam(player: Player, team: string, position: string | null): Player {
+  const confirmedTeams = confirmedTeamAssignments(player)
+  if (position) confirmedTeams[team] = position
+  else delete confirmedTeams[team]
+  const currentPrimary = player.offeredTeam && confirmedTeams[player.offeredTeam] ? player.offeredTeam : ''
+  const offeredTeam = currentPrimary || Object.keys(confirmedTeams)[0] || player.offeredTeam || ''
+  return {
+    ...player,
+    confirmedTeams,
+    offeredTeam,
+    offeredPosition: confirmedTeams[offeredTeam] || player.offers?.find(offer => offer.team === offeredTeam)?.position || player.offeredPosition || '',
+  }
+}
+
 export function normalisePlayer(player: Player): Player {
   const unsafePlayer = player as Player & Record<string, unknown>
   const {
@@ -108,6 +147,11 @@ export function normalisePlayer(player: Player): Player {
   const offers = normaliseOffers(player)
   if ((player.decision?.includes('Offer') || player.decision === 'Alternative offer')) offers.forEach(offer=>{if(!consideration[offer.team])consideration[offer.team]=offer.position})
   const primary = offers.find(offer=>offer.team===player.offeredTeam)||offers[0]
+  const confirmedTeams = confirmedTeamAssignments({...player,offers})
+  const confirmedTeamNames = Object.keys(confirmedTeams)
+  const offeredTeam = player.decision === 'Offer accepted' && confirmedTeamNames.length
+    ? (player.offeredTeam && confirmedTeams[player.offeredTeam] ? player.offeredTeam : confirmedTeamNames[0])
+    : player.offeredTeam || primary?.team || ''
 
   const history = player.communicationHistory && typeof player.communicationHistory === 'object'
     ? player.communicationHistory
@@ -153,8 +197,9 @@ export function normalisePlayer(player: Player): Player {
     trialRegistrations,
     notes: player.notes || '',
     offers,
-    offeredTeam: player.offeredTeam || primary?.team || '',
-    offeredPosition: player.offeredPosition || primary?.position || '',
+    offeredTeam,
+    offeredPosition: confirmedTeams[offeredTeam] || player.offeredPosition || offers.find(offer=>offer.team===offeredTeam)?.position || primary?.position || '',
+    confirmedTeams,
     assessment,
     assessmentHistory,
     recommendation: player.recommendation || '',

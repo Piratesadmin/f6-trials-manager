@@ -2,7 +2,8 @@ import { Check, Layers3, Plus, Trash2 } from 'lucide-react'
 import { positions, squadRoles, teams } from '../data/constants'
 import type { Player, PlayerOffer } from '../types'
 import { teamMatchesInterestedDivisions } from '../utils/division'
-import { defaultSquadRole, primaryOffer } from '../utils/offers'
+import { defaultSquadRole } from '../utils/offers'
+import { confirmedTeamAssignments } from '../utils/player'
 
 type Props = {
   player: Player
@@ -38,13 +39,7 @@ export function OfferOptionsEditor({ player, save, compact = false, disabled = f
   const updateSquadRoleVisibility=(team:string,includeSquadRole:boolean)=>{
     saveOffers(offers.map(offer=>offer.team===team?{...offer,includeSquadRole}:offer))
   }
-  const chooseAccepted=(team:string)=>{
-    if(disabled)return
-    const selected=offers.find(offer=>offer.team===team)
-    if(selected)save({...player,offeredTeam:selected.team,offeredPosition:selected.position,teamConsideration:{...player.teamConsideration,[selected.team]:selected.position}})
-  }
-
-  if(accepted){const selected=primaryOffer(player);return <section className="accepted-offer-choice"><div><Check/><span><b>Accepted team option</b><small>Select the option the player has accepted. This controls their confirmed squad.</small></span></div><select disabled={disabled} value={selected?.team||''} onChange={event=>chooseAccepted(event.target.value)}>{offers.map(offer=><option value={offer.team} key={offer.team}>{offer.team} · {offer.position} · {offer.squadRole}</option>)}</select>{!offers.length&&<p>No saved team option exists. Change the decision back to an offer and add one first.</p>}</section>}
+  if(accepted){const assignments=Object.entries(confirmedTeamAssignments(player));return <section className="accepted-offer-choice"><div><Check/><span><b>Confirmed squad{assignments.length===1?'':'s'}</b><small>Team membership is managed from the Team Planner.</small></span></div><div className="accepted-team-list">{assignments.map(([team,position])=>{const offer=offers.find(item=>item.team===team);return <span key={team}><b>{team}</b><small>{position}{offer?.squadRole?` · ${offer.squadRole}`:''}</small></span>})}</div>{!assignments.length&&<p>No confirmed team assignment exists yet. Add the player from the Team Planner.</p>}</section>}
 
   return <section className={`offer-options-editor ${compact?'compact':''}`}>
     <header><div><span className="eyebrow">TEAM OFFER OPTIONS</span><h3><Layers3/>Offer one or more teams</h3><p>Set each team's playing position and squad role, then choose whether the role should appear in the email.</p></div><strong>{offers.length} selected</strong></header>

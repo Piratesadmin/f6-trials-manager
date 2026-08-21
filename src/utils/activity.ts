@@ -1,5 +1,5 @@
 import type { ActivityDraft, ActivityLogEntry, Player } from '../types'
-import { trialRegistrationsFor } from './player'
+import { confirmedTeamAssignments, trialRegistrationsFor } from './player'
 
 export function createActivityEntry(draft: ActivityDraft, actor: { uid: string; name: string; email: string }, season: string): ActivityLogEntry {
   return {
@@ -44,6 +44,14 @@ export function describePlayerChange(before: Player | undefined, after: Player):
   if (!before) return { category: 'player', action: 'created', summary: `Added ${after.name}`, detail: `${after.position} · ${after.interestedDivisions} applicant`, team: after.suitableTeams[0] || '', entityType: 'player', entityId: after.id }
   const team = after.offeredTeam || after.suitableTeams[0] || ''
   if (before.decision !== after.decision) return { category: 'player', action: 'decision_changed', summary: `${after.name}: ${after.decision}`, detail: `Decision changed from ${before.decision} to ${after.decision}.`, team, entityType: 'player', entityId: after.id }
+  const beforeConfirmed=confirmedTeamAssignments(before)
+  const afterConfirmed=confirmedTeamAssignments(after)
+  const confirmedAdded=Object.keys(afterConfirmed).find(name=>!beforeConfirmed[name])
+  const confirmedRemoved=Object.keys(beforeConfirmed).find(name=>!afterConfirmed[name])
+  const confirmedPositionChanged=Object.keys(afterConfirmed).find(name=>beforeConfirmed[name]&&beforeConfirmed[name]!==afterConfirmed[name])
+  if(confirmedAdded)return{category:'team',action:'player_confirmed',summary:`${after.name} added to ${confirmedAdded}`,detail:`Confirmed as ${afterConfirmed[confirmedAdded]}.`,team:confirmedAdded,entityType:'player',entityId:after.id}
+  if(confirmedRemoved)return{category:'team',action:'player_removed_from_squad',summary:`${after.name} removed from ${confirmedRemoved}`,detail:Object.keys(afterConfirmed).length?`Still confirmed for ${Object.keys(afterConfirmed).join(', ')}.`:'No confirmed squad assignments remain.',team:confirmedRemoved,entityType:'player',entityId:after.id}
+  if(confirmedPositionChanged)return{category:'team',action:'squad_position_changed',summary:`${after.name}: ${confirmedPositionChanged} position changed`,detail:`${beforeConfirmed[confirmedPositionChanged]} to ${afterConfirmed[confirmedPositionChanged]}.`,team:confirmedPositionChanged,entityType:'player',entityId:after.id}
   if (before.recommendation !== after.recommendation) return { category: 'player', action: 'recommendation_changed', summary: `${after.name}: ${after.recommendation || 'Recommendation cleared'}`, detail: before.recommendation ? `Previous recommendation: ${before.recommendation}.` : 'Coach recommendation recorded.', team, entityType: 'player', entityId: after.id }
   if (JSON.stringify(before.offers || []) !== JSON.stringify(after.offers || [])) {
     const labels = after.offers.map(offer => `${offer.team} (${offer.position}, ${offer.squadRole})`).join(', ')

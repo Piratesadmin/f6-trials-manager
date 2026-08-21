@@ -1,16 +1,17 @@
 import type { FinanceSettings, PaymentPlan, Player, PlayerFinance } from '../types'
+import { confirmedPositionForTeam, confirmedTeamAssignments, confirmedTeamNames } from './player'
 
 export const paymentPlans: Exclude<PaymentPlan, ''>[] = ['Fully paid', '2 instalments', 'Direct debit']
 export const nvlTeams = ['Aces', 'Ravens']
 export const defaultFinanceSettings: FinanceSettings = { nvlFee: 0, lvaFee: 0, fullPaymentDueDate: '', instalmentOneDueDate: '', instalmentTwoDueDate: '', directDebitDueDates: [] }
 
 export function confirmedTeam(player: Player) {
-  if (player.decision !== 'Offer accepted') return ''
-  return player.offeredTeam || player.offers[0]?.team || ''
+  const assignments=confirmedTeamAssignments(player)
+  return player.offeredTeam&&assignments[player.offeredTeam]?player.offeredTeam:confirmedTeamNames(player)[0]||''
 }
 
-export function confirmedPosition(player: Player) {
-  return player.position || player.offeredPosition || 'Unassigned'
+export function confirmedPosition(player: Player, team=confirmedTeam(player)) {
+  return team?confirmedPositionForTeam(player,team):player.position||player.offeredPosition||'Unassigned'
 }
 
 export function emptyPlayerFinance(playerId: string): PlayerFinance {
@@ -60,8 +61,12 @@ export function standardFeeForTeam(team: string, settings: FinanceSettings) {
   return feeBandForTeam(team) === 'NVL' ? settings.nvlFee : settings.lvaFee
 }
 
+export function standardFeeForPlayer(player: Player, settings: FinanceSettings) {
+  return confirmedTeamNames(player).reduce((total,team)=>total+standardFeeForTeam(team,settings),0)
+}
+
 export function effectiveAmountOwed(player: Player, finance: PlayerFinance, settings: FinanceSettings) {
-  return finance.usesStandardFee ? standardFeeForTeam(confirmedTeam(player), settings) : finance.amountOwed
+  return finance.usesStandardFee ? standardFeeForPlayer(player, settings) : finance.amountOwed
 }
 
 export function outstandingAmount(finance: PlayerFinance, amountOwed = finance.amountOwed) {
