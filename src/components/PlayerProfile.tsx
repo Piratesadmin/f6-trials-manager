@@ -70,7 +70,7 @@ export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save,
 
     <div className="profile-content">
       {activeTab === 'overview' && <Overview player={player} sessions={sessions} save={save} photo={photo} uploadPhoto={uploadPhoto} removePhoto={removePhoto}/>} 
-      {activeTab === 'assessment' && <Assessment player={player} saveAssessment={saveAssessment} trialsMode={trialsMode}/>} 
+      {activeTab === 'assessment' && <PlayerAssessment player={player} saveAssessment={saveAssessment} trialsMode={trialsMode}/>}
       {activeTab === 'decision' && <DecisionPanel key={player.id} player={player} saveDecision={saveDecision}/>}
     </div>
   </article>
@@ -132,7 +132,7 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
 type AssessmentDraft={assessment:Assessment;strengths:string;developmentAreas:string}
 const assessmentDraftFor=(player:Player):AssessmentDraft=>({assessment:{...player.assessment},strengths:player.strengths,developmentAreas:player.developmentAreas})
 
-function Assessment({ player, saveAssessment, trialsMode }: Pick<Props, 'player' | 'saveAssessment' | 'trialsMode'>) {
+export function PlayerAssessment({ player, saveAssessment, trialsMode, showHistory = true, onSaved }: Pick<Props, 'player' | 'saveAssessment' | 'trialsMode'> & {showHistory?:boolean;onSaved?:()=>void}) {
   const [draft,setDraft]=useState<AssessmentDraft>(()=>assessmentDraftFor(player))
   const [busy,setBusy]=useState(false)
   const [saved,setSaved]=useState(false)
@@ -141,7 +141,7 @@ function Assessment({ player, saveAssessment, trialsMode }: Pick<Props, 'player'
   const average=averageRating(draftPlayer)
   const completion=assessmentCompletion(draftPlayer)
   const history=Object.values(player.assessmentHistory||{}).sort((a,b)=>a.recordedAt-b.recordedAt)
-  const submit=async()=>{setBusy(true);setSaved(false);try{await saveAssessment(draftPlayer);setSaved(true);window.setTimeout(()=>setSaved(false),2200)}finally{setBusy(false)}}
+  const submit=async()=>{setBusy(true);setSaved(false);try{await saveAssessment(draftPlayer);if(onSaved){onSaved();return}setSaved(true);window.setTimeout(()=>setSaved(false),2200)}finally{setBusy(false)}}
 
   return <div className="profile-section">
     <div className="assessment-summary assessment-draft-summary">
@@ -158,7 +158,7 @@ function Assessment({ player, saveAssessment, trialsMode }: Pick<Props, 'player'
       <label><span>Development areas</span><small>What should they work on?</small><textarea value={draft.developmentAreas} onChange={event=>setDraft(current=>({...current,developmentAreas:event.target.value}))} placeholder="e.g. Blocking timing, transition speed…"/></label>
     </div>
 
-    <AssessmentProgression history={history} trialsMode={trialsMode}/>
+    {showHistory&&<AssessmentProgression history={history} trialsMode={trialsMode}/>}
   </div>
 }
 

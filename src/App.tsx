@@ -805,6 +805,7 @@ export default function App(){
         saveSessions={saveTrialSessionSeries}
         deleteSession={deleteTrialSession}
         savePlayer={save}
+        saveAssessment={saveAssessment}
         openPlayer={id=>openPlayer(id,'overview')}
         onImport={()=>setImportOpen(true)}
         teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))}
