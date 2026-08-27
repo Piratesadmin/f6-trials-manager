@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { AlertTriangle, Banknote, BarChart3, CheckCircle2, Download, Search, WalletCards, X } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
+import { PlayerAvatar } from '../components/PlayerAvatar'
 import { teams } from '../data/constants'
-import type { FinanceSettings, PaymentPlan, Player, PlayerFinance, PlayerFinanceMap } from '../types'
+import type { FinanceSettings, PaymentPlan, Player, PlayerFinance, PlayerFinanceMap, PlayerPhotos } from '../types'
 import { confirmedTeam, effectiveAmountOwed, emptyPlayerFinance, feeBandForTeam, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentPlans, paymentStatus, standardFeeForPlayer, standardFeeForTeam } from '../utils/finance'
 import { confirmedPositionForTeam, confirmedTeamNames, isConfirmedForTeam } from '../utils/player'
 
 type Props = {
   players: Player[]
+  playerPhotos: PlayerPhotos
   finances: PlayerFinanceMap
   financeSettings: FinanceSettings
   saveFinance: (finance: PlayerFinance) => void | Promise<void>
@@ -28,7 +30,7 @@ function pieStyle(values:number[],colours=chartColours):CSSProperties{
   return{background:`conic-gradient(${stops.join(',')})`}
 }
 
-export function FinancePage({ players, finances, financeSettings, saveFinance, onOpenPlayer }: Props) {
+export function FinancePage({ players, playerPhotos, finances, financeSettings, saveFinance, onOpenPlayer }: Props) {
   const confirmed = useMemo(() => players.filter(player => Boolean(confirmedTeam(player))), [players])
   const [query, setQuery] = useState('')
   const [team, setTeam] = useState('All teams')
@@ -84,7 +86,7 @@ export function FinancePage({ players, finances, financeSettings, saveFinance, o
     <section className="finance-panel">
       <div className="finance-toolbar"><label><Search/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search player, team or position"/></label><select value={team} onChange={event=>setTeam(event.target.value)}><option>All teams</option>{teams.map(item=><option key={item}>{item}</option>)}</select><select value={plan} onChange={event=>setPlan(event.target.value as PaymentPlan|'All plans')}><option>All plans</option><option value="">Not selected</option>{paymentPlans.map(item=><option key={item}>{item}</option>)}</select><select value={deadlineFilter} onChange={event=>setDeadlineFilter(event.target.value as typeof deadlineFilter)}><option>All deadlines</option><option>Overdue</option><option>Due soon</option><option>On track</option></select></div>
       {overdueEntries.length>0&&<div className="finance-overdue-banner"><AlertTriangle/><div><b>{overdueEntries.length} player payment{overdueEntries.length===1?' is':'s are'} overdue</b><span>{formatCurrency(overdueEntries.reduce((total,entry)=>total+entry.deadline.shortfall,0))} should have been collected by now.</span></div><button onClick={()=>setDeadlineFilter('Overdue')}>Show overdue players</button></div>}
-      <div className="finance-table-wrap"><table className="finance-table"><thead><tr><th>Confirmed player</th><th>Arrangement</th><th>Fee basis / owed</th><th>Amount paid</th><th>Outstanding</th><th>Payment deadline</th><th>Status</th></tr></thead><tbody>{filtered.map(({player,finance})=><FinanceRow key={player.id} player={player} finance={finance} financeSettings={financeSettings} saveFinance={saveFinance} onOpen={()=>onOpenPlayer(player.id)}/>)}</tbody></table>{!filtered.length&&<div className="finance-empty"><WalletCards/><b>No confirmed players match these filters.</b><span>Adjust the filters or set a player’s decision to Offer accepted.</span></div>}</div>
+      <div className="finance-table-wrap"><table className="finance-table"><thead><tr><th>Confirmed player</th><th>Arrangement</th><th>Fee basis / owed</th><th>Amount paid</th><th>Outstanding</th><th>Payment deadline</th><th>Status</th></tr></thead><tbody>{filtered.map(({player,finance})=><FinanceRow key={player.id} player={player} photo={playerPhotos[player.id]} finance={finance} financeSettings={financeSettings} saveFinance={saveFinance} onOpen={()=>onOpenPlayer(player.id)}/>)}</tbody></table>{!filtered.length&&<div className="finance-empty"><WalletCards/><b>No confirmed players match these filters.</b><span>Adjust the filters or set a player’s decision to Offer accepted.</span></div>}</div>
     </section>
     {insightsOpen&&<><button className="finance-drawer-backdrop" aria-label="Close financial insights" onClick={()=>setInsightsOpen(false)}></button><aside className="finance-insights-drawer" aria-label="Financial insights"><header><div><span className="eyebrow">TREASURER OVERVIEW</span><h2>Financial insights</h2><p>Live totals across every confirmed squad.</p></div><button onClick={()=>setInsightsOpen(false)} aria-label="Close financial insights"><X/></button></header><div className="insight-scroll">
       <section className="insight-card collection-card"><div><span className="eyebrow">COLLECTION PROGRESS</span><h3>{collectionRate}% collected</h3></div><div className="donut-chart" role="img" aria-label={`${collectionRate}% of fees collected`} style={pieStyle([Math.min(collected,billed),outstanding],['#16a34a','#fee2e2'])}><span><b>{formatCurrency(collected)}</b><small>received</small></span></div><div className="chart-legend compact"><span><i style={{background:'#16a34a'}}></i>Collected <b>{formatCurrency(collected)}</b></span><span><i style={{background:'#ef4444'}}></i>Outstanding <b>{formatCurrency(outstanding)}</b></span></div></section>
@@ -95,7 +97,7 @@ export function FinancePage({ players, finances, financeSettings, saveFinance, o
   </>
 }
 
-function FinanceRow({ player, finance, financeSettings, saveFinance, onOpen }: { player: Player; finance: PlayerFinance; financeSettings:FinanceSettings; saveFinance: Props['saveFinance']; onOpen:()=>void }) {
+function FinanceRow({ player, photo, finance, financeSettings, saveFinance, onOpen }: { player: Player; photo?:string; finance: PlayerFinance; financeSettings:FinanceSettings; saveFinance: Props['saveFinance']; onOpen:()=>void }) {
   const [draft,setDraft]=useState(finance)
   useEffect(()=>setDraft(finance),[finance])
   const commit=(updates:Partial<PlayerFinance>={})=>saveFinance({...draft,...updates,playerId:player.id})
@@ -110,7 +112,7 @@ function FinanceRow({ player, finance, financeSettings, saveFinance, onOpen }: {
     setDraft(next);saveFinance(next)
   }
   return <tr>
-    <td><button className="finance-player" onClick={onOpen}><span>{player.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</span><div><b>{player.name}</b><small>{confirmedTeamNames(player).map(team=>`${team} · ${confirmedPositionForTeam(player,team)}`).join(' / ')}</small></div></button></td>
+    <td><button className="finance-player" onClick={onOpen}><PlayerAvatar player={player} photo={photo}/><div><b>{player.name}</b><small>{confirmedTeamNames(player).map(team=>`${team} · ${confirmedPositionForTeam(player,team)}`).join(' / ')}</small></div></button></td>
     <td><select value={draft.paymentPlan} onChange={event=>{const paymentPlan=event.target.value as PaymentPlan;setDraft(current=>({...current,paymentPlan}));commit({paymentPlan})}}><option value="">Select plan</option>{paymentPlans.map(item=><option key={item}>{item}</option>)}</select></td>
     <td><select className="fee-basis-select" value={draft.usesStandardFee?'standard':'custom'} onChange={event=>changeFeeBasis(event.target.value==='standard')}><option value="standard">Standard {feeBands}</option><option value="custom">Custom total</option></select><div className={`money-input ${draft.usesStandardFee?'standard':''}`}><span>£</span><input aria-label={`${player.name} amount owed`} disabled={draft.usesStandardFee} min="0" step="0.01" type="number" value={owed||''} onChange={event=>setDraft(current=>({...current,amountOwed:Number(event.target.value)}))} onBlur={()=>commit()}/></div></td>
     <td><div className="money-input"><span>£</span><input aria-label={`${player.name} amount paid`} min="0" step="0.01" type="number" value={draft.amountPaid||''} onChange={event=>setDraft(current=>({...current,amountPaid:Number(event.target.value)}))} onBlur={()=>commit()}/></div><input className="finance-notes" value={draft.notes} onChange={event=>setDraft(current=>({...current,notes:event.target.value}))} onBlur={()=>commit()} placeholder="Payment note…"/></td>

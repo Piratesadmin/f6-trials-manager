@@ -198,16 +198,12 @@ export default function App(){
   },[user,demo])
 
   useEffect(()=>{
-    if(!selectedId)return
     if(!database||!user||demo)return
-    return onValue(ref(database,`playerPhotos/${selectedId}`),snapshot=>setPlayerPhotos(current=>{
-      const next={...current}
-      const value=snapshot.val()
-      if(typeof value==='string'&&value)next[selectedId]=value
-      else delete next[selectedId]
-      return next
-    }))
-  },[selectedId,user,demo])
+    return onValue(ref(database,'playerPhotos'),snapshot=>{
+      const value=snapshot.val() as Record<string,unknown>|null
+      setPlayerPhotos(value?Object.fromEntries(Object.entries(value).filter((entry):entry is [string,string]=>typeof entry[1]==='string'&&Boolean(entry[1]))):{})
+    },()=>setSyncState('offline'))
+  },[user,demo])
 
   useEffect(()=>{
     if(!activeScheduleSessionId||!database||!user||demo)return
@@ -796,10 +792,11 @@ export default function App(){
   return <div className="app">
     <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={Boolean(user?.email && user.email === sharedLoginEmail)} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions}/>
     <main>
-      {page==='dashboard'&&<DashboardPage players={players} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
       {page==='schedule'&&<SchedulePage
         sessions={trialSessions}
         players={players}
+        playerPhotos={playerPhotos}
         saveSession={saveTrialSession}
         saveSessionNotes={saveTrialSessionNotes}
         saveSessions={saveTrialSessionSeries}
@@ -820,9 +817,9 @@ export default function App(){
         trialsMode={seasonSettings.trialsMode}
       />}
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
-      {page==='emails'&&<EmailsPage players={players} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions}/>}
-      {page==='teams'&&<TeamsPage players={players} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
-      {page==='finance'&&isAdmin&&<FinancePage players={players} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} onOpenPlayer={id=>openPlayer(id,'overview')}/>} 
+      {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions}/>}
+      {page==='teams'&&<TeamsPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
+      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} onOpenPlayer={id=>openPlayer(id,'overview')}/>}
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
       {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
       {page==='settings'&&isAdmin&&<SettingsPage

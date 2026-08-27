@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarClock, Check, CheckCircle2, ClipboardCheck, ClipboardList, Copy, Download, ExternalLink, FileWarning, History, Mail, Search, Send, UserRoundCheck } from 'lucide-react'
-import type { EmailSettings, EmailType, Player, TeamPlans, TrialSession } from '../types'
+import type { EmailSettings, EmailType, Player, PlayerPhotos, TeamPlans, TrialSession } from '../types'
 import { PageHeader } from '../components/PageHeader'
+import { PlayerAvatar } from '../components/PlayerAvatar'
 import { effectiveEmailFields, emailCcFor, emailFor, emailQueueStatus, emailSubjectFor, emailTypeFor, emailTypeLabel, emailValidation, mailtoFor, type EmailQueueStatus } from '../utils/email'
 import { deadlineStateLabel, formatDeadline, responseDeadlineDetails } from '../utils/deadline'
 import { offerTeamsLabel } from '../utils/offers'
@@ -10,6 +11,7 @@ import { teams } from '../data/constants'
 
 type Props = {
   players: Player[]
+  playerPhotos: PlayerPhotos
   playersReady: boolean
   teamAccessReady: boolean
   assignedTeams: string[]
@@ -34,7 +36,7 @@ const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
 
 const statusLabel: Record<EmailQueueStatus, string> = { 'needs-info': 'Needs info', ready: 'Ready to review', reviewed: 'Reviewed', sent: 'Sent' }
 
-export function EmailsPage({ players, playersReady, teamAccessReady, assignedTeams, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen, teamDivisions }: Props) {
+export function EmailsPage({ players, playerPhotos, playersReady, teamAccessReady, assignedTeams, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen, teamDivisions }: Props) {
   const queue = useMemo(() => players.filter(player => player.suitableTeams.length > 0), [players])
   const deadlineFor = (player: Player) => responseDeadlineDetails(player, sessions, settings.defaultResponseDeadline)
   const [statusFilter, setStatusFilter] = useState<'all' | EmailQueueStatus>('all')
@@ -115,7 +117,7 @@ export function EmailsPage({ players, playersReady, teamAccessReady, assignedTea
             const status = emailQueueStatus(player, settings, players, teamPlans, deadline)
             return <div className={`email-queue-item ${selected?.id === player.id ? 'selected' : ''}`} key={player.id}>
               <input type="checkbox" checked={checked.includes(player.id)} onChange={() => toggleChecked(player.id)} aria-label={`Select ${player.name}`}/>
-              <button onClick={() => setSelectedId(player.id)}><div className="email-avatar">{player.name.split(' ').map(part => part[0]).join('').slice(0,2)}</div><div><b>{player.name}</b><span>{emailTypeLabel(emailTypeFor(player))} · {offerTeamsLabel(player)}</span><small className={`email-status ${status}`}>{statusLabel[status]}</small>{emailTypeFor(player)!=='rejection'&&deadline.state!=='none'&&<small className={`deadline-badge ${deadline.state}`}>{deadlineStateLabel(deadline.state)}</small>}</div></button>
+              <button onClick={() => setSelectedId(player.id)}><PlayerAvatar player={player} photo={playerPhotos[player.id]} className="email-avatar"/><div><b>{player.name}</b><span>{emailTypeLabel(emailTypeFor(player))} · {offerTeamsLabel(player)}</span><small className={`email-status ${status}`}>{statusLabel[status]}</small>{emailTypeFor(player)!=='rejection'&&deadline.state!=='none'&&<small className={`deadline-badge ${deadline.state}`}>{deadlineStateLabel(deadline.state)}</small>}</div></button>
             </div>
           })}
           {!filtered.length && <div className="email-centre-empty"><Mail/><b>No messages match</b><span>Try another status, type or search.</span></div>}
@@ -126,7 +128,7 @@ export function EmailsPage({ players, playersReady, teamAccessReady, assignedTea
   </>
 }
 
-function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen, teamDivisions }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'|'teamAccessReady'|'assignedTeams'> & { player: Player }) {
+function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen, teamDivisions }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'|'teamAccessReady'|'assignedTeams'|'playerPhotos'> & { player: Player }) {
   const [copied, setCopied] = useState<'subject' | 'body' | ''>('')
   const deadline=responseDeadlineDetails(player,sessions,settings.defaultResponseDeadline)
   const emailType=emailTypeFor(player)
