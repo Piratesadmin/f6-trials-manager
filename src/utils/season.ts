@@ -1,5 +1,5 @@
 import type { ArchivedPlayersMap, EmailSettings, FinanceSettings, Player, PlayerFinanceMap, SeasonArchive, SeasonSettings, TeamPlans, TrialSession } from '../types'
-import { effectiveAmountOwed, emptyPlayerFinance } from './finance'
+import { effectiveAmountOwed, emptyPlayerFinance, recordedAmountPaid } from './finance'
 
 export const defaultSeasonSettings: SeasonSettings = { currentSeason: `${new Date().getFullYear()} season`, trialsMode: true }
 
@@ -28,7 +28,7 @@ export function createSeasonArchive(input: {
   const id = `${Date.now()}-${crypto.randomUUID()}`
   const confirmed = input.players.filter(player => player.decision === 'Offer accepted')
   const amountBilled = confirmed.reduce((total, player) => total + effectiveAmountOwed(player, input.playerFinance[player.id] || emptyPlayerFinance(player.id), input.financeSettings), 0)
-  const amountPaid = confirmed.reduce((total, player) => total + (input.playerFinance[player.id]?.amountPaid || 0), 0)
+  const amountPaid = confirmed.reduce((total, player) => total + recordedAmountPaid(input.playerFinance[player.id] || emptyPlayerFinance(player.id)), 0)
   const communicationsSent = input.players.reduce((total, player) => total + Object.keys(player.communicationHistory || {}).length, 0)
   const archive: SeasonArchive = {
     id,

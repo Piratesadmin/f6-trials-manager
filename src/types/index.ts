@@ -142,15 +142,49 @@ export type Player = {
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
-export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'finance' | 'activity' | 'archive' | 'settings'
+export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
 export type PlayerTab = 'overview' | 'assessment' | 'decision'
+export type FinanceView = 'overview' | 'forecast' | 'payments'
 export type SyncState = 'live' | 'saving' | 'offline'
 export type PositionTargets = Record<string, number>
 export type TeamPlans = Record<string, PositionTargets>
 export type PlayerStars = Record<string, boolean>
 export type PlayerPhotos = Record<string, string>
 
-export type PaymentPlan = '' | 'Fully paid' | '2 instalments' | 'Direct debit'
+export type PaymentPlan = '' | 'Fully paid' | '2 instalments' | 'Standing order' | 'Non paying' | 'Custom'
+
+export type CustomPaymentRuleFeeMode = 'existing' | 'fixed' | 'percentage'
+
+export type CustomPaymentRule = {
+  id: string
+  name: string
+  description: string
+  feeMode: CustomPaymentRuleFeeMode
+  feeValue: number
+  dueDates: string[]
+}
+
+export type FinancePayment = {
+  id: string
+  date: string
+  amount: number
+  reference: string
+  description: string
+  source: 'statement-pdf' | 'manual'
+  statementName?: string
+  recordedAt: number
+  recordedBy?: string
+}
+
+export type FinanceCommunicationKind = 'payment-instructions' | 'payment-reminder' | 'payment-receipt'
+
+export type FinanceCommunication = {
+  id: string
+  kind: FinanceCommunicationKind
+  subject: string
+  recordedAt: number
+  recordedBy?: string
+}
 
 export type PlayerFinance = {
   playerId: string
@@ -158,12 +192,56 @@ export type PlayerFinance = {
   usesStandardFee: boolean
   amountPaid: number
   paymentPlan: PaymentPlan
+  customPaymentRuleId: string
   notes: string
+  paymentReference: string
+  chargeCreatedAt?: number
+  payments: Record<string, FinancePayment>
+  communications: Record<string, FinanceCommunication>
   updatedAt?: number
   updatedBy?: string
 }
 
 export type PlayerFinanceMap = Record<string, PlayerFinance>
+
+export type FinanceForecastTeam = {
+  fullPlayers: number
+  halfPlayers: number
+  paygIncome: number
+  fullFee: number
+  halfFee: number
+  homeGames: number
+  awayGames: number
+  gameHours: number
+  gameVenueHourlyRate: number
+  officialsPerHomeGame: number
+  trainingSessions: number
+  trainingHours: number
+  trainingVenueHourlyRate: number
+  coachHourlyRate: number
+}
+
+export type FinanceForecastCostLine = {
+  id: string
+  label: string
+  teamAmounts: Record<string, number>
+}
+
+export type FinanceForecastClubCost = {
+  id: string
+  label: string
+  amount: number
+}
+
+export type FinanceForecast = {
+  seasonName: string
+  sourceNote: string
+  teams: Record<string, FinanceForecastTeam>
+  extraCosts: FinanceForecastCostLine[]
+  clubCosts: FinanceForecastClubCost[]
+  updatedAt?: number
+  updatedBy?: string
+}
 
 export type FinanceSettings = {
   nvlFee: number
@@ -171,7 +249,15 @@ export type FinanceSettings = {
   fullPaymentDueDate: string
   instalmentOneDueDate: string
   instalmentTwoDueDate: string
-  directDebitDueDates: string[]
+  standingOrderDueDates: string[]
+  customPaymentRules: CustomPaymentRule[]
+  bankName: string
+  bankAccountName: string
+  sortCode: string
+  accountNumber: string
+  financeContactEmail: string
+  bankPaymentInstructions: string
+  forecast: FinanceForecast
   updatedAt?: number
   updatedBy?: string
 }

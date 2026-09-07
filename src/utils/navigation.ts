@@ -1,4 +1,5 @@
-import type { PageKey, PlayerTab } from '../types'
+import type { FinanceView, PageKey, PlayerTab } from '../types'
+import type { WelfareView } from '../pages/WelfarePage'
 
 export type AppRoute = {
   page: PageKey
@@ -6,10 +7,13 @@ export type AppRoute = {
   playerTab?: PlayerTab
   sessionId?: string
   team?: string
+  financeView?: FinanceView
+  welfareView?: WelfareView
 }
 
-const pages: PageKey[] = ['dashboard','schedule','players','emails','teams','finance','activity','archive','settings']
+const pages: PageKey[] = ['dashboard','schedule','players','emails','teams','finance','activity','archive','settings','welfare']
 const playerTabs: PlayerTab[] = ['overview','assessment','decision']
+const financeViews: FinanceView[] = ['overview','forecast','payments']
 
 const safeDecode = (value = '') => {
   try { return decodeURIComponent(value) } catch { return '' }
@@ -31,6 +35,8 @@ export function parseAppHash(hash: string): AppRoute {
   if (page === 'emails') return { page, playerId: parts[1] || undefined }
   if (page === 'schedule') return { page, sessionId: parts[1] || undefined }
   if (page === 'teams') return { page, team: parts[1] || undefined }
+  if (page === 'finance') return { page, financeView: financeViews.includes(parts[1] as FinanceView) ? parts[1] as FinanceView : 'overview' }
+  if (page === 'welfare') return {page, welfareView: parts[1] === 'case' || parts[1] === 'inbox' ? parts[1] : 'submit'}
   return { page }
 }
 
@@ -44,6 +50,10 @@ export function appHashFor(route: AppRoute): string {
     parts.push(route.sessionId)
   } else if (route.page === 'teams' && route.team) {
     parts.push(route.team)
+  } else if (route.page === 'finance' && route.financeView && route.financeView !== 'overview') {
+    parts.push(route.financeView)
+  } else if (route.page === 'welfare' && route.welfareView && route.welfareView !== 'submit') {
+    parts.push(route.welfareView)
   }
   return `#/${parts.map(encodeURIComponent).join('/')}`
 }

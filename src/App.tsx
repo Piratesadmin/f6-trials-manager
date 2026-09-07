@@ -3,7 +3,7 @@ import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
-import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceSettings, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
+import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
@@ -31,6 +31,7 @@ import { FinancePage } from './pages/FinancePage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { ArchivePage } from './pages/ArchivePage'
+import { WelfarePage, type WelfareView } from './pages/WelfarePage'
 import { defaultSquadRole } from './utils/offers'
 import './App.css'
 
@@ -69,6 +70,8 @@ export default function App(){
   const [importOpen,setImportOpen]=useState(false)
   const [returningImportTeam,setReturningImportTeam]=useState('')
   const [playerTab,setPlayerTabState]=useState<PlayerTab>(initialRoute.playerTab||'decision')
+  const [financeView,setFinanceViewState]=useState<FinanceView>(initialRoute.financeView||'overview')
+  const [welfareView,setWelfareView]=useState<WelfareView>(initialRoute.welfareView||'submit')
   const [selectedTeam,setSelectedTeamState]=useState(initialRoute.team&&teams.includes(initialRoute.team)?initialRoute.team:teams[0])
   const [teamPlans,setTeamPlans]=useState<TeamPlans>(()=>{
     const stored = JSON.parse(localStorage.getItem('f6teamplans') || 'null') as TeamPlans | null
@@ -106,8 +109,9 @@ export default function App(){
     const stored=JSON.parse(localStorage.getItem('f6activitylog')||'[]') as ActivityLogEntry[]
     return stored
   })
-  const isAdmin=demo||Boolean(user?.email&&user.email===sharedLoginEmail)||coachProfile?.role==='admin'
-  const accountAccessReady=demo||Boolean(user?.email&&user.email===sharedLoginEmail)||Boolean(coachProfile)
+  const sharedPinAdmin=Boolean(user?.email&&user.email===sharedLoginEmail)
+  const isAdmin=demo||sharedPinAdmin||coachProfile?.role==='admin'
+  const accountAccessReady=demo||sharedPinAdmin||Boolean(coachProfile)
   const editableTeams=isAdmin?Object.keys(teamPlans):assignedTeamNames(coachProfile)
   const defaultTeam=editableTeams[0]||teams[0]
   const currentCoachId=user?.uid||'local-demo'
@@ -124,6 +128,8 @@ export default function App(){
     if(route.page==='players'){
       setPlayerTabState(route.playerTab||'decision')
     }
+    if(route.page==='finance')setFinanceViewState(route.financeView||'overview')
+    if(route.page==='welfare')setWelfareView(route.welfareView||'submit')
     if(route.page==='schedule')setRequestedSessionId(route.sessionId||'')
     if(route.page==='teams')setSelectedTeamState(route.team&&teams.includes(route.team)?route.team:defaultTeam)
   },[defaultTeam])
@@ -156,6 +162,7 @@ export default function App(){
 
   useEffect(()=>{if(seasonSettingsReady&&!seasonSettings.trialsMode&&page==='emails')navigate({page:'dashboard'},true)},[seasonSettingsReady,seasonSettings.trialsMode,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!isAdmin&&page==='settings')navigate({page:'dashboard'},true)},[accountAccessReady,isAdmin,page,navigate])
+  useEffect(()=>{if(!authLoading&&page==='welfare'&&!sharedPinAdmin)navigate({page:'dashboard'},true)},[authLoading,page,sharedPinAdmin,navigate])
 
   useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setFinanceSettings(defaultFinanceSettings);setUser(u);setAuthLoading(false)})},[])
   useEffect(()=>{
@@ -661,21 +668,32 @@ export default function App(){
   const savePlayerFinance=async(finance:PlayerFinance)=>{
     if(!isAdmin)return
     const stamped={...normalisePlayerFinance(finance.playerId,finance),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
-    const next={...playerFinance,[stamped.playerId]:stamped}
-    setPlayerFinance(next)
-    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`playerFinance/${stamped.playerId}`),stamped)}
-    else localStorage.setItem('f6playerfinance',JSON.stringify(next))
+    setPlayerFinance(current=>{
+      const next={...current,[stamped.playerId]:stamped}
+      if(!(database&&user&&!demo))localStorage.setItem('f6playerfinance',JSON.stringify(next))
+      return next
+    })
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      await runTransaction(ref(database,`playerFinance/${stamped.playerId}`),current=>{
+        const remote=normalisePlayerFinance(stamped.playerId,current)
+        return firebaseSafeValue({...stamped,paymentReference:stamped.paymentReference||remote.paymentReference,payments:{...remote.payments,...stamped.payments},communications:{...remote.communications,...stamped.communications},...(!stamped.chargeCreatedAt&&remote.chargeCreatedAt?{chargeCreatedAt:remote.chargeCreatedAt}:{})})
+      })
+    }
     const player=players.find(item=>item.id===stamped.playerId)
     await recordActivity({category:'finance',action:'player_finance_changed',summary:`Payment record updated for ${player?.name||'confirmed player'}`,detail:`Payment plan: ${stamped.paymentPlan||'Not selected'}.`,team:player?.offeredTeam||player?.suitableTeams[0]||'',entityType:'player',entityId:stamped.playerId})
   }
-  const saveFinanceSettings=async(settings:FinanceSettings)=>{
+  const saveFinanceSettings=async(settings:FinanceSettings,change:'settings'|'forecast'='settings')=>{
     if(!isAdmin)return
     const stamped={...normaliseFinanceSettings(settings),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
     setFinanceSettings(stamped)
     if(database&&user&&!demo){setSyncState('saving');await set(ref(database,'financeSettings'),stamped)}
     else localStorage.setItem('f6financesettings',JSON.stringify(stamped))
-    await recordActivity({category:'finance',action:'standard_fees_changed',summary:'Standard season fees updated',detail:'NVL and LVA fee settings were saved.',team:'',entityType:'settings',entityId:'financeSettings'})
+    await recordActivity(change==='forecast'
+      ? {category:'finance',action:'finance_forecast_changed',summary:`Finance forecast updated for ${stamped.forecast.seasonName}`,detail:'Membership, training, match and extra-cost assumptions were saved.',team:'',entityType:'settings',entityId:'financeForecast'}
+      : {category:'finance',action:'standard_fees_changed',summary:'Finance settings updated',detail:`NVL/LVA fees, payment dates and ${stamped.customPaymentRules.length} custom arrangement rule${stamped.customPaymentRules.length===1?'':'s'} were saved.`,team:'',entityType:'settings',entityId:'financeSettings'})
   }
+  const saveFinanceForecast=(forecast:FinanceForecast)=>saveFinanceSettings({...financeSettings,forecast:{...forecast,updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}},'forecast')
   const saveSeasonSettings=async(settings:SeasonSettings)=>{
     if(!isAdmin)return
     const stamped={...normaliseSeasonSettings(settings),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
@@ -779,6 +797,8 @@ export default function App(){
   const selectEmailPlayer=(id:string)=>navigate({page:'emails',playerId:id},true)
   const openTeam=(team:string)=>navigate({page:'teams',team})
   const selectTeam=(team:string)=>navigate({page:'teams',team},true)
+  const selectFinanceView=(financeView:FinanceView)=>navigate({page:'finance',financeView})
+  const navigateWelfare=(view:WelfareView)=>navigate({page:'welfare',welfareView:view})
   const selectScheduleSession=useCallback((id:string)=>{
     setActiveScheduleSessionId(id)
     if(page!=='schedule'||requestedSessionId)return
@@ -788,9 +808,10 @@ export default function App(){
 
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
+  if(page==='welfare')return sharedPinAdmin?<WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>navigate({page:'dashboard'})}/>:<div className="loading-page">Returning to Club Manager…</div>
 
   return <div className="app">
-    <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={Boolean(user?.email && user.email === sharedLoginEmail)} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions}/>
+    <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions}/>
     <main>
       {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
       {page==='schedule'&&<SchedulePage
@@ -819,7 +840,7 @@ export default function App(){
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions}/>}
       {page==='teams'&&<TeamsPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
-      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} onOpenPlayer={id=>openPlayer(id,'overview')}/>}
+      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView}/>}
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
       {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
       {page==='settings'&&isAdmin&&<SettingsPage
