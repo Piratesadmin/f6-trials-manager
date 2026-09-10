@@ -24,6 +24,7 @@ type Props = {
   setSelectedId: (id: string) => void
   onOpen: (id: string) => void
   teamDivisions: Record<string,string>
+  readOnly: boolean
 }
 
 const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
@@ -36,12 +37,12 @@ const statuses: { value: 'all' | EmailQueueStatus; label: string }[] = [
 
 const statusLabel: Record<EmailQueueStatus, string> = { 'needs-info': 'Needs info', ready: 'Ready to review', reviewed: 'Reviewed', sent: 'Sent' }
 
-export function EmailsPage({ players, playerPhotos, playersReady, teamAccessReady, assignedTeams, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen, teamDivisions }: Props) {
+export function EmailsPage({ players, playerPhotos, playersReady, teamAccessReady, assignedTeams, sessions, settings, teamPlans, save, markSent, selectedId, setSelectedId, onOpen, teamDivisions, readOnly }: Props) {
   const queue = useMemo(() => players.filter(player => player.suitableTeams.length > 0), [players])
   const deadlineFor = (player: Player) => responseDeadlineDetails(player, sessions, settings.defaultResponseDeadline)
   const [statusFilter, setStatusFilter] = useState<'all' | EmailQueueStatus>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | EmailType>('all')
-  const [teamFilter, setTeamFilter] = useState('assigned')
+  const [teamFilter, setTeamFilter] = useState(readOnly?'all':'assigned')
   const [query, setQuery] = useState('')
   const [checked, setChecked] = useState<string[]>([])
   const configuredTeams = teams.filter(team => assignedTeams.includes(team))
@@ -100,7 +101,7 @@ export function EmailsPage({ players, playerPhotos, playersReady, teamAccessRead
     </section>
     {deadlineWarnings>0&&<div className="email-deadline-banner"><CalendarClock/><div><b>{deadlineWarnings} response deadline{deadlineWarnings===1?' needs':'s need'} attention</b><span>Warnings begin 48 hours before the deadline calculated from when each email was recorded sent.</span></div></div>}
 
-    {checked.length > 0 && <div className="bulk-email-bar"><b>{checked.length} selected</b><span>Mark drafts as reviewed or export a handover list.</span><button onClick={markSelectedReviewed}><UserRoundCheck/>Mark reviewed</button><button onClick={() => setChecked([])}>Clear</button></div>}
+    {checked.length > 0 && <div className="bulk-email-bar"><b>{checked.length} selected</b><span>{readOnly?'Export a handover list.':'Mark drafts as reviewed or export a handover list.'}</span>{!readOnly&&<button onClick={markSelectedReviewed}><UserRoundCheck/>Mark reviewed</button>}<button onClick={() => setChecked([])}>Clear</button></div>}
 
     <section className="email-centre-layout">
       <aside className="email-queue-panel">
@@ -123,12 +124,12 @@ export function EmailsPage({ players, playerPhotos, playersReady, teamAccessRead
           {!filtered.length && <div className="email-centre-empty"><Mail/><b>No messages match</b><span>Try another status, type or search.</span></div>}
         </div>
       </aside>
-      {selected ? <EmailReview player={selected} sessions={sessions} settings={settings} players={players} teamPlans={teamPlans} save={save} markSent={markSent} onOpen={onOpen} teamDivisions={teamDivisions}/> : <div className="email-review-empty"><Mail/><h2>No email selected</h2><p>Prepare an offer, waiting-list or rejection decision from a player profile first.</p></div>}
+      {selected ? <EmailReview player={selected} sessions={sessions} settings={settings} players={players} teamPlans={teamPlans} save={save} markSent={markSent} onOpen={onOpen} teamDivisions={teamDivisions} readOnly={readOnly}/> : <div className="email-review-empty"><Mail/><h2>No email selected</h2><p>Prepare an offer, waiting-list or rejection decision from a player profile first.</p></div>}
     </section>
   </>
 }
 
-function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen, teamDivisions }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'|'teamAccessReady'|'assignedTeams'|'playerPhotos'> & { player: Player }) {
+function EmailReview({ player, sessions, settings, players, teamPlans, save, markSent, onOpen, teamDivisions, readOnly }: Omit<Props,'selectedId'|'setSelectedId'|'playersReady'|'teamAccessReady'|'assignedTeams'|'playerPhotos'> & { player: Player }) {
   const [copied, setCopied] = useState<'subject' | 'body' | ''>('')
   const deadline=responseDeadlineDetails(player,sessions,settings.defaultResponseDeadline)
   const emailType=emailTypeFor(player)
@@ -165,8 +166,8 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
     <div className="email-review-body">
       {tracksResponse&&<section className={`deadline-summary ${deadline.state==='none'?'on-track':deadline.state}`}><CalendarClock/><div><b>{deadline.effectiveDeadline?deadlineStateLabel(deadline.state):'72-hour response window'}</b><span>{deadline.effectiveDeadline?`${formatDeadline(deadline.effectiveDeadline)} · calculated from when the email was recorded sent`:'The clock begins when this email is recorded as sent.'}</span></div></section>}
       {emailType!=='rejection'&&<section className="email-decision-snapshot" aria-label="Saved player decision"><span className="email-decision-title"><ClipboardList/>Decision</span><strong className={recommendationClass}>{player.recommendation||'No recommendation'}</strong><span className="email-decision-teams">{player.suitableTeams.map(team=><b key={team}>{team}</b>)}</span></section>}
-      {(emailType==='offer'||emailType==='alternative')&&<OfferOptionsEditor player={player} save={save} compact teamDivisions={teamDivisions}/>}
-      {emailType==='rejection'?<section className="email-draft-settings rejection-only"><label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label></section>:<section className={`email-draft-settings ${emailType==='squad-confirmation'?'confirmation-only':''}`}>{tracksResponse&&<div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div>}<div className="email-signatory-field"><label>Email signatories<textarea className="email-signatories-input" value={player.emailDraft.coachName} placeholder={fields.coachName || 'Set email signatories'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using the relevant team coach and administrator names' : 'Custom sign-off for this email'}</small></label>{player.emailDraft.coachName&&<button type="button" onClick={()=>updateDraft('coachName','')}>Use team defaults</button>}</div><label className="full">Optional personal message<textarea value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label></section>}
+      {(emailType==='offer'||emailType==='alternative')&&<OfferOptionsEditor player={player} save={save} compact disabled={readOnly} teamDivisions={teamDivisions}/>}
+      {emailType==='rejection'?<section className="email-draft-settings rejection-only"><label className="full">Optional personal message<textarea disabled={readOnly} value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label></section>:<section className={`email-draft-settings ${emailType==='squad-confirmation'?'confirmation-only':''}`}>{tracksResponse&&<div className="receipt-deadline-setting"><CalendarClock/><span><b>Response timing</b><small>Players are asked to reply within 72 hours of receiving the email.</small></span></div>}<div className="email-signatory-field"><label>Email signatories<textarea disabled={readOnly} className="email-signatories-input" value={player.emailDraft.coachName} placeholder={fields.coachName || 'Set email signatories'} onChange={event => updateDraft('coachName', event.target.value)}/><small>{!player.emailDraft.coachName && fields.coachName ? 'Using the relevant team coach and administrator names' : 'Custom sign-off for this email'}</small></label>{!readOnly&&player.emailDraft.coachName&&<button type="button" onClick={()=>updateDraft('coachName','')}>Use team defaults</button>}</div><label className="full">Optional personal message<textarea disabled={readOnly} value={player.emailDraft.personalMessage} onChange={event => updateDraft('personalMessage', event.target.value)} placeholder="Add a short, player-specific paragraph if needed…"/></label></section>}
 
       {issues.length > 0 && <section className="email-checks"><div className="email-checks-title"><AlertTriangle/><div><b>Pre-send checks</b><span>{blockers.length ? `${blockers.length} item${blockers.length === 1 ? '' : 's'} must be fixed` : 'Warnings to review'}</span></div></div>{issues.map(issue => <div className={issue.level} key={issue.message}>{issue.level === 'blocker' ? <FileWarning/> : <AlertTriangle/>}<span>{issue.message}</span></div>)}</section>}
 
@@ -180,8 +181,8 @@ function EmailReview({ player, sessions, settings, players, teamPlans, save, mar
       <div className="email-review-actions">
         <button className="secondary" onClick={() => copy('body')}><Copy/>{copied === 'body' ? 'Copied' : 'Copy body'}</button>
         <a className={`secondary ${blockers.length ? 'disabled' : ''}`} href={blockers.length ? undefined : mailtoFor(player, settings, deadline)}><ExternalLink/>Open in email app</a>
-        {status !== 'sent' && <button className="review-button" disabled={Boolean(blockers.length)} onClick={() => save({ ...player, emailReviewStatus: 'reviewed' })}><Check/>Mark reviewed</button>}
-        <button className="primary" disabled={Boolean(blockers.length) || status === 'sent'} onClick={confirmSent}><Send/>{status === 'sent' ? 'Sent recorded' : emailType==='rejection'?'Mark rejected':'Mark as sent'}</button>
+        {!readOnly&&status !== 'sent' && <button className="review-button" disabled={Boolean(blockers.length)} onClick={() => save({ ...player, emailReviewStatus: 'reviewed' })}><Check/>Mark reviewed</button>}
+        {!readOnly&&<button className="primary" disabled={Boolean(blockers.length) || status === 'sent'} onClick={confirmSent}><Send/>{status === 'sent' ? 'Sent recorded' : emailType==='rejection'?'Mark rejected':'Mark as sent'}</button>}
       </div>
       <p className="manual-send-note"><AlertTriangle/>“Open in email app” creates a draft. “Mark as sent” only records your completed action; this portal does not send email automatically.</p>
 

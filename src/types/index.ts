@@ -341,7 +341,7 @@ export type TrialSession = {
   updatedBy?: string
 }
 
-export type CoachRole = 'admin' | 'team-admin' | 'coach' | 'assistant-coach'
+export type CoachRole = 'admin' | 'team-admin' | 'coach' | 'assistant-coach' | 'welfare'
 
 export type CoachProfile = {
   uid: string

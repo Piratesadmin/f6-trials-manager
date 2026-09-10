@@ -1,6 +1,6 @@
 import { httpsCallable } from 'firebase/functions'
 import { welfarePublicFunctions, welfareStaffFunctions } from './firebase'
-import type { WelfareCase, WelfareCaseSummary, WelfareCategory, WelfareMode, WelfareStatus } from './types'
+import type { WelfareCase, WelfareCaseSummary, WelfareCategory, WelfareStatus } from './types'
 
 function publicCallable<Request, Response>(name: string) {
   if (!welfarePublicFunctions) throw new Error('The confidential welfare service has not been configured.')
@@ -12,18 +12,18 @@ function staffCallable<Request, Response>(name: string) {
   return httpsCallable<Request, Response>(welfareStaffFunctions, name)
 }
 
-export async function submitWelfareCase(input: {mode: WelfareMode; category: WelfareCategory; urgent: boolean; message: string}) {
-  const result = await publicCallable<typeof input, {caseId: string; mode: WelfareMode; recoveryCode?: string}>('submitWelfareCase')(input)
+export async function submitWelfareCase(input: {category: WelfareCategory; urgent: boolean; message: string}) {
+  const result = await publicCallable<typeof input, {caseId: string; pin: string}>('submitWelfareCase')(input)
   return result.data
 }
 
-export async function getWelfareConversation(caseId: string, recoveryCode: string) {
-  const result = await publicCallable<{caseId: string; recoveryCode: string}, WelfareCase>('getWelfareConversation')({caseId, recoveryCode})
+export async function getWelfareConversation(caseId: string, pin: string) {
+  const result = await publicCallable<{caseId: string; pin: string}, WelfareCase>('getWelfareConversation')({caseId, pin})
   return result.data
 }
 
-export async function replyToWelfareConversation(caseId: string, recoveryCode: string, message: string) {
-  await publicCallable<{caseId: string; recoveryCode: string; message: string}, {updatedAt: number}>('replyToWelfareConversation')({caseId, recoveryCode, message})
+export async function replyToWelfareConversation(caseId: string, pin: string, message: string) {
+  await publicCallable<{caseId: string; pin: string; message: string}, {updatedAt: number}>('replyToWelfareConversation')({caseId, pin, message})
 }
 
 export async function listWelfareCases() {

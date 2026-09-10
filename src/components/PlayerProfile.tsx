@@ -24,6 +24,7 @@ type Props = {
   removePhoto: (player: Player) => Promise<void>
   deletePlayer: (player: Player) => Promise<void>
   isAdmin: boolean
+  readOnly: boolean
   trialsMode: boolean
 }
 
@@ -35,7 +36,7 @@ const tabs: { key: PlayerTab; label: string; icon: typeof UserRound }[] = [
 
 const recommendationClass = (recommendation: Recommendation) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, starred, toggleStar, photo, uploadPhoto, removePhoto, deletePlayer, isAdmin, trialsMode }: Props) {
+export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, starred, toggleStar, photo, uploadPhoto, removePhoto, deletePlayer, isAdmin, readOnly, trialsMode }: Props) {
   const average = averageRating(player)
   const completion = assessmentCompletion(player)
   const initials = player.name.split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2)
@@ -58,7 +59,7 @@ export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save,
           <span className={`recommendation-badge ${recommendationClass(player.recommendation)}`}>{player.recommendation || 'No recommendation yet'}</span>
         </div>
       </div>
-      <div className="profile-hero-actions">{isAdmin&&<button className="profile-delete-player" disabled={deleteBusy} onClick={removePlayer} aria-label={`Permanently delete ${player.name}`} title="Organization administrators only">{deleteBusy?<LoaderCircle className="spin"/>:<Trash2/>}<span>{deleteBusy?'Deleting…':'Delete player'}</span></button>}<button className={`profile-star ${starred?'starred':''}`} onClick={toggleStar} aria-label={starred?'Remove from my starred players':'Add to my starred players'} title={starred?'Remove from my starred players':'Add to my starred players'}><Star/></button><div className="profile-score" aria-label={average ? `Average rating ${average.toFixed(1)} out of 5` : 'Not yet rated'}>
+      <div className="profile-hero-actions">{isAdmin&&<button className="profile-delete-player" disabled={deleteBusy} onClick={removePlayer} aria-label={`Permanently delete ${player.name}`} title="Organization administrators only">{deleteBusy?<LoaderCircle className="spin"/>:<Trash2/>}<span>{deleteBusy?'Deleting…':'Delete player'}</span></button>}{!readOnly&&<button className={`profile-star ${starred?'starred':''}`} onClick={toggleStar} aria-label={starred?'Remove from my starred players':'Add to my starred players'} title={starred?'Remove from my starred players':'Add to my starred players'}><Star/></button>}<div className="profile-score" aria-label={average ? `Average rating ${average.toFixed(1)} out of 5` : 'Not yet rated'}>
         <div><Star/><strong>{average ? average.toFixed(1) : '—'}</strong><span>/ 5</span></div>
         <p>{completion}% assessed</p>
       </div></div>
@@ -68,11 +69,11 @@ export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save,
       {visibleTabs.map(({ key, label, icon: Icon }) => <button key={key} className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}><Icon/>{label}</button>)}
     </nav>
 
-    <div className="profile-content">
+    <fieldset className="profile-content read-only-fieldset" disabled={readOnly}>
       {activeTab === 'overview' && <Overview player={player} sessions={sessions} save={save} photo={photo} uploadPhoto={uploadPhoto} removePhoto={removePhoto}/>} 
       {activeTab === 'assessment' && <PlayerAssessment player={player} saveAssessment={saveAssessment} trialsMode={trialsMode}/>}
       {activeTab === 'decision' && <DecisionPanel key={player.id} player={player} saveDecision={saveDecision}/>}
-    </div>
+    </fieldset>
   </article>
 }
 

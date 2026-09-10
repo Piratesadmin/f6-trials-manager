@@ -4,39 +4,39 @@
     ".write": false,
     "players": {
       ".read": "auth != null",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      "$playerId": { ".write": "auth != null && newData.exists()" }
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      "$playerId": { ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && newData.exists()" }
     },
-    "emailSettings": { ".read": "auth != null", ".write": "auth != null" },
+    "emailSettings": { ".read": "auth != null", ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare'" },
     "trialSessions": {
       ".read": "auth != null",
-      ".write": "auth != null",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare'",
       "$sessionId": { ".validate": "!newData.exists() || (newData.hasChildren(['title','date']) && newData.child('title').isString() && newData.child('title').val().length <= 100 && newData.child('date').isString())" }
     },
     "playerStars": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare'",
         "$playerId": { ".validate": "newData.val() == true || !newData.exists()" }
       }
     },
     "playerPhotos": {
       ".read": "auth != null",
-      ".write": "auth != null",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare'",
       "$playerId": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 150000)" }
     },
     "sessionPhotos": {
       ".read": "auth != null",
-      ".write": "auth != null",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare'",
       "$sessionId": {
         "$photoId": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 300000)" }
       }
     },
     "playerFinance": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$playerId": {
         ".validate": "!newData.exists() || (newData.hasChildren(['playerId','amountOwed','usesStandardFee','amountPaid','paymentPlan','notes']) && newData.child('playerId').val() == $playerId && newData.child('amountOwed').isNumber() && newData.child('amountOwed').val() >= 0 && newData.child('usesStandardFee').isBoolean() && newData.child('amountPaid').isNumber() && newData.child('amountPaid').val() >= 0 && newData.child('paymentPlan').isString() && (newData.child('paymentPlan').val() == '' || newData.child('paymentPlan').val() == 'Fully paid' || newData.child('paymentPlan').val() == '2 instalments' || newData.child('paymentPlan').val() == 'Direct debit' || newData.child('paymentPlan').val() == 'Standing order' || newData.child('paymentPlan').val() == 'Non paying' || newData.child('paymentPlan').val() == 'Custom') && (!newData.child('customPaymentRuleId').exists() || (newData.child('customPaymentRuleId').isString() && newData.child('customPaymentRuleId').val().length <= 80)) && newData.child('notes').isString() && newData.child('notes').val().length <= 500)"
       }
@@ -45,7 +45,7 @@
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$coachUid": {
         ".read": "auth != null && (auth.uid == $coachUid || auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-        ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
         ".validate": "!newData.exists() || (newData.hasChildren(['coachUid','hourlyRate','updatedAt','updatedBy']) && newData.child('coachUid').val() == $coachUid && newData.child('hourlyRate').isNumber() && newData.child('hourlyRate').val() >= 0 && newData.child('hourlyRate').val() <= 1000 && newData.child('updatedAt').isNumber() && newData.child('updatedBy').isString() && newData.child('updatedBy').val().length <= 120)",
         "teamRates": {
           "$team": { ".validate": "($team == 'Aces' || $team == 'Ravens' || $team == 'Cobras' || $team == 'Coyotes' || $team == 'Llamas' || $team == 'Meerkats' || $team == 'Leopards' || $team == 'Pirates') && newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000" }
@@ -57,7 +57,7 @@
       "$coachUid": {
         ".read": "auth != null && (auth.uid == $coachUid || auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
         "$entryId": {
-          ".write": "auth != null && ((auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin') || (auth.uid == $coachUid && (root.child('coachProfiles').child(auth.uid).child('role').val() == 'coach' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'assistant-coach') && ((!data.exists() && newData.child('invoiceId').val() == '') || (data.exists() && data.child('invoiceId').val() == ''))))",
+          ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && ((auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin') || (auth.uid == $coachUid && (root.child('coachProfiles').child(auth.uid).child('role').val() == 'coach' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'assistant-coach') && ((!data.exists() && newData.child('invoiceId').val() == '') || (data.exists() && data.child('invoiceId').val() == ''))))",
           ".validate": "!newData.exists() || (newData.hasChildren(['id','coachUid','coachName','coachEmail','date','team','activity','hours','notes','season','invoiceId','createdAt','updatedAt']) && newData.child('id').val() == $entryId && newData.child('coachUid').val() == $coachUid && newData.child('coachName').isString() && newData.child('coachName').val().length <= 120 && newData.child('coachEmail').isString() && newData.child('coachEmail').val().length <= 200 && newData.child('date').isString() && newData.child('date').val().length == 10 && (newData.child('team').val() == 'Aces' || newData.child('team').val() == 'Ravens' || newData.child('team').val() == 'Cobras' || newData.child('team').val() == 'Coyotes' || newData.child('team').val() == 'Llamas' || newData.child('team').val() == 'Meerkats' || newData.child('team').val() == 'Leopards' || newData.child('team').val() == 'Pirates') && (newData.child('activity').val() == 'Training' || newData.child('activity').val() == 'Match' || newData.child('activity').val() == 'Trial' || newData.child('activity').val() == 'Other') && newData.child('hours').isNumber() && newData.child('hours').val() > 0 && newData.child('hours').val() <= 24 && newData.child('notes').isString() && newData.child('notes').val().length <= 500 && newData.child('season').isString() && newData.child('season').val().length <= 60 && newData.child('invoiceId').isString() && newData.child('invoiceId').val().length <= 100 && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber())"
         }
       }
@@ -67,7 +67,7 @@
       "$coachUid": {
         ".read": "auth != null && (auth.uid == $coachUid || auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
         "$invoiceId": {
-          ".write": "auth != null && ((auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin') || (auth.uid == $coachUid && (root.child('coachProfiles').child(auth.uid).child('role').val() == 'coach' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'assistant-coach') && !data.exists() && newData.child('status').val() == 'Submitted' && newData.child('rateBreakdown').exists()))",
+          ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && ((auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin') || (auth.uid == $coachUid && (root.child('coachProfiles').child(auth.uid).child('role').val() == 'coach' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'assistant-coach') && !data.exists() && newData.child('status').val() == 'Submitted' && newData.child('rateBreakdown').exists()))",
           ".validate": "!newData.exists() || (newData.hasChildren(['id','invoiceNumber','coachUid','coachName','coachEmail','entryIds','totalHours','hourlyRate','totalAmount','season','status','submittedAt']) && newData.child('id').val() == $invoiceId && newData.child('coachUid').val() == $coachUid && newData.child('invoiceNumber').isString() && newData.child('invoiceNumber').val().length <= 80 && newData.child('coachName').isString() && newData.child('coachName').val().length <= 120 && newData.child('coachEmail').isString() && newData.child('coachEmail').val().length <= 200 && newData.child('totalHours').isNumber() && newData.child('totalHours').val() > 0 && newData.child('totalHours').val() <= 10000 && newData.child('hourlyRate').isNumber() && newData.child('hourlyRate').val() >= 0 && newData.child('hourlyRate').val() <= 1000 && newData.child('totalAmount').isNumber() && newData.child('totalAmount').val() >= 0 && newData.child('totalAmount').val() <= 1000000 && (newData.child('rateBreakdown').exists() || (newData.child('totalAmount').val() >= newData.child('totalHours').val() * newData.child('hourlyRate').val() - 0.011 && newData.child('totalAmount').val() <= newData.child('totalHours').val() * newData.child('hourlyRate').val() + 0.011)) && newData.child('season').isString() && newData.child('season').val().length <= 60 && (newData.child('status').val() == 'Submitted' || newData.child('status').val() == 'Paid') && newData.child('submittedAt').isNumber() && (!newData.child('paidAt').exists() || newData.child('paidAt').isNumber()) && (!newData.child('paidBy').exists() || (newData.child('paidBy').isString() && newData.child('paidBy').val().length <= 120)))",
           "entryIds": { "$index": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" } },
           "rateBreakdown": {
@@ -78,7 +78,7 @@
     },
     "financeSettings": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       ".validate": "newData.hasChildren(['nvlFee','lvaFee']) && newData.child('nvlFee').isNumber() && newData.child('nvlFee').val() >= 0 && newData.child('lvaFee').isNumber() && newData.child('lvaFee').val() >= 0 && (!newData.child('fullPaymentDueDate').exists() || newData.child('fullPaymentDueDate').isString()) && (!newData.child('instalmentOneDueDate').exists() || newData.child('instalmentOneDueDate').isString()) && (!newData.child('instalmentTwoDueDate').exists() || newData.child('instalmentTwoDueDate').isString())",
       "directDebitDueDates": {
         "$index": { ".validate": "newData.isString()" }
@@ -109,19 +109,19 @@
     },
     "teamPlans": {
       ".read": "auth != null",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$team": {
-        ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('coachProfiles').child(auth.uid).child('teams').child($team).val() == true)",
+        ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('coachProfiles').child(auth.uid).child('teams').child($team).val() == true)",
         ".validate": "newData.hasChildren(['Setter','Outside','Middle','Opposite','Libero','All-rounder']) && newData.child('Setter').isNumber() && newData.child('Outside').isNumber() && newData.child('Middle').isNumber() && newData.child('Opposite').isNumber() && newData.child('Libero').isNumber() && newData.child('All-rounder').isNumber() && newData.child('Setter').val() + newData.child('Outside').val() + newData.child('Middle').val() + newData.child('Opposite').val() + newData.child('Libero').val() + newData.child('All-rounder').val() >= 17"
       }
     },
     "coachProfiles": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-        ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || (auth.uid == $uid && !data.exists() && newData.child('role').val() == 'coach' && !newData.child('teams').exists()))",
-        ".validate": "newData.hasChildren(['uid','email','displayName','role']) && newData.child('uid').val() == $uid && (newData.child('role').val() == 'coach' || newData.child('role').val() == 'assistant-coach' || newData.child('role').val() == 'admin' || (newData.child('role').val() == 'team-admin' && (!newData.child('teams').exists() || (newData.child('teams/Aces').val() == true && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Ravens').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Cobras').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Coyotes').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Llamas').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Meerkats').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Leopards').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Pirates').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists()))))",
+        ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || (auth.uid == $uid && !data.exists() && newData.child('role').val() == 'coach' && !newData.child('teams').exists()))",
+        ".validate": "newData.hasChildren(['uid','email','displayName','role']) && newData.child('uid').val() == $uid && (newData.child('role').val() == 'coach' || newData.child('role').val() == 'assistant-coach' || (newData.child('role').val() == 'welfare' && !newData.child('teams').exists()) || newData.child('role').val() == 'admin' || (newData.child('role').val() == 'team-admin' && (!newData.child('teams').exists() || (newData.child('teams/Aces').val() == true && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Ravens').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Cobras').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Coyotes').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Llamas').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Meerkats').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Leopards').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Leopards').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Pirates').exists()) || (newData.child('teams/Pirates').val() == true && !newData.child('teams/Aces').exists() && !newData.child('teams/Ravens').exists() && !newData.child('teams/Cobras').exists() && !newData.child('teams/Coyotes').exists() && !newData.child('teams/Llamas').exists() && !newData.child('teams/Meerkats').exists() && !newData.child('teams/Leopards').exists()))))",
         "teams": {
           "$team": { ".validate": "($team == 'Aces' || $team == 'Ravens' || $team == 'Cobras' || $team == 'Coyotes' || $team == 'Llamas' || $team == 'Meerkats' || $team == 'Leopards' || $team == 'Pirates') && newData.val() == true" }
         }
@@ -129,19 +129,19 @@
     },
     "seasonSettings": {
       ".read": "auth != null",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       ".validate": "newData.hasChildren(['currentSeason']) && newData.child('currentSeason').isString() && newData.child('currentSeason').val().length > 0 && newData.child('currentSeason').val().length <= 60 && (!newData.child('trialsMode').exists() || newData.child('trialsMode').isBoolean())"
     },
     "archivedPlayers": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$playerId": {
         ".validate": "!newData.exists() || (newData.hasChildren(['id','seasonName','archivedAt','archivedBy','archiveReason','player','photo']) && newData.child('id').val() == $playerId && newData.child('seasonName').isString() && newData.child('seasonName').val().length <= 60 && newData.child('archivedAt').isNumber() && newData.child('archivedBy').isString() && newData.child('archivedBy').val().length <= 120 && (newData.child('archiveReason').val() == 'Final rejection cleanup' || newData.child('archiveReason').val() == 'Outside confirmed squad cleanup') && newData.child('player').hasChildren(['name','email','decision']) && newData.child('photo').isString() && newData.child('photo').val().length <= 150000)"
       }
     },
     "seasonArchives": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
-      ".write": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$archiveId": {
         ".validate": "!newData.exists() || (newData.hasChildren(['id','seasonName','nextSeasonName','archivedAt','archivedBy','summary','snapshot']) && newData.child('id').val() == $archiveId && newData.child('seasonName').isString() && newData.child('seasonName').val().length <= 60 && newData.child('archivedAt').isNumber())"
       }
@@ -150,9 +150,19 @@
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       ".indexOn": ["timestamp"],
       "$entryId": {
-        ".write": "auth != null && !data.exists() && newData.exists() && newData.child('actorUid').val() == auth.uid",
+        ".write": "auth != null && root.child('coachProfiles').child(auth.uid).child('role').val() != 'welfare' && !data.exists() && newData.exists() && newData.child('actorUid').val() == auth.uid",
         ".validate": "newData.hasChildren(['id','timestamp','actorUid','actorName','actorEmail','category','action','summary','detail','team','entityType','entityId','season']) && newData.child('id').val() == $entryId && newData.child('timestamp').isNumber() && newData.child('actorUid').isString() && newData.child('actorName').isString() && newData.child('actorName').val().length <= 120 && newData.child('actorEmail').isString() && newData.child('category').isString() && newData.child('action').isString() && newData.child('summary').isString() && newData.child('summary').val().length <= 240 && newData.child('detail').isString() && newData.child('detail').val().length <= 500 && newData.child('team').isString() && newData.child('entityType').isString() && newData.child('entityId').isString() && newData.child('season').isString()"
       }
+    },
+    "welfareCases": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["updatedAt", "deleteAfter"]
+    },
+    "welfareAccessLog": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["deleteAfter"]
     }
   }
 }

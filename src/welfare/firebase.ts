@@ -1,29 +1,17 @@
 import { initializeApp } from 'firebase/app'
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
-import { getAuth } from 'firebase/auth'
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
-import { firebaseConfig, firebaseConfigured } from '../firebase'
+import { firebaseApp, firebaseConfig, firebaseConfigured } from '../firebase'
 
-const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY as string | undefined
-export const welfareConfigured = firebaseConfigured && Boolean(appCheckSiteKey)
+export const welfareConfigured = firebaseConfigured
 
-// Named clients keep public reports detached from any staff or Club Manager auth
-// session while still using the same underlying Firebase project.
+// The named public client has no Auth instance, so an existing Club Manager
+// identity is never attached to an anonymous report or case lookup.
 const welfarePublicApp = welfareConfigured ? initializeApp(firebaseConfig, 'f6-welfare-public') : null
-const welfareStaffApp = welfareConfigured ? initializeApp(firebaseConfig, 'f6-welfare-staff') : null
-
-if (appCheckSiteKey) {
-  for (const app of [welfarePublicApp, welfareStaffApp]) {
-    if (app) initializeAppCheck(app, {provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey), isTokenAutoRefreshEnabled: true})
-  }
-}
-
-export const welfareAuth = welfareStaffApp ? getAuth(welfareStaffApp) : null
 export const welfarePublicFunctions = welfarePublicApp
   ? getFunctions(welfarePublicApp, 'europe-west2')
   : null
-export const welfareStaffFunctions = welfareStaffApp
-  ? getFunctions(welfareStaffApp, 'europe-west2')
+export const welfareStaffFunctions = firebaseApp
+  ? getFunctions(firebaseApp, 'europe-west2')
   : null
 
 if (import.meta.env.DEV && import.meta.env.VITE_FIREBASE_FUNCTIONS_EMULATOR === 'true') {

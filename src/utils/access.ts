@@ -16,6 +16,8 @@ export function normaliseCoachProfile(uid: string, value: unknown, fallbackEmail
   const assigned = incoming.teams && typeof incoming.teams === 'object' ? incoming.teams : {}
   const role = incoming.role === 'admin'
     ? 'admin'
+    : incoming.role === 'welfare'
+      ? 'welfare'
     : incoming.role === 'team-admin'
       ? 'team-admin'
       : incoming.role === 'assistant-coach'
@@ -27,7 +29,7 @@ export function normaliseCoachProfile(uid: string, value: unknown, fallbackEmail
     email: typeof incoming.email === 'string' ? incoming.email : fallbackEmail,
     displayName: typeof incoming.displayName === 'string' && incoming.displayName.trim() ? incoming.displayName : createCoachProfile(uid, fallbackEmail).displayName,
     role,
-    teams: Object.fromEntries((role === 'team-admin' ? assignedTeams.slice(0,1) : assignedTeams).map(team => [team, true])),
+    teams: role === 'welfare' ? {} : Object.fromEntries((role === 'team-admin' ? assignedTeams.slice(0,1) : assignedTeams).map(team => [team, true])),
   }
 }
 
@@ -37,7 +39,7 @@ export function assignedTeamNames(profile: CoachProfile | null) {
 
 export function assignedCoachNameForTeam(profiles: CoachProfile[], team: string, preferredEmail = '') {
   const assigned = profiles
-    .filter(profile => profile.role !== 'admin' && profile.teams[team] && profile.displayName.trim())
+    .filter(profile => profile.role !== 'admin' && profile.role !== 'welfare' && profile.teams[team] && profile.displayName.trim())
     .sort((left, right) => left.displayName.localeCompare(right.displayName))
   const preferred = preferredEmail.trim().toLowerCase()
   return (preferred ? assigned.find(profile => profile.email.trim().toLowerCase() === preferred) : undefined)?.displayName.trim()
@@ -47,9 +49,9 @@ export function assignedCoachNameForTeam(profiles: CoachProfile[], team: string,
 }
 
 export function assignedEmailSignatoriesForTeam(profiles: CoachProfile[], team: string) {
-  const roleOrder: Record<CoachProfile['role'], number> = { coach: 0, 'assistant-coach': 1, 'team-admin': 2, admin: 3 }
+  const roleOrder: Record<CoachProfile['role'], number> = { coach: 0, 'assistant-coach': 1, 'team-admin': 2, admin: 3, welfare: 4 }
   return profiles
-    .filter(profile => profile.role !== 'admin' && profile.teams[team] && profile.displayName.trim())
+    .filter(profile => profile.role !== 'admin' && profile.role !== 'welfare' && profile.teams[team] && profile.displayName.trim())
     .sort((left, right) => roleOrder[left.role] - roleOrder[right.role] || left.displayName.localeCompare(right.displayName))
     .map(profile => {
       const roleLabel = profile.role === 'team-admin' ? 'Admin' : profile.role === 'assistant-coach' ? 'Assistant Coach' : 'Coach'

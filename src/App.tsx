@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
+import { LockKeyhole } from 'lucide-react'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
@@ -54,7 +55,9 @@ function recordsWithId(value:unknown){
 }
 
 export default function App(){
-  const initialRoute=parseAppHash(window.location.hash)
+  const cleanWelfarePath=/\/welfare\/?$/.test(window.location.pathname)
+  const cleanWelfareView=()=>window.location.hash==='#case'?'case':window.location.hash==='#inbox'?'inbox':'submit'
+  const initialRoute:AppRoute=cleanWelfarePath?{page:'welfare',welfareView:cleanWelfareView()}:parseAppHash(window.location.hash)
   const [user,setUser]=useState<User|null>(null)
   const [authLoading,setAuthLoading]=useState(firebaseConfigured)
   const [demo,setDemo]=useState(!firebaseConfigured)
@@ -117,6 +120,7 @@ export default function App(){
   })
   const sharedPinAdmin=Boolean(user?.email&&user.email===sharedLoginEmail)
   const isAdmin=demo||sharedPinAdmin||coachProfile?.role==='admin'
+  const isReadOnly=coachProfile?.role==='welfare'
   const accountAccessReady=demo||sharedPinAdmin||Boolean(coachProfile)
   const canUseTimesheets=isAdmin||coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach'
   const editableTeams=isAdmin?Object.keys(teamPlans):assignedTeamNames(coachProfile)
@@ -158,19 +162,19 @@ export default function App(){
   },[navigate,playerTab,selectedId])
 
   useEffect(()=>{
-    const handleHashChange=()=>applyRoute(parseAppHash(window.location.hash))
+    const handleHashChange=()=>cleanWelfarePath?setWelfareView(cleanWelfareView()):applyRoute(parseAppHash(window.location.hash))
     window.addEventListener('hashchange',handleHashChange)
+    if(cleanWelfarePath){setWelfareView(cleanWelfareView());return()=>window.removeEventListener('hashchange',handleHashChange)}
     const route=parseAppHash(window.location.hash)
     applyRoute(route)
     const canonicalHash=appHashFor(route)
     if(window.location.hash!==canonicalHash)window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${canonicalHash}`)
     return ()=>window.removeEventListener('hashchange',handleHashChange)
-  },[applyRoute])
+  },[applyRoute,cleanWelfarePath])
 
   useEffect(()=>{if(seasonSettingsReady&&!seasonSettings.trialsMode&&page==='emails')navigate({page:'dashboard'},true)},[seasonSettingsReady,seasonSettings.trialsMode,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!isAdmin&&page==='settings')navigate({page:'dashboard'},true)},[accountAccessReady,isAdmin,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!canUseTimesheets&&page==='timesheets')navigate({page:'dashboard'},true)},[accountAccessReady,canUseTimesheets,page,navigate])
-  useEffect(()=>{if(!authLoading&&page==='welfare'&&!sharedPinAdmin)navigate({page:'dashboard'},true)},[authLoading,page,sharedPinAdmin,navigate])
 
   useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setUser(u);setAuthLoading(false)})},[])
   useEffect(()=>{
@@ -308,6 +312,7 @@ export default function App(){
 
   const activityActor={uid:user?.uid||'local-demo',name:signedInCoachName||coachProfile?.displayName||user?.email||'Local demo',email:user?.email||''}
   const recordActivity=async(draft:ActivityDraft)=>{
+    if(isReadOnly)return
     const entry=createActivityEntry(draft,activityActor,seasonSettings.currentSeason)
     if(database&&user&&!demo){try{await set(ref(database,`auditLog/${entry.id}`),entry)}catch(error){console.warn('Activity record could not be saved. Publish the v0.20 Firebase rules.',error)}}else{setActivityLog(current=>{const next=[entry,...current].slice(0,500);localStorage.setItem('f6activitylog',JSON.stringify(next));return next})}
   }
@@ -450,8 +455,9 @@ export default function App(){
     }
     window.setTimeout(()=>window.location.reload(),700)
   }
-  const save=async(updated:Player,activityOverride?:ActivityDraft|null)=>{const previous=players.find(player=>player.id===updated.id);const stamped={...normalisePlayer(updated),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'};if(database&&user&&!demo){setSyncState('saving');const{id,...data}=stamped;await update(ref(database,`players/${id}`),data)}else{const next=players.map(p=>p.id===stamped.id?stamped:p);setPlayers(next);localStorage.setItem('f6players',JSON.stringify(next))}const activity=activityOverride===undefined?describePlayerChange(previous,stamped):activityOverride;if(activity)await recordActivity(activity)}
+  const save=async(updated:Player,activityOverride?:ActivityDraft|null)=>{if(isReadOnly)return;const previous=players.find(player=>player.id===updated.id);const stamped={...normalisePlayer(updated),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'};if(database&&user&&!demo){setSyncState('saving');const{id,...data}=stamped;await update(ref(database,`players/${id}`),data)}else{const next=players.map(p=>p.id===stamped.id?stamped:p);setPlayers(next);localStorage.setItem('f6players',JSON.stringify(next))}const activity=activityOverride===undefined?describePlayerChange(previous,stamped):activityOverride;if(activity)await recordActivity(activity)}
   const savePlayerDecision=async(playerId:string,expected:PlayerDecisionDraft,next:PlayerDecisionDraft):Promise<PlayerDecisionSaveResult>=>{
+    if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
     const previous=players.find(player=>player.id===playerId)
     const updatedAt=Date.now()
     const updatedBy=user?.email||'Local demo'
@@ -493,12 +499,14 @@ export default function App(){
     return 'saved'
   }
   const saveAssessment=async(updated:Player)=>{
+    if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
     const snapshotId=crypto.randomUUID()
     const recordedBy=activityActor.name
     const snapshot={id:snapshotId,assessment:{...updated.assessment},average:averageRating(updated),recommendation:updated.recommendation,strengths:updated.strengths,developmentAreas:updated.developmentAreas,suitableTeams:[...updated.suitableTeams],recordedAt:Date.now(),recordedBy}
     await save({...updated,assessmentHistory:{...updated.assessmentHistory,[snapshotId]:snapshot}},{category:'player',action:'assessment_saved',summary:`Saved a new assessment for ${updated.name}`,detail:`Overall average ${snapshot.average?snapshot.average.toFixed(1):'not rated'} · ${updated.recommendation||'No recommendation'}`,team:updated.offeredTeam||updated.suitableTeams[0]||'',entityType:'player',entityId:updated.id})
   }
   const importPlayers=async(newPlayers:Omit<Player,'id'>[])=>{
+    if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
     const stamped=newPlayers.map(player=>normalisePlayer({...player,id:crypto.randomUUID(),recommendation:'',suitableTeams:[],updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}))
     if(database&&user&&!demo){
       setSyncState('saving')
@@ -513,6 +521,7 @@ export default function App(){
     await recordActivity({category:'import',action:'players_imported',summary:`Imported ${stamped.length} player${stamped.length===1?'':'s'}`,detail:'CSV or Excel player import completed.',team:'',entityType:'settings',entityId:''})
   }
   const importTrialWorkbook=async(session:Omit<TrialSession,'id'>,importedPlayers:Omit<Player,'id'>[],existingSessionId?:string)=>{
+    if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
     const existingSession=existingSessionId?trialSessions.find(item=>item.id===existingSessionId):undefined
     if(existingSessionId&&!existingSession)throw new Error('The matching event no longer exists. Close the import and try again.')
     const sessionId=existingSession?.id||crypto.randomUUID()
@@ -638,6 +647,7 @@ export default function App(){
     await recordActivity({category:'settings',action:'club_settings_changed',summary:'Club communication and team settings updated',detail:'Email defaults, team details or calendar colours were saved.',team:'',entityType:'settings',entityId:'emailSettings'})
   }
   const saveTrialSession=async(session:TrialSession)=>{
+    if(isReadOnly)return
     const previous=trialSessions.find(item=>item.id===session.id)
     const stamped={...normaliseTrialSession(session.id,session),createdAt:previous?.createdAt||session.createdAt||Date.now(),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
     const affected=players.filter(player=>player.trialSessionId===session.id&&player.trialDate!==trialDateLabel(stamped.date))
@@ -656,6 +666,7 @@ export default function App(){
     await recordActivity({category:'schedule',action:previous?'session_updated':'session_created',summary:`${previous?'Updated':'Created'} ${stamped.title}`,detail:`${trialDateLabel(stamped.date)} · ${stamped.startTime||'Time not set'}`,team:stamped.teams.join(', '),entityType:'session',entityId:stamped.id})
   }
   const saveTrialSessionNotes=async(sessionId:string,notes:string)=>{
+    if(isReadOnly)return
     const session=trialSessions.find(item=>item.id===sessionId)
     if(!session)return
     const updatedAt=Date.now()
@@ -665,6 +676,7 @@ export default function App(){
     await recordActivity({category:'schedule',action:'session_notes_updated',summary:`Updated notes for ${session.title}`,detail:`${trialDateLabel(session.date)} · ${session.startTime||'Time not set'}`,team:session.teams.join(', '),entityType:'session',entityId:session.id})
   }
   const saveTrialSessionSeries=async(sessions:TrialSession[])=>{
+    if(isReadOnly)return
     if(!sessions.length)return
     const now=Date.now()
     const actor=user?.email||'Local demo'
@@ -683,6 +695,7 @@ export default function App(){
     await recordActivity({category:'schedule',action:'recurring_series_created',summary:`Created ${stamped.length} recurring sessions`,detail:stamped[0]?`${stamped[0].title} from ${trialDateLabel(stamped[0].date)}`:'Recurring training series',team:stamped[0]?.teams.join(', ')||'',entityType:'session',entityId:stamped[0]?.id||''})
   }
   const deleteTrialSession=async(sessionId:string)=>{
+    if(isReadOnly)return
     const affected=players.filter(player=>Boolean(trialRegistrationFor(player,sessionId)))
     if(database&&user&&!demo){
       setSyncState('saving')
@@ -699,6 +712,7 @@ export default function App(){
     await recordActivity({category:'schedule',action:'session_deleted',summary:`Deleted ${trialSessions.find(session=>session.id===sessionId)?.title||'club event'}`,detail:`${affected.length} player assignment${affected.length===1?'':'s'} cleared.`,team:'',entityType:'session',entityId:sessionId})
   }
   const markEmailSent=async(player:Player)=>{
+    if(isReadOnly)return
     const sentDecision=sentDecisionFor(player)
     if(!sentDecision)return
     const deadline=responseDeadlineDetails(player,trialSessions,activeEmailSettings.defaultResponseDeadline)
@@ -706,6 +720,7 @@ export default function App(){
     await save({ ...player, decision: sentDecision, emailReviewStatus: 'sent', communicationHistory: { ...player.communicationHistory, [entry.id]: entry } },{category:'email',action:'email_sent',summary:`${entry.type.replace('-',' ')} email marked sent to ${player.name}`,detail:entry.subject,team:player.offeredTeam||player.suitableTeams[0]||'',entityType:'player',entityId:player.id})
   }
   const togglePlayerStar=async(playerId:string)=>{
+    if(isReadOnly)return
     const next={...playerStars}
     if(next[playerId])delete next[playerId]
     else next[playerId]=true
@@ -714,6 +729,7 @@ export default function App(){
     else localStorage.setItem('f6playerstars',JSON.stringify(next))
   }
   const uploadPlayerPhoto=async(player:Player,file:File)=>{
+    if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
     const prepared=await preparePlayerPhoto(file)
     const photo=await blobToDataUrl(prepared)
     if(photo.length>150000)throw new Error('This photo is still too detailed after resizing. Try a simpler or more tightly cropped image.')
@@ -725,6 +741,7 @@ export default function App(){
     await recordActivity({category:'player',action:'photo_uploaded',summary:`Player photo updated for ${player.name}`,detail:'Photo stored in the protected player record.',team:player.offeredTeam||player.suitableTeams[0]||'',entityType:'player',entityId:player.id})
   }
   const removePlayerPhoto=async(player:Player)=>{
+    if(isReadOnly)return
     const next={...playerPhotos};delete next[player.id];setPlayerPhotos(next)
     if(database&&user&&!demo)await set(ref(database,`playerPhotos/${player.id}`),null)
     else localStorage.setItem('f6playerphotos',JSON.stringify(next))
@@ -732,6 +749,7 @@ export default function App(){
     await recordActivity({category:'player',action:'photo_removed',summary:`Player photo removed for ${player.name}`,detail:'',team:player.offeredTeam||player.suitableTeams[0]||'',entityType:'player',entityId:player.id})
   }
   const uploadSessionPhoto=async(session:TrialSession,file:File)=>{
+    if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
     const current=sessionPhotos[session.id]||{}
     if(Object.keys(current).length>=6)throw new Error('Each calendar event can contain up to 6 photos.')
     const prepared=await prepareEventPhoto(file)
@@ -745,6 +763,7 @@ export default function App(){
     await recordActivity({category:'schedule',action:'session_photo_uploaded',summary:`Added a photo to ${session.title}`,detail:trialDateLabel(session.date),team:session.teams.join(', '),entityType:'session',entityId:session.id})
   }
   const removeSessionPhoto=async(session:TrialSession,photoId:string)=>{
+    if(isReadOnly)return
     const current={...sessionPhotos[session.id]};delete current[photoId]
     const next={...sessionPhotos}
     if(Object.keys(current).length)next[session.id]=current
@@ -911,7 +930,11 @@ export default function App(){
   const openTeam=(team:string)=>navigate({page:'teams',team})
   const selectTeam=(team:string)=>navigate({page:'teams',team},true)
   const selectFinanceView=(financeView:FinanceView)=>navigate({page:'finance',financeView})
-  const navigateWelfare=(view:WelfareView)=>navigate({page:'welfare',welfareView:view})
+  const navigateWelfare=(view:WelfareView)=>{
+    if(!cleanWelfarePath){navigate({page:'welfare',welfareView:view});return}
+    setWelfareView(view)
+    window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${view==='submit'?'':`#${view}`}`)
+  }
   const selectScheduleSession=useCallback((id:string)=>{
     setActiveScheduleSessionId(id)
     if(page!=='schedule'||requestedSessionId)return
@@ -919,13 +942,13 @@ export default function App(){
     if(window.location.hash!==nextHash)window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${nextHash}`)
   },[page,requestedSessionId])
 
+  if(cleanWelfarePath||page==='welfare')return <WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>cleanWelfarePath?window.location.assign(window.location.pathname.replace(/welfare\/?$/,'')||'/'):navigate({page:'dashboard'})} user={user} accountRole={coachProfile?.role||null} accountLoading={authLoading||Boolean(user&&!coachProfile&&!sharedPinAdmin)}/>
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
-  if(page==='welfare')return sharedPinAdmin?<WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>navigate({page:'dashboard'})}/>:<div className="loading-page">Returning to Club Manager…</div>
 
   return <div className="app">
     <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions}/>
-    <main>
+    <main>{isReadOnly&&<div className="read-only-account-banner"><LockKeyhole/><div><b>Welfare account · read-only</b><span>You can view Club Manager information, but this account cannot change it.</span></div></div>}
       {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
       {page==='schedule'&&<SchedulePage
         sessions={trialSessions}
@@ -948,10 +971,11 @@ export default function App(){
         onSelectedSessionChange={selectScheduleSession}
         editableTeams={editableTeams}
         isAdmin={isAdmin}
+        readOnly={isReadOnly}
         trialsMode={seasonSettings.trialsMode}
       />}
-      {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
-      {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions}/>}
+      {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} readOnly={isReadOnly} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions} readOnly={isReadOnly}/>}
       {page==='teams'&&<TeamsPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
       {page==='timesheets'&&canUseTimesheets&&<TimesheetsPage isAdmin={isAdmin} currentUid={currentCoachId} currentEmail={user?.email||''} currentProfile={coachProfile} currentSeason={seasonSettings.currentSeason} coachProfiles={coachProfiles} hourlyRates={coachHourlyRates} entries={coachTimesheetEntries} invoices={coachInvoices} saveHourlyRate={saveCoachHourlyRate} saveEntry={saveCoachTimesheetEntry} deleteEntry={deleteCoachTimesheetEntry} submitInvoice={submitCoachInvoice} markInvoicePaid={markCoachInvoicePaid}/>}
       {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} coachProfiles={coachProfiles} coachInvoices={coachInvoices} timesheetEntries={coachTimesheetEntries} currentSeason={seasonSettings.currentSeason} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView} onOpenTimesheets={()=>navigatePage('timesheets')}/>}

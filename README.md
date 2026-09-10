@@ -4,6 +4,54 @@ A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. 
 
 Version 0.26 turns trialist cleanup into a recoverable archive, creating a searchable replacement pool for the remainder of the season.
 
+## Timesheets and coach invoices
+
+Coach and assistant-coach accounts can record dated hours against their assigned teams and submit draft entries as an invoice. Administrators act as the treasurer: they set each eligible coach's hourly rate for each assigned team, review the submitted entry breakdown, and mark invoices as paid. Multi-team invoices calculate each entry using its team's snapshotted rate. Submitted invoices automatically appear in the finance payment history and are reconciled against each team's planned coaching budget in the forecast; paid invoices retain their payment date and status. Rates, entries, and invoices are private to the coach and administrators and are included in full system backups.
+
+## Confidential Welfare channel
+
+The public route `/welfare` accepts anonymous reports without a Club Manager login. Every submission returns an unguessable case number and an eight-digit PIN. The reporter can use those details to read the conversation and reply; the application does not attach a login, player record, name or email to the case. Message content and infrastructure security logs can still identify someone, so the service does not promise technical untraceability.
+
+Welfare cases are stored in the existing Firebase Realtime Database but cannot be read or written directly from a browser. Callable Cloud Functions validate case credentials and perform every case operation. PINs are stored using a random salt and a slow scrypt hash, rather than in plain text.
+
+The signed-in inbox is available only to an individual Firebase Authentication account whose `coachProfiles` record has the exclusive `welfare` role. Administrators and coaching roles cannot read welfare cases. Welfare accounts can view the ordinary Club Manager application but Firebase rules prevent them from changing its data.
+
+### Welfare Firebase setup
+
+1. Upgrade the existing Firebase project to Blaze because Cloud Functions deployment requires billing, and configure a budget alert.
+2. Create the welfare officer in Firebase Authentication and ask them to sign in once. Their profile initially uses the normal `coach` default.
+3. Using an administrator account, open **Settings → Team permissions** and change that profile to **Welfare (read-only)**.
+4. Install and deploy the backend and updated Realtime Database rules:
+
+   ```bash
+   npm --prefix functions install
+   npx firebase-tools deploy --project YOUR_EXISTING_FIREBASE_PROJECT_ID --config firebase.welfare.json --only functions,database
+   ```
+
+No reCAPTCHA, App Check, Firestore database, custom claims or service-account claim script is required. Staff reads, replies and status changes are recorded under the backend-only `welfareAccessLog`. Closed cases expire after 180 days, open cases after two years from their latest activity, and access logs after one year.
+
+## Multi-team confirmed players
+
+- A player can be confirmed in more than one squad at the same time, for example an NVL team and an LVA team.
+- Each editable Team Planner has an **Add player directly** shortcut. An authorised coach can choose any live player and their squad position, then confirm them immediately without preparing, reviewing or recording an email.
+- Direct assignment preserves the player’s existing team memberships and communication history, so it also works when adding an NVL player to an LVA squad.
+- Each confirmed team stores its own playing position. Changing the position in one Team Planner does not overwrite the player’s position in another squad.
+- Accepting one team option leaves the player’s other prepared options in those teams’ planned squads, where an authorised coach can add the player to that team as well.
+- Removing a player from one confirmed squad leaves their other confirmed squad memberships intact.
+- Team counts, training and game attendance, archived squad totals, and Finance team filters recognise every confirmed team assignment.
+- Returning-player imports add the selected team without replacing an existing confirmed team.
+- Standard finance charges are added once per confirmed team: NVL + LVA uses the NVL fee plus the LVA fee, while two LVA squads use twice the LVA fee. The player still has one combined finance and payment record.
+- Existing single-team accepted records are upgraded automatically when loaded; no manual data migration or Firebase rule change is required.
+
+## Administrator system backups
+
+- **Settings → System backup** exports a timestamped JSON snapshot of all Club Manager application data: players, assessments, decisions, communication history, schedules, attendance, team plans, settings, finance, archives, app account profiles and permissions, stars, compressed photos and activity history.
+- Backup files contain personal and financial data and should be stored somewhere private and access-controlled.
+- Selecting a backup for import only validates and previews it. Restoring requires typing `RESTORE` and accepting a final confirmation.
+- The app automatically downloads a fresh pre-restore backup before replacing live application data.
+- The signed-in administrator profile and existing append-only audit entries are preserved during a restore. Missing historical audit entries are added where Firebase rules permit.
+- Firebase Authentication users and passwords are managed separately by Firebase and are not included. Restored coach profiles therefore still require the corresponding Firebase Authentication accounts to exist before those people can sign in.
+
 ## v0.26 archived players and replacement pool
 
 - Trialist cleanup now moves matching players out of live records and into **Seasons → Archived players** instead of deleting their profile permanently.
@@ -88,11 +136,12 @@ Version 0.26 turns trialist cleanup into a recoverable archive, creating a searc
 - Player decisions and the Email Centre can now offer one player several teams in one message.
 - Coaches tick the teams being offered and choose a playing position for every option.
 - Every team option records an expected squad role: Starting six, Frequent player, Rotational player, Development / improvement role, Training squad or Role to be discussed.
+- Each team option can keep that squad role for internal planning while omitting it from the generated player email.
 - Offer and alternative-offer templates list every option and include the relevant training, venue and competition details for each team.
 - The generated response paragraph asks for a reply within 72 hours of the trial session and invites the player to contact the club if that timing is not possible.
 - Pre-send checks validate every selected option and warn against each team and positional target independently.
 - The Email Centre queue, search and CSV handover export show all offered teams.
-- The Team Planner counts each option against its own team while an accepted player is confirmed only in the option they choose.
+- The Team Planner counts each option against its own team, and a player can later be confirmed in any number of those team options.
 - Existing Firebase records with a single legacy offer are upgraded safely in memory, so no database migration is required.
 - No Firebase rule change or new GitHub secret is required.
 
@@ -150,7 +199,7 @@ Choose a PIN with at least 6 digits. Avoid obvious values such as `123456`, the 
 
 ## Individual club accounts
 
-The sign-in screen offers **Club PIN** and **Individual login**. Coach and Team administrator accounts use Firebase's existing Email/Password authentication:
+The sign-in screen offers **Club PIN** and **Individual login**. Coach, Assistant coach and Team administrator accounts use Firebase's existing Email/Password authentication:
 
 1. Open **Firebase → Authentication → Users**.
 2. Choose **Add user**.
@@ -161,9 +210,11 @@ No extra GitHub secrets are required. Individual accounts identify the person's 
 
 Administrators can also edit the person's **Coach name** in that permissions row. The saved name appears automatically in offer, alternative-offer, waiting-list and rejection templates whenever that individual account is signed in. The shared PIN account continues to use the fallback name configured under **Settings → Club communication** because a shared login cannot identify which person is using it.
 
+Email signatures are role-aware and team-specific. Every coach assigned to an offered team is labelled, for example, `Adam Watkins - Aces Coach`; Assistant coaches use `Maria - Aces Assistant Coach`; and that team’s Team administrator is labelled `John - Aces Admin`. All relevant assigned staff are included together, and multi-team emails combine the signatories without duplicates.
+
 ## v0.16 coach names and 72-hour response deadlines
 
-- Individual coach and Team administrator accounts automatically sign email templates using the display name saved in their account profile.
+- Individual Coach, Assistant coach and Team administrator accounts automatically sign email templates using the display name saved in their account profile.
 - Administrators can correct or update coach names under **Settings → Team permissions**.
 - A scheduled player's response deadline is calculated exactly 72 hours after the trial session end time.
 - When no end time exists, the session start time is used; when neither time exists, the session date ends at 23:59 before the 72 hours are added.
@@ -195,8 +246,9 @@ Administrators can also edit the person's **Coach name** in that permissions row
 - Training and game events can be assigned to one or several club teams.
 - Games can record the opponent, home/away status, competition, venue and timings.
 - Training and games show the confirmed squad for every assigned team, with direct links to player profiles.
-- Trial events retain player assignment, RSVP information, payment status, attendance and post-trial decision reminders.
+- Trial events retain independent player assignment, RSVP information, payment status and attendance for each event, plus post-trial decision reminders.
 - Excel attendance imports always create Trial events.
+- Importing a later attendance workbook adds that event to each matching player without removing any of their earlier event registrations.
 - Players can only be assigned to Trial events, protecting email deadlines and decision reminders from training or game entries.
 - Existing schedule records automatically become Trial events, so no migration is required.
 - The Firebase path and rules remain unchanged; no new GitHub secret is required.
@@ -322,6 +374,8 @@ Each coach can select the star beside a player and use **Filters → Show only m
 
 Photos are reduced in the browser to a small JPEG thumbnail before upload and stored in the authenticated Realtime Database under `playerPhotos`. The original file is not retained. This avoids requiring Firebase Cloud Storage or an additional GitHub secret. Publish the supplied `firebase-database-rules.json` before using stars or photos on the live site.
 
+When a live player has a stored photo, that thumbnail replaces their initials throughout the dashboard, schedule rosters, Email Centre, Team Planner and Finance. Initials remain the fallback for players without a photo, and the shared photo map updates live through Firebase.
+
 ## v0.11 schedule, payment and attendance
 
 Open **Schedule** to:
@@ -334,11 +388,12 @@ Open **Schedule** to:
 - assign or unassign players from the session roster;
 - mark assigned players **Paid / Not paid** and **Attended / Not attended**;
 - see live assigned, paid and attended totals;
+- review an attending player in an assessment popup, then save and return to the same event;
 - open a player's full profile directly from the roster.
 
-The player Overview tab also contains the assigned session, payment status and attendance status. The Players filter panel can filter by a specific session, unassigned players, payment status and attendance.
+The player Overview tab lists every assigned trial event and allows RSVP, payment and attendance to be managed independently for each one. Players can be added to or removed from any number of Trial events. The Players filter panel can filter by a specific session, players with no event, payment status and attendance across their registrations.
 
-Sessions sync through Firebase under `trialSessions`. Existing player records receive empty `trialSessionId` and unpaid defaults automatically. An older free-text trial date remains visible until the player is assigned to one of the new scheduled sessions; it is not guessed or automatically matched.
+Sessions sync through Firebase under `trialSessions`; each player stores event-specific state under `trialRegistrations/{sessionId}`. Existing records with the older single `trialSessionId` fields are normalised into a registration automatically, so their current assignment is retained without a manual migration.
 
 ## v0.12 Excel player and schedule importer
 
@@ -352,7 +407,11 @@ The import window now accepts both `.csv` and `.xlsx` files. For Excel workbooks
 - ignores the Phone column completely;
 - identifies Going, Not answered and Can’t go players;
 - creates the calendar session at the same time as importing players;
+- detects an existing Trial event with the same normalised name, date and start time;
+- offers an explicit choice to update that event or create a separate event;
+- when updating, refreshes the imported event details and imported player responses while preserving event notes, recorded payment/attendance and players not listed in the new workbook;
 - assigns Going and Not answered players to the session;
+- preserves all earlier event assignments when an existing player appears in another workbook;
 - imports Can’t go players without placing them on the session roster;
 - updates an existing player profile when the email already exists, instead of creating a duplicate;
 - shows invalid or repeated rows before import.
@@ -361,14 +420,14 @@ The detected session name, date, times and venue remain editable in the preview.
 
 A plain `.xlsx` player spreadsheet can also be imported without creating a trial session. It recognises the Spond export headings for name, email, date of birth, interested divisions, primary position, second position, past playing experience and highest level played. Dates formatted by Excel are retained as `DD.MM.YYYY`; `All rounder` is normalised to `All-rounder`, while a blank or `None` second position is left empty. Existing email addresses are shown and skipped so that a routine player import cannot overwrite an existing profile.
 
-Trial response status is visible in the schedule roster and player Overview. It is also available as a player filter.
+Each event's trial response status is visible in the schedule roster and player Overview. It is also available as a player filter.
 
 ## v0.13 confirmed squads and finance
 
-- Set a player's Decision to **Offer accepted** to place them in the confirmed squad for their accepted team offer.
+- Confirm an offered team from its Team Planner to add that team to the player's confirmed squad assignments. The same player can be confirmed for additional team options later.
 - Each Team Planner has a separate **Confirmed squad** section. All authenticated coaches can see confirmed names and positions.
 - Administrators receive a **Finance** navigation item and dashboard summary; coach accounts do not.
-- Administrators can set the amount owed, record the amount paid, choose **Fully paid**, **2 instalments** or **Direct debit**, and add a short payment note.
+- Administrators can set the amount owed, record the amount paid, choose **Fully paid**, **2 instalments** or **Standing order**, and add a short payment note.
 - The treasurer view totals billed, collected and outstanding amounts and exports a CSV.
 - Finance data is stored separately under `playerFinance`, not in player profiles, and Firebase rules restrict it to the shared PIN administrator and accounts with the admin role.
 - Existing players and Firebase records remain compatible. Missing finance records start with no fee, no payment arrangement and £0 paid.
@@ -377,23 +436,38 @@ Trial response status is visible in the schedule roster and player Overview. It 
 
 - Administrators can set the **NVL standard fee** and **LVA standard fee** under Settings.
 - Aces and Ravens inherit the NVL standard; Cobras, Coyotes, Llamas, Meerkats, Leopards and Pirates inherit the LVA standard.
-- Confirmed players use their team's standard fee automatically.
-- The treasurer can switch an individual player from **Standard** to **Custom amount** for discounts, waivers or other exceptions.
+- Confirmed players use every confirmed team's standard fee automatically; multi-team players therefore owe the sum of those team fees.
+- The treasurer can switch an individual player from **Standard** to **Custom total** for discounts, waivers or other exceptions.
 - Existing v0.13 records with a manually entered amount remain custom, so the upgrade does not overwrite them.
 - The Finance page contains a pull-out **Financial insights** panel with collection progress, outstanding balance by team, payment-arrangement breakdowns and team-by-team progress bars.
 - Dashboard, Team Planner, CSV export and Finance totals all use the effective standard or custom fee consistently.
 - `financeSettings` and `playerFinance` are both protected by administrator-only Firebase rules. Publish the updated rules before using this release.
 
+## Bank-transfer collection and PDF reconciliation
+
+- Administrators configure the club bank name, account name, sort code, account number, finance contact and optional payment wording under **Settings → Season fees and payment schedule**.
+- **Finance → Create missing charges** assigns every confirmed player with a fee a stable, unique `F6-…` payment reference. Players confirmed for two teams continue to owe both team fees.
+- **Payments & emails** opens a private player drawer with payment-instruction, reminder and receipt drafts. Drafts open in the administrator's email client and can be recorded as sent manually.
+- Finance records default to **2 instalments** unless an administrator selects another arrangement. The dedicated `#/finance/payments` page lists all recorded payments and finance-email history, while the per-player drawer remains available for quick updates.
+- The Finance overview can sort players by name, outstanding balance or next deadline. Any filtered result—such as one team—can be selected in bulk and processed sequentially; closing one player's payment drawer advances to the next selected player until the batch is complete or stopped.
+- Finance email drafts include the selected arrangement's complete payment schedule. Two-instalment emails state that only half is initially due and list both amounts and dates; fully-paid emails show the full-fee deadline; standing-order emails divide the total across every configured collection date. Unconfigured dates are explicitly marked as still to be confirmed.
+- Payments are stored as an append-only ledger inside the existing administrator-only `playerFinance` record. The previous amount-paid field is retained as an opening/manual adjustment; statement and manual ledger entries are added to it for all totals and deadlines.
+- **Import PDF statement** reads a text-based PDF entirely in the browser. The PDF itself is not uploaded or retained. Exact payment-reference matches whose amount does not exceed the member's outstanding balance are selected automatically; every row must still pass through the review table before saving.
+- Re-importing the same PDF recognises rows that have already been recorded. Image-only/scanned PDFs are rejected rather than sent to an external OCR service.
+- The provisional parser expects common UK statement rows containing a date, description/reference, transaction amount and balance. The supplied placeholder image contained no statement columns, so extraction rules must be tuned against the actual bank PDF before relying on unattended matching.
+
 ## v0.15 Club Manager and Team administrators
 
 - The application is now named **F6 Club Manager** in the sign-in screen, sidebar, browser title and deployment workflow.
 - The GitHub repository and existing Pages address do not need to change.
-- Administrators can assign **Coach**, **Team administrator** or **Administrator** under Settings.
+- Administrators can assign **Coach**, **Assistant coach**, **Team administrator** or **Administrator** under Settings.
+- Assistant coaches have the same assigned-team access and multi-team assignment support as coaches; their role is identified separately in email signatures.
 - A Team administrator can view and edit player records like a coach and can edit exactly one assigned team in the Team Planner.
 - Selecting a different team for a Team administrator replaces their previous team assignment.
+- When a Team administrator account email matches a player email, that player's Finance arrangement is automatically set and locked to **Non paying**. Existing payment history is retained.
 - Team administrators cannot see Finance, financial insights or administrator-only fee settings.
 - Existing coach and administrator profiles remain compatible without migration.
-- The updated Firebase rules recognise `team-admin` and enforce a maximum of one team assignment for that role.
+- The updated Firebase rules recognise `assistant-coach` with Coach-equivalent assigned-team access, recognise `team-admin`, and enforce a maximum of one team assignment for Team administrators.
 
 ## v0.4 player profiles and assessment
 
@@ -417,10 +491,16 @@ Open **Teams** to:
 - see shortages and over-capacity warnings;
 - add recommended players, referrals and applicants to the plan;
 - change a planned position or move a player to another team;
+- adjust a confirmed player’s squad position directly from the confirmed squad;
 - prepare standard and alternative-team offers;
+- import returning players from Excel directly into the selected confirmed squad;
 - open the player's assessment from the planner.
 
 Team targets are stored in Firebase under `teamPlans`. The existing authentication rules already protect this path because database access requires an authenticated user.
+
+Returning-player imports accept `.xlsx` workbooks with either a full-name column or separate first/last-name columns. Supported profile details are imported, existing players are matched by email and updated, and phone number/address columns are deliberately ignored.
+
+Imported returning players are labelled throughout the player and confirmed-squad views. They enter the Email Centre with a dedicated squad-confirmation draft, including their confirmed team, current position and configured training details. Recording that email as sent keeps them confirmed. Coaches with team access can also reset a confirmed player from the squad card if the assignment needs to return to the initial workflow.
 
 Existing offer records are automatically included in the appropriate team plan. Existing players receive an empty `teamConsideration` value in the app until they are planned or next saved.
 

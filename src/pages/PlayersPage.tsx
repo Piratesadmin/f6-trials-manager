@@ -31,12 +31,13 @@ type Props = {
   removePhoto: (player: Player) => Promise<void>
   deletePlayer: (player: Player) => Promise<void>
   isAdmin: boolean
+  readOnly: boolean
   trialsMode: boolean
 }
 
 const recommendationClass = (recommendation: Player['recommendation']) => recommendation ? `recommendation-${recommendation.toLowerCase().replaceAll(' ', '-')}` : 'recommendation-none'
 
-export function PlayersPage({ players, sessions, selectedId, openPlayer, query, setQuery, assignedTeams, teamDivisions, save, saveDecision, saveAssessment, onImport, activeTab, setActiveTab, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, deletePlayer, isAdmin, trialsMode }: Props) {
+export function PlayersPage({ players, sessions, selectedId, openPlayer, query, setQuery, assignedTeams, teamDivisions, save, saveDecision, saveAssessment, onImport, activeTab, setActiveTab, playerStars, currentCoachId, toggleStar, selectedPhoto, uploadPhoto, removePhoto, deletePlayer, isAdmin, readOnly, trialsMode }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState<PlayerFilterValues>(emptyPlayerFilters)
   const [divisionFilter,setDivisionFilter]=useState('assigned')
@@ -73,7 +74,7 @@ export function PlayersPage({ players, sessions, selectedId, openPlayer, query, 
   }
 
   return <>
-    <PageHeader title="Players" subtitle={trialsMode?'Review profiles, record shared assessments and prepare decisions.':'View and maintain the club’s active player records.'} action={trialsMode?<button className="primary" onClick={onImport}>+ Import players / schedule</button>:undefined}/>
+    <PageHeader title="Players" subtitle={readOnly?'View player profiles and assessments.':trialsMode?'Review profiles, record shared assessments and prepare decisions.':'View and maintain the club’s active player records.'} action={trialsMode&&!readOnly?<button className="primary" onClick={onImport}>+ Import players / schedule</button>:undefined}/>
     <section className="workspace player-workspace">
       <div className="list-panel">
         <div className="toolbar">
@@ -90,7 +91,7 @@ export function PlayersPage({ players, sessions, selectedId, openPlayer, query, 
             const decisionReminder=decisionReminderDetails(player,sessions)
             const trialEventCount=Object.keys(trialRegistrationsFor(player)).length
             return <div key={player.id} className={`player-row player-card ${selected?.id === player.id ? 'selected' : ''}`}>
-              <button className={`player-star-toggle ${starred?'starred':''}`} aria-label={`${starred?'Remove':'Add'} ${player.name} ${currentCoachId==='local-demo'?'from the demo shortlist':'from my starred players'}`} title={starred?'Remove from my starred players':'Add to my starred players'} onClick={()=>toggleStar(player.id)}><Star/></button>
+              {!readOnly&&<button className={`player-star-toggle ${starred?'starred':''}`} aria-label={`${starred?'Remove':'Add'} ${player.name} ${currentCoachId==='local-demo'?'from the demo shortlist':'from my starred players'}`} title={starred?'Remove from my starred players':'Add to my starred players'} onClick={()=>toggleStar(player.id)}><Star/></button>}
               <button className="player-card-open" onClick={() => selectPlayer(player.id)}>
                 <div className="player-rating"><Star/><b>{rating ? rating.toFixed(1) : '—'}</b></div>
                 <div className="player-main"><div><b>{player.name}</b>{player.returningPlayer&&<span className="returning-player-badge compact">Returning</span>}{player.bibNumber && <span className="list-bib">#{player.bibNumber}</span>}</div><span>{player.interestedDivisions} · {player.position}{player.secondaryPosition?` / ${player.secondaryPosition}`:''}{trialEventCount?` · ${trialEventCount} trial event${trialEventCount===1?'':'s'}`:''}</span>{decisionReminder.state!=='none'?<small className={`decision-reminder-badge ${decisionReminder.state}`} title={decisionReminderDetailText(decisionReminder)}>{decisionReminder.label}</small>:<small className={`recommendation-badge ${player.decision==='Offer accepted'?'recommendation-offer-accepted':recommendationClass(player.recommendation)}`}>{player.decision==='Offer accepted'?'Offer accepted':player.recommendation || player.decision}</small>}</div>
@@ -101,7 +102,7 @@ export function PlayersPage({ players, sessions, selectedId, openPlayer, query, 
           {!filtered.length && <div className="empty-state compact">No players match these filters.</div>}
         </div>
       </div>
-      {selected?<PlayerProfile player={selected} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveDecision={saveDecision} saveAssessment={saveAssessment} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} deletePlayer={deletePlayer} isAdmin={isAdmin} trialsMode={trialsMode}/>:<div className="empty-state">No players match the selected division and filters.</div>}
+      {selected?<PlayerProfile player={selected} sessions={sessions} activeTab={activeTab} setActiveTab={setActiveTab} save={save} saveDecision={saveDecision} saveAssessment={saveAssessment} starred={Boolean(playerStars[selected.id])} toggleStar={()=>toggleStar(selected.id)} photo={selectedPhoto||selected.photoUrl} uploadPhoto={uploadPhoto} removePhoto={removePhoto} deletePlayer={deletePlayer} isAdmin={isAdmin} readOnly={readOnly} trialsMode={trialsMode}/>:<div className="empty-state">No players match these filters.</div>}
     </section>
   </>
 }

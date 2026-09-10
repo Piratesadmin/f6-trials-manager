@@ -15,6 +15,6 @@ export const firebaseConfig = {
 export const firebaseConfigured = Object.values(firebaseConfig).every(Boolean)
 export const sharedLoginEmail = import.meta.env.VITE_FIREBASE_LOGIN_EMAIL || ''
 
-const app = firebaseConfigured ? initializeApp(firebaseConfig) : null
-export const auth = app ? getAuth(app) : null
-export const database = app ? getDatabase(app) : null
+export const firebaseApp = firebaseConfigured ? initializeApp(firebaseConfig) : null
+export const auth = firebaseApp ? getAuth(firebaseApp) : null
+export const database = firebaseApp ? getDatabase(firebaseApp) : null
