@@ -214,5 +214,5 @@ function StaffInbox({user, accountRole, accountLoading}: Pick<Props, 'user' | 'a
 }
 
 export function WelfarePage(props: Props) {
-  return <div className="welfare-app"><WelfareHeader {...props}/><main>{props.view === 'submit' && <SubmissionPage navigate={props.navigate}/>} {props.view === 'case' && <ConversationPage/>} {props.view === 'inbox' && <StaffInbox user={props.user} accountRole={props.accountRole} accountLoading={props.accountLoading}/>}</main><footer>Flaming Six confidential welfare channel · Anonymous reports are kept separate from Club Manager records.</footer></div>
+  return <div className="welfare-app"><WelfareHeader {...props}/><main className={props.view === 'inbox' ? 'welfare-main-wide' : undefined}>{props.view === 'submit' && <SubmissionPage navigate={props.navigate}/>} {props.view === 'case' && <ConversationPage/>} {props.view === 'inbox' && <StaffInbox user={props.user} accountRole={props.accountRole} accountLoading={props.accountLoading}/>}</main><footer>Flaming Six confidential welfare channel · Anonymous reports are kept separate from Club Manager records.</footer></div>
 }
