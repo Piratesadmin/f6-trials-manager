@@ -25,6 +25,7 @@ function friendlyError(error: unknown) {
   if (message.includes('invalid-credential') || message.includes('wrong-password')) return 'That email address or password is incorrect.'
   if (message.includes('permission-denied')) return 'This account does not have access to the confidential welfare inbox.'
   if (message.includes('not-found')) return 'Those case details could not be verified.'
+  if (message.includes('currently at capacity')) return 'The welfare inbox is currently at capacity. Please try again later.'
   if (message.includes('resource-exhausted')) return 'Please wait before trying again.'
   if (message.includes('failed-precondition')) return message.replace(/^FirebaseError:\s*/, '')
   return 'The confidential welfare service could not complete that request. Please try again.'

@@ -28,7 +28,7 @@ The signed-in inbox is available only to an individual Firebase Authentication a
    npx firebase-tools deploy --project YOUR_EXISTING_FIREBASE_PROJECT_ID --config firebase.welfare.json --only functions,database
    ```
 
-No reCAPTCHA, App Check, Firestore database, custom claims or service-account claim script is required. Staff reads, replies and status changes are recorded under the backend-only `welfareAccessLog`. Closed cases expire after 180 days, open cases after two years from their latest activity, and access logs after one year.
+No reCAPTCHA, App Check, Firestore database, custom claims or service-account claim script is required. Staff reads, replies and status changes are recorded under the backend-only `welfareAccessLog`. The service accepts at most 50 cases with a `new` or `open` status; closing a case frees a place. Closed cases expire after 180 days, open cases after two years from their latest activity, and access logs after one year.
 
 ## Multi-team confirmed players
 

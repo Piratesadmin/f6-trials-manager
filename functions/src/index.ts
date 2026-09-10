@@ -13,6 +13,7 @@ const day = 24 * 60 * 60 * 1000
 const openRetention = 730 * day
 const closedRetention = 180 * day
 const auditRetention = 365 * day
+const maximumOpenCases = 50
 
 type CaseStatus = 'new' | 'open' | 'closed'
 type StoredCase = {
@@ -70,6 +71,17 @@ function createCaseId() {
 
 function createPin() {
   return randomInt(0, 100_000_000).toString().padStart(8, '0')
+}
+
+function openCaseCount(cases: Record<string, unknown>) {
+  return Object.values(cases).filter(value => {
+    const status = record(value).status
+    return status === 'new' || status === 'open'
+  }).length
+}
+
+function capacityError() {
+  return new HttpsError('resource-exhausted', 'The welfare inbox is currently at capacity. Please try again later.')
 }
 
 function publicCase(id: string, value: StoredCase) {
@@ -134,7 +146,7 @@ export const submitWelfareCase = onCall({region}, async request => {
   const now = Date.now()
   const messageId = db.ref(`welfareCases/${id}/messages`).push().key
   if (!messageId) throw new HttpsError('internal', 'The case could not be created.')
-  await db.ref(`welfareCases/${id}`).set({
+  const newCase: StoredCase = {
     category,
     urgent: input.urgent === true,
     status: 'new',
@@ -147,7 +159,14 @@ export const submitWelfareCase = onCall({region}, async request => {
     pinSalt,
     pinHash: hashPin(pin, pinSalt),
     messages: {[messageId]: {sender: 'reporter', text: message, createdAt: now}},
+  }
+  const casesReference = db.ref('welfareCases')
+  const result = await casesReference.transaction(current => {
+    const cases = record(current)
+    if (openCaseCount(cases) >= maximumOpenCases) return
+    return {...cases, [id]: newCase}
   })
+  if (!result.committed) throw capacityError()
   return {caseId: id, pin}
 })
 
@@ -233,10 +252,31 @@ export const updateWelfareCaseStatus = onCall({region}, async request => {
   const id = caseId(input.caseId)
   const status = typeof input.status === 'string' && statuses.has(input.status) ? input.status as CaseStatus : null
   if (!status) throw new HttpsError('invalid-argument', 'Choose a valid status.')
-  const reference = db.ref(`welfareCases/${id}`)
-  storedCase(await reference.get())
   const now = Date.now()
-  await reference.update({status, updatedAt: now, deleteAfter: now + (status === 'closed' ? closedRetention : openRetention)})
+  let abortReason: 'capacity' | 'not-found' | null = null
+  const casesReference = db.ref('welfareCases')
+  const result = await casesReference.transaction(current => {
+    abortReason = null
+    const cases = record(current)
+    const existing = cases[id]
+    if (!existing) {
+      abortReason = 'not-found'
+      return
+    }
+    const value = record(existing)
+    if (value.status === 'closed' && status !== 'closed' && openCaseCount(cases) >= maximumOpenCases) {
+      abortReason = 'capacity'
+      return
+    }
+    return {
+      ...cases,
+      [id]: {...value, status, updatedAt: now, deleteAfter: now + (status === 'closed' ? closedRetention : openRetention)},
+    }
+  })
+  if (!result.committed) {
+    if (abortReason === 'capacity') throw capacityError()
+    throw new HttpsError('not-found', 'Case not found.')
+  }
   await audit(actor, `set-status-${status}`, id)
   return {updatedAt: now}
 })
