@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Calculator, Check, Plus, RefreshCw, Save, Trash2, TrendingUp } from 'lucide-react'
 import { teams } from '../data/constants'
-import type { FinanceForecast, FinanceForecastTeam, Player } from '../types'
-import { financeForecastSummary } from '../utils/financeForecast'
+import type { CoachInvoiceMap, CoachTimesheetEntryMap, FinanceForecast, FinanceForecastTeam, Player } from '../types'
+import { financeForecastSummary, forecastCoachCostForTeam } from '../utils/financeForecast'
 import { formatCurrency } from '../utils/finance'
 import { confirmedTeamNames } from '../utils/player'
+import { coachInvoiceFinanceSummary, formatHours } from '../utils/timesheets'
 
 type Props = {
   forecast: FinanceForecast
   players: Player[]
+  coachInvoices: CoachInvoiceMap
+  timesheetEntries: CoachTimesheetEntryMap
+  currentSeason: string
   saveForecast: (forecast: FinanceForecast) => void | Promise<void>
 }
 
@@ -26,12 +30,18 @@ const inputFields: Array<{key:keyof FinanceForecastTeam; label:string; short:str
 
 function moneyClass(value:number){return value<0?'negative':value>0?'positive':''}
 
-export function FinanceForecastPage({forecast,players,saveForecast}:Props){
+export function FinanceForecastPage({forecast,players,coachInvoices,timesheetEntries,currentSeason,saveForecast}:Props){
   const [draft,setDraft]=useState(forecast)
   const [saving,setSaving]=useState(false)
   const [saved,setSaved]=useState(false)
   useEffect(()=>setDraft(forecast),[forecast])
   const summary=useMemo(()=>financeForecastSummary(draft),[draft])
+  const invoiceSummary=useMemo(()=>coachInvoiceFinanceSummary(coachInvoices,timesheetEntries,currentSeason),[coachInvoices,timesheetEntries,currentSeason])
+  const teamInvoiceVariance=Object.fromEntries(teams.map(team=>[team,Math.max(0,invoiceSummary.byTeam[team].invoiced-forecastCoachCostForTeam(team,draft))]))
+  const invoiceVariance=teams.reduce((total,team)=>total+teamInvoiceVariance[team],0)
+  const adjustedTeamCosts=summary.teamCosts+invoiceVariance
+  const adjustedTotalCost=summary.totalCost+invoiceVariance
+  const adjustedNet=summary.income-adjustedTotalCost
   const dirty=JSON.stringify(draft)!==JSON.stringify(forecast)
   const canSave=dirty||!forecast.updatedAt
 
@@ -63,13 +73,17 @@ export function FinanceForecastPage({forecast,players,saveForecast}:Props){
     <section className="forecast-source-note"><Calculator/><label><span>Source / assumptions note</span><input value={draft.sourceNote} maxLength={300} onChange={event=>setDraft({...draft,sourceNote:event.target.value})}/></label></section>
     <section className="stats forecast-stats">
       <div><TrendingUp/><span>Forecast income</span><b>{formatCurrency(summary.income)}</b><small>{summary.fullFeeEquivalents.toFixed(1)} full-fee equivalents</small></div>
-      <div><Calculator/><span>Team costs</span><b>{formatCurrency(summary.teamCosts)}</b><small>Training, matches and extra costs</small></div>
-      <div><Calculator/><span>Club-wide costs</span><b>{formatCurrency(summary.clubCosts)}</b><small>Held once at club level</small></div>
-      <div className={summary.net<0?'forecast-loss-stat':''}>{summary.net<0?<AlertTriangle/>:<TrendingUp/>}<span>Forecast net</span><b>{formatCurrency(summary.net)}</b><small>Break-even full fee {formatCurrency(summary.breakEvenFullFee)}</small></div>
+      <div><Calculator/><span>Forecast costs</span><b>{formatCurrency(adjustedTotalCost)}</b><small>Includes coach commitments without double-counting budget</small></div>
+      <div><Calculator/><span>Coach invoices</span><b>{formatCurrency(invoiceSummary.totalAmount)}</b><small>{formatCurrency(invoiceSummary.submittedAmount)} awaiting · {formatCurrency(invoiceSummary.paidAmount)} paid</small></div>
+      <div className={adjustedNet<0?'forecast-loss-stat':''}>{adjustedNet<0?<AlertTriangle/>:<TrendingUp/>}<span>Forecast net</span><b>{formatCurrency(adjustedNet)}</b><small>{invoiceVariance?`${formatCurrency(invoiceVariance)} above planned coach budget`:`Coach invoices within the ${formatCurrency(teams.reduce((total,team)=>total+forecastCoachCostForTeam(team,draft),0))} budget`}</small></div>
+    </section>
+    <section className="forecast-panel coach-invoice-forecast">
+      <header><div><span className="eyebrow">LIVE COACH COSTS</span><h2>Coach invoices against forecast</h2><p>Submitted and paid invoices are committed costs. They are matched against the planned coaching budget, so the forecast does not count the same coaching cost twice.</p></div><strong>{invoiceSummary.invoices.length} invoice{invoiceSummary.invoices.length===1?'':'s'} · {formatHours(invoiceSummary.totalHours)}</strong></header>
+      <div className="forecast-table-wrap"><table className="forecast-summary-table"><thead><tr><th>Team</th><th>Planned coach budget</th><th>Invoiced</th><th>Awaiting payment</th><th>Paid</th><th>Budget remaining</th><th>Variance</th></tr></thead><tbody>{teams.map(team=>{const actual=invoiceSummary.byTeam[team];const planned=forecastCoachCostForTeam(team,draft);const variance=actual.invoiced-planned;return <tr key={team}><th>{team}</th><td>{formatCurrency(planned)}</td><td><strong>{formatCurrency(actual.invoiced)}</strong><small>{formatHours(actual.hours)}</small></td><td>{formatCurrency(actual.submitted)}</td><td>{formatCurrency(actual.paid)}</td><td>{formatCurrency(Math.max(0,planned-actual.invoiced))}</td><td className={moneyClass(-variance)}>{variance>0?`+${formatCurrency(variance)}`:formatCurrency(variance)}</td></tr>})}</tbody><tfoot><tr><th>All teams</th><td>{formatCurrency(teams.reduce((total,team)=>total+forecastCoachCostForTeam(team,draft),0))}</td><td>{formatCurrency(invoiceSummary.totalAmount)}</td><td>{formatCurrency(invoiceSummary.submittedAmount)}</td><td>{formatCurrency(invoiceSummary.paidAmount)}</td><td>{formatCurrency(teams.reduce((total,team)=>total+Math.max(0,forecastCoachCostForTeam(team,draft)-invoiceSummary.byTeam[team].invoiced),0))}</td><td>{invoiceVariance?`+${formatCurrency(invoiceVariance)}`:formatCurrency(0)}</td></tr></tfoot></table></div>
     </section>
     <section className="forecast-panel">
       <header><div><span className="eyebrow">TEAM SUMMARY</span><h2>Forecast P&amp;L</h2><p>Team contribution is shown before club-wide costs.</p></div></header>
-      <div className="forecast-table-wrap"><table className="forecast-summary-table"><thead><tr><th>Team</th><th>Income</th><th>Training</th><th>Home games</th><th>Away games</th><th>Extra costs</th><th>Total cost</th><th>Contribution</th></tr></thead><tbody>{teams.map(team=>{const result=summary.teamResults[team];return <tr key={team}><th>{team}</th><td>{formatCurrency(result.income)}</td><td>{formatCurrency(result.trainingCost)}</td><td>{formatCurrency(result.homeGameCost)}</td><td>{formatCurrency(result.awayGameCost)}</td><td>{formatCurrency(result.extraCost)}</td><td>{formatCurrency(result.totalCost)}</td><td className={moneyClass(result.contribution)}><strong>{formatCurrency(result.contribution)}</strong></td></tr>})}</tbody><tfoot><tr><th>All teams</th><td>{formatCurrency(summary.income)}</td><td colSpan={4}></td><td>{formatCurrency(summary.teamCosts)}</td><td className={moneyClass(summary.income-summary.teamCosts)}><strong>{formatCurrency(summary.income-summary.teamCosts)}</strong></td></tr><tr><th>Club forecast</th><td colSpan={5}>After {formatCurrency(summary.clubCosts)} club-wide costs</td><td>{formatCurrency(summary.totalCost)}</td><td className={moneyClass(summary.net)}><strong>{formatCurrency(summary.net)}</strong></td></tr></tfoot></table></div>
+      <div className="forecast-table-wrap"><table className="forecast-summary-table"><thead><tr><th>Team</th><th>Income</th><th>Training</th><th>Home games</th><th>Away games</th><th>Extra costs</th><th>Coach variance</th><th>Total cost</th><th>Contribution</th></tr></thead><tbody>{teams.map(team=>{const result=summary.teamResults[team];const totalCost=result.totalCost+teamInvoiceVariance[team];const contribution=result.income-totalCost;return <tr key={team}><th>{team}</th><td>{formatCurrency(result.income)}</td><td>{formatCurrency(result.trainingCost)}</td><td>{formatCurrency(result.homeGameCost)}</td><td>{formatCurrency(result.awayGameCost)}</td><td>{formatCurrency(result.extraCost)}</td><td>{formatCurrency(teamInvoiceVariance[team])}</td><td>{formatCurrency(totalCost)}</td><td className={moneyClass(contribution)}><strong>{formatCurrency(contribution)}</strong></td></tr>})}</tbody><tfoot><tr><th>All teams</th><td>{formatCurrency(summary.income)}</td><td colSpan={5}></td><td>{formatCurrency(adjustedTeamCosts)}</td><td className={moneyClass(summary.income-adjustedTeamCosts)}><strong>{formatCurrency(summary.income-adjustedTeamCosts)}</strong></td></tr><tr><th>Club forecast</th><td colSpan={6}>After {formatCurrency(summary.clubCosts)} club-wide costs</td><td>{formatCurrency(adjustedTotalCost)}</td><td className={moneyClass(adjustedNet)}><strong>{formatCurrency(adjustedNet)}</strong></td></tr></tfoot></table></div>
     </section>
     <section className="forecast-panel">
       <header><div><span className="eyebrow">INCOME INPUTS</span><h2>Membership and PAYG income</h2><p>Fees can differ by team. Half-fee players are priced separately.</p></div><button className="secondary" onClick={useCurrentSquads}><RefreshCw/>Use current squad counts</button></header>

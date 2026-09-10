@@ -142,7 +142,7 @@ export type Player = {
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
-export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
+export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'timesheets' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
 export type PlayerTab = 'overview' | 'assessment' | 'decision'
 export type FinanceView = 'overview' | 'forecast' | 'payments'
 export type SyncState = 'live' | 'saving' | 'offline'
@@ -261,6 +261,58 @@ export type FinanceSettings = {
   updatedAt?: number
   updatedBy?: string
 }
+
+export type TimesheetActivity = 'Training' | 'Match' | 'Trial' | 'Other'
+
+export type CoachHourlyRate = {
+  coachUid: string
+  hourlyRate: number
+  teamRates: Record<string, number>
+  updatedAt: number
+  updatedBy: string
+}
+
+export type CoachHourlyRateMap = Record<string, CoachHourlyRate>
+
+export type CoachTimesheetEntry = {
+  id: string
+  coachUid: string
+  coachName: string
+  coachEmail: string
+  date: string
+  team: string
+  activity: TimesheetActivity
+  hours: number
+  notes: string
+  season: string
+  invoiceId: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type CoachTimesheetEntryMap = Record<string, Record<string, CoachTimesheetEntry>>
+
+export type CoachInvoiceStatus = 'Submitted' | 'Paid'
+
+export type CoachInvoice = {
+  id: string
+  invoiceNumber: string
+  coachUid: string
+  coachName: string
+  coachEmail: string
+  entryIds: string[]
+  totalHours: number
+  hourlyRate: number
+  rateBreakdown: Record<string, number>
+  totalAmount: number
+  season: string
+  status: CoachInvoiceStatus
+  submittedAt: number
+  paidAt?: number
+  paidBy?: string
+}
+
+export type CoachInvoiceMap = Record<string, Record<string, CoachInvoice>>
 
 export type ClubEventType = 'trial' | 'training' | 'game'
 export type GameLocation = '' | 'Home' | 'Away'

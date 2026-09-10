@@ -10,6 +10,9 @@ export const systemBackupPaths = [
   'playerPhotos',
   'sessionPhotos',
   'coachProfiles',
+  'coachHourlyRates',
+  'coachTimesheetEntries',
+  'coachInvoices',
   'archivedPlayers',
   'seasonArchives',
   'auditLog',
@@ -45,11 +48,13 @@ export function parseSystemBackup(text: string): SystemBackup {
   if (typeof parsed.exportedAt !== 'string' || Number.isNaN(Date.parse(parsed.exportedAt))) throw new Error('The backup export date is missing or invalid.')
   if (!isRecord(parsed.data)) throw new Error('The backup data is missing or invalid.')
   const backupData = parsed.data as Record<string, unknown>
-  const missing = systemBackupPaths.filter(path => !Object.hasOwn(backupData, path))
+  const optionalLegacyPaths = new Set<SystemBackupPath>(['coachHourlyRates','coachTimesheetEntries','coachInvoices'])
+  const missing = systemBackupPaths.filter(path => !Object.hasOwn(backupData, path) && !optionalLegacyPaths.has(path))
   if (missing.length) throw new Error(`The backup is incomplete. Missing: ${missing.join(', ')}.`)
-  const invalid = systemBackupPaths.filter(path => backupData[path] !== null && !isRecord(backupData[path]))
+  const invalid = systemBackupPaths.filter(path => Object.hasOwn(backupData,path) && backupData[path] !== null && !isRecord(backupData[path]))
   if (invalid.length) throw new Error(`The backup contains invalid collections: ${invalid.join(', ')}.`)
-  return parsed as SystemBackup
+  const data=Object.fromEntries(systemBackupPaths.map(path=>[path,Object.hasOwn(backupData,path)?backupData[path]:null])) as SystemBackupData
+  return {...parsed,data} as SystemBackup
 }
 
 export function systemBackupSummary(backup: SystemBackup) {

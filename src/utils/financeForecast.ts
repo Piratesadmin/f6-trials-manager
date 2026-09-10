@@ -115,6 +115,11 @@ export function forecastTeamResult(team: string, forecast: FinanceForecast) {
   return { income, trainingCost, homeGameCost, awayGameCost, operatingCost, extraCost, totalCost, contribution:income-totalCost }
 }
 
+export function forecastCoachCostForTeam(team:string,forecast:FinanceForecast){
+  const input=forecast.teams[team]||emptyTeam()
+  return input.coachHourlyRate*(input.trainingHours*input.trainingSessions+input.gameHours*(input.homeGames+input.awayGames))
+}
+
 export function financeForecastSummary(forecast: FinanceForecast) {
   const teamResults = Object.fromEntries(teams.map(team => [team, forecastTeamResult(team, forecast)]))
   const income = Object.values(teamResults).reduce((total, result) => total + result.income, 0)

@@ -3,7 +3,7 @@ import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
-import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachProfile, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
+import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
@@ -33,6 +33,8 @@ import { ActivityPage } from './pages/ActivityPage'
 import { ArchivePage } from './pages/ArchivePage'
 import { WelfarePage, type WelfareView } from './pages/WelfarePage'
 import { defaultSquadRole } from './utils/offers'
+import { hourlyRateForTeam, normaliseCoachHourlyRateMap, normaliseCoachInvoiceMap, normaliseTimesheetEntry, normaliseTimesheetEntryMap, rateBreakdownForEntries, timesheetAmountForEntries, totalTimesheetHours } from './utils/timesheets'
+import { TimesheetsPage } from './pages/TimesheetsPage'
 import './App.css'
 
 function firebaseSafeValue<T>(value:T):T {
@@ -90,7 +92,11 @@ export default function App(){
     const stored=JSON.parse(localStorage.getItem('f6playerfinance')||'{}') as Record<string,unknown>
     return Object.fromEntries(Object.entries(stored).map(([playerId,value])=>[playerId,normalisePlayerFinance(playerId,value)]))
   })
+  const [playerFinanceReady,setPlayerFinanceReady]=useState(!firebaseConfigured)
   const [financeSettings,setFinanceSettings]=useState<FinanceSettings>(()=>normaliseFinanceSettings(JSON.parse(localStorage.getItem('f6financesettings')||'null')||defaultFinanceSettings))
+  const [coachHourlyRates,setCoachHourlyRates]=useState<CoachHourlyRateMap>(()=>normaliseCoachHourlyRateMap(JSON.parse(localStorage.getItem('f6coachhourlyrates')||'{}')))
+  const [coachTimesheetEntries,setCoachTimesheetEntries]=useState<CoachTimesheetEntryMap>(()=>normaliseTimesheetEntryMap(JSON.parse(localStorage.getItem('f6coachtimesheetentries')||'{}')))
+  const [coachInvoices,setCoachInvoices]=useState<CoachInvoiceMap>(()=>normaliseCoachInvoiceMap(JSON.parse(localStorage.getItem('f6coachinvoices')||'{}')))
   const [trialSessions,setTrialSessions]=useState<TrialSession[]>(()=>{
     const stored=JSON.parse(localStorage.getItem('f6trialsessions')||'[]') as TrialSession[]
     return stored.map(session=>normaliseTrialSession(session.id,session))
@@ -112,6 +118,7 @@ export default function App(){
   const sharedPinAdmin=Boolean(user?.email&&user.email===sharedLoginEmail)
   const isAdmin=demo||sharedPinAdmin||coachProfile?.role==='admin'
   const accountAccessReady=demo||sharedPinAdmin||Boolean(coachProfile)
+  const canUseTimesheets=isAdmin||coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach'
   const editableTeams=isAdmin?Object.keys(teamPlans):assignedTeamNames(coachProfile)
   const defaultTeam=editableTeams[0]||teams[0]
   const currentCoachId=user?.uid||'local-demo'
@@ -162,9 +169,10 @@ export default function App(){
 
   useEffect(()=>{if(seasonSettingsReady&&!seasonSettings.trialsMode&&page==='emails')navigate({page:'dashboard'},true)},[seasonSettingsReady,seasonSettings.trialsMode,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!isAdmin&&page==='settings')navigate({page:'dashboard'},true)},[accountAccessReady,isAdmin,page,navigate])
+  useEffect(()=>{if(accountAccessReady&&!canUseTimesheets&&page==='timesheets')navigate({page:'dashboard'},true)},[accountAccessReady,canUseTimesheets,page,navigate])
   useEffect(()=>{if(!authLoading&&page==='welfare'&&!sharedPinAdmin)navigate({page:'dashboard'},true)},[authLoading,page,sharedPinAdmin,navigate])
 
-  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setFinanceSettings(defaultFinanceSettings);setUser(u);setAuthLoading(false)})},[])
+  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setUser(u);setAuthLoading(false)})},[])
   useEffect(()=>{
     if(demo){setPlayersReady(true);return}
     if(!database||!user){setPlayersReady(false);return}
@@ -232,6 +240,17 @@ export default function App(){
   },[user,demo,isAdmin])
 
   useEffect(()=>{
+    if(demo)return
+    if(!database||!user){setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});return}
+    const coachUid=user.uid
+    const path=(rootPath:string)=>isAdmin?rootPath:`${rootPath}/${coachUid}`
+    const stopRates=onValue(ref(database,path('coachHourlyRates')),snapshot=>{setCoachHourlyRates(normaliseCoachHourlyRateMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));setSyncState('live')},()=>{setCoachHourlyRates({});setSyncState('offline')})
+    const stopEntries=onValue(ref(database,path('coachTimesheetEntries')),snapshot=>{setCoachTimesheetEntries(normaliseTimesheetEntryMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));setSyncState('live')},()=>{setCoachTimesheetEntries({});setSyncState('offline')})
+    const stopInvoices=onValue(ref(database,path('coachInvoices')),snapshot=>{setCoachInvoices(normaliseCoachInvoiceMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));setSyncState('live')},()=>{setCoachInvoices({});setSyncState('offline')})
+    return()=>{stopRates();stopEntries();stopInvoices()}
+  },[user,demo,isAdmin])
+
+  useEffect(()=>{
     if(!isAdmin||!coachProfiles.length)return
     const next=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,assignedEmailSignatoriesForTeam(coachProfiles,team)]))
     if(JSON.stringify(next)===JSON.stringify(emailSettings.teamSignatories||{}))return
@@ -260,13 +279,15 @@ export default function App(){
   },[user,demo,isAdmin])
 
   useEffect(()=>{
-    if(demo)return
-    if(!database||!user||!isAdmin){setPlayerFinance({});return}
+    if(demo){setPlayerFinanceReady(true);return}
+    if(!database||!user||!isAdmin){setPlayerFinance({});setPlayerFinanceReady(false);return}
+    setPlayerFinanceReady(false)
     return onValue(ref(database,'playerFinance'),snapshot=>{
       const value=snapshot.val() as Record<string,unknown>|null
       setPlayerFinance(value?Object.fromEntries(Object.entries(value).map(([playerId,finance])=>[playerId,normalisePlayerFinance(playerId,finance)])): {})
+      setPlayerFinanceReady(true)
       setSyncState('live')
-    },()=>{setPlayerFinance({});setSyncState('offline')})
+    },()=>{setPlayerFinance({});setPlayerFinanceReady(true);setSyncState('offline')})
   },[user,demo,isAdmin])
 
   useEffect(()=>{
@@ -290,6 +311,74 @@ export default function App(){
     const entry=createActivityEntry(draft,activityActor,seasonSettings.currentSeason)
     if(database&&user&&!demo){try{await set(ref(database,`auditLog/${entry.id}`),entry)}catch(error){console.warn('Activity record could not be saved. Publish the v0.20 Firebase rules.',error)}}else{setActivityLog(current=>{const next=[entry,...current].slice(0,500);localStorage.setItem('f6activitylog',JSON.stringify(next));return next})}
   }
+  const saveCoachHourlyRate=async(coachUid:string,teamRates:Record<string,number>)=>{
+    if(!isAdmin)return
+    const coach=coachProfiles.find(profile=>profile.uid===coachUid)
+    const assignedTeams=coach?assignedTeamNames(coach):[]
+    const cleanTeamRates=Object.fromEntries(assignedTeams.map(team=>[team,Math.max(0,Math.min(1000,Math.round((teamRates[team]||0)*100)/100))]))
+    const record={coachUid,hourlyRate:cleanTeamRates[assignedTeams[0]]||0,teamRates:cleanTeamRates,updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
+    const next={...coachHourlyRates,[coachUid]:record}
+    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`coachHourlyRates/${coachUid}`),record)}else localStorage.setItem('f6coachhourlyrates',JSON.stringify(next))
+    setCoachHourlyRates(next)
+    const rateDetail=Object.entries(cleanTeamRates).map(([team,rate])=>`${team}: ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(rate)}`).join(' · ')
+    await recordActivity({category:'finance',action:'coach_hourly_rate_changed',summary:`Updated hourly rates for ${coach?.displayName||'coach'}`,detail:rateDetail||'No team rate set.',team:assignedTeams.join(', '),entityType:'settings',entityId:coachUid})
+  }
+  const saveCoachTimesheetEntry=async(entry:CoachTimesheetEntry)=>{
+    const ownEntry=entry.coachUid===currentCoachId&&(coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach')
+    if(!isAdmin&&!ownEntry)throw new Error('This account cannot submit coaching hours.')
+    const prepared=normaliseTimesheetEntry(entry.coachUid,entry.id,{...entry,updatedAt:Date.now()})
+    if(!prepared)throw new Error('Enter a valid date and number of hours.')
+    if(prepared.invoiceId)throw new Error('Submitted timesheet entries cannot be changed.')
+    const next={...coachTimesheetEntries,[prepared.coachUid]:{...coachTimesheetEntries[prepared.coachUid],[prepared.id]:prepared}}
+    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`coachTimesheetEntries/${prepared.coachUid}/${prepared.id}`),prepared)}else localStorage.setItem('f6coachtimesheetentries',JSON.stringify(next))
+    setCoachTimesheetEntries(next)
+    await recordActivity({category:'finance',action:'coaching_hours_added',summary:`${prepared.coachName||'Coach'} added coaching hours`,detail:`${prepared.date} · ${prepared.activity} · ${prepared.hours} hours.`,team:prepared.team,entityType:'settings',entityId:prepared.id})
+  }
+  const deleteCoachTimesheetEntry=async(entry:CoachTimesheetEntry)=>{
+    const ownEntry=entry.coachUid===currentCoachId&&(coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach')
+    if((!isAdmin&&!ownEntry)||entry.invoiceId)throw new Error('Submitted timesheet entries cannot be removed.')
+    const group={...coachTimesheetEntries[entry.coachUid]};delete group[entry.id]
+    const next={...coachTimesheetEntries,[entry.coachUid]:group}
+    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`coachTimesheetEntries/${entry.coachUid}/${entry.id}`),null)}else localStorage.setItem('f6coachtimesheetentries',JSON.stringify(next))
+    setCoachTimesheetEntries(next)
+    await recordActivity({category:'finance',action:'coaching_hours_removed',summary:`${entry.coachName||'Coach'} removed draft coaching hours`,detail:`${entry.date} · ${entry.activity} · ${entry.hours} hours.`,team:entry.team,entityType:'settings',entityId:entry.id})
+  }
+  const submitCoachInvoice=async(coachUid:string,entryIds:string[])=>{
+    const ownCoach=coachUid===currentCoachId&&(coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach')
+    if(!ownCoach)throw new Error('Only the coach can submit their invoice.')
+    const selected=entryIds.map(id=>coachTimesheetEntries[coachUid]?.[id]).filter((entry):entry is CoachTimesheetEntry=>Boolean(entry)&&!entry.invoiceId)
+    if(!selected.length)throw new Error('There are no draft entries to invoice.')
+    if(selected.length>200)throw new Error('Submit no more than 200 time entries in one invoice.')
+    const rate=coachHourlyRates[coachUid]
+    const missingRateTeams=[...new Set(selected.filter(entry=>!hourlyRateForTeam(rate,entry.team)).map(entry=>entry.team))]
+    if(missingRateTeams.length)throw new Error(`The treasurer must set a rate for ${missingRateTeams.join(', ')} before you submit this invoice.`)
+    const totalHours=totalTimesheetHours(selected)
+    const submittedAt=Date.now()
+    const id=crypto.randomUUID()
+    const rateBreakdown=rateBreakdownForEntries(selected,rate)
+    const invoice:CoachInvoice={id,invoiceNumber:`F6-${new Date(submittedAt).toISOString().slice(0,10).replaceAll('-','')}-${id.slice(0,6).toUpperCase()}`,coachUid,coachName:coachProfile?.displayName||user?.email||'Coach',coachEmail:user?.email||'',entryIds:selected.map(entry=>entry.id),totalHours,hourlyRate:rateBreakdown[selected[0].team]||0,rateBreakdown,totalAmount:timesheetAmountForEntries(selected,rate),season:seasonSettings.currentSeason,status:'Submitted',submittedAt}
+    const updatedEntries=Object.fromEntries(selected.map(entry=>[entry.id,{...entry,invoiceId:id,updatedAt:submittedAt}]))
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      const updates:Record<string,unknown>={[`coachInvoices/${coachUid}/${id}`]:invoice}
+      Object.values(updatedEntries).forEach(entry=>{updates[`coachTimesheetEntries/${coachUid}/${entry.id}`]=entry})
+      await update(ref(database),firebaseSafeValue(updates))
+    }else{
+      const nextEntries={...coachTimesheetEntries,[coachUid]:{...coachTimesheetEntries[coachUid],...updatedEntries}}
+      const nextInvoices={...coachInvoices,[coachUid]:{...coachInvoices[coachUid],[id]:invoice}}
+      setCoachTimesheetEntries(nextEntries);setCoachInvoices(nextInvoices)
+      localStorage.setItem('f6coachtimesheetentries',JSON.stringify(nextEntries));localStorage.setItem('f6coachinvoices',JSON.stringify(nextInvoices))
+    }
+    await recordActivity({category:'finance',action:'coach_invoice_submitted',summary:`${invoice.coachName} submitted ${invoice.invoiceNumber}`,detail:`${invoice.totalHours} hours · ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(invoice.totalAmount)}.`,team:[...new Set(selected.map(entry=>entry.team))].join(', '),entityType:'settings',entityId:id})
+  }
+  const markCoachInvoicePaid=async(invoice:CoachInvoice)=>{
+    if(!isAdmin)return
+    const paid={...invoice,status:'Paid' as const,paidAt:Date.now(),paidBy:user?.email||'Local demo'}
+    const next={...coachInvoices,[invoice.coachUid]:{...coachInvoices[invoice.coachUid],[invoice.id]:paid}}
+    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`coachInvoices/${invoice.coachUid}/${invoice.id}`),paid)}else localStorage.setItem('f6coachinvoices',JSON.stringify(next))
+    setCoachInvoices(next)
+    await recordActivity({category:'finance',action:'coach_invoice_paid',summary:`Marked ${invoice.invoiceNumber} as paid`,detail:`${invoice.coachName} · ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(invoice.totalAmount)}.`,team:'',entityType:'settings',entityId:invoice.id})
+  }
   const exportSystemBackup=async(prefix='f6-system-backup')=>{
     if(!isAdmin)throw new Error('Administrator access is required.')
     let data:SystemBackupData
@@ -310,6 +399,9 @@ export default function App(){
         playerPhotos,
         sessionPhotos,
         coachProfiles:Object.fromEntries(coachProfiles.map(profile=>[profile.uid,profile])),
+        coachHourlyRates,
+        coachTimesheetEntries,
+        coachInvoices,
         archivedPlayers,
         seasonArchives:Object.fromEntries(seasonArchives.map(archive=>[archive.id,archive])),
         auditLog:Object.fromEntries(activityLog.map(entry=>[entry.id,entry])),
@@ -347,6 +439,9 @@ export default function App(){
         f6playerstars:starsByAccount[currentCoachId]||{},
         f6playerphotos:backup.data.playerPhotos||{},
         f6sessionphotos:backup.data.sessionPhotos||{},
+        f6coachhourlyrates:backup.data.coachHourlyRates||{},
+        f6coachtimesheetentries:backup.data.coachTimesheetEntries||{},
+        f6coachinvoices:backup.data.coachInvoices||{},
         f6archivedplayers:backup.data.archivedPlayers||{},
         f6seasonarchives:recordsWithId(backup.data.seasonArchives),
         f6activitylog:recordsWithId(backup.data.auditLog),
@@ -683,6 +778,24 @@ export default function App(){
     const player=players.find(item=>item.id===stamped.playerId)
     await recordActivity({category:'finance',action:'player_finance_changed',summary:`Payment record updated for ${player?.name||'confirmed player'}`,detail:`Payment plan: ${stamped.paymentPlan||'Not selected'}.`,team:player?.offeredTeam||player?.suitableTeams[0]||'',entityType:'player',entityId:stamped.playerId})
   }
+  useEffect(()=>{
+    if(!isAdmin||!playersReady||!playerFinanceReady)return
+    const teamAdminEmails=new Set(coachProfiles.filter(profile=>profile.role==='team-admin').map(profile=>profile.email.trim().toLowerCase()).filter(Boolean))
+    if(!teamAdminEmails.size)return
+    const targets=players.filter(player=>teamAdminEmails.has(player.email.trim().toLowerCase())&&normalisePlayerFinance(player.id,playerFinance[player.id]).paymentPlan!=='Non paying')
+    if(!targets.length)return
+    const updatedAt=Date.now()
+    const updatedBy=user?.email||'Automatic Team Admin exemption'
+    const next={...playerFinance}
+    targets.forEach(player=>{next[player.id]={...normalisePlayerFinance(player.id,playerFinance[player.id]),paymentPlan:'Non paying',updatedAt,updatedBy}})
+    setPlayerFinance(next)
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      const updates:Record<string,unknown>={}
+      targets.forEach(player=>{updates[`playerFinance/${player.id}/paymentPlan`]='Non paying';updates[`playerFinance/${player.id}/updatedAt`]=updatedAt;updates[`playerFinance/${player.id}/updatedBy`]=updatedBy})
+      void update(ref(database),updates).catch(()=>setSyncState('offline'))
+    }else localStorage.setItem('f6playerfinance',JSON.stringify(next))
+  },[isAdmin,playersReady,playerFinanceReady,coachProfiles,players,playerFinance,user,demo])
   const saveFinanceSettings=async(settings:FinanceSettings,change:'settings'|'forecast'='settings')=>{
     if(!isAdmin)return
     const stamped={...normaliseFinanceSettings(settings),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
@@ -840,7 +953,8 @@ export default function App(){
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions}/>}
       {page==='teams'&&<TeamsPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
-      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView}/>}
+      {page==='timesheets'&&canUseTimesheets&&<TimesheetsPage isAdmin={isAdmin} currentUid={currentCoachId} currentEmail={user?.email||''} currentProfile={coachProfile} currentSeason={seasonSettings.currentSeason} coachProfiles={coachProfiles} hourlyRates={coachHourlyRates} entries={coachTimesheetEntries} invoices={coachInvoices} saveHourlyRate={saveCoachHourlyRate} saveEntry={saveCoachTimesheetEntry} deleteEntry={deleteCoachTimesheetEntry} submitInvoice={submitCoachInvoice} markInvoicePaid={markCoachInvoicePaid}/>}
+      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} coachProfiles={coachProfiles} coachInvoices={coachInvoices} timesheetEntries={coachTimesheetEntries} currentSeason={seasonSettings.currentSeason} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView} onOpenTimesheets={()=>navigatePage('timesheets')}/>}
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
       {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
       {page==='settings'&&isAdmin&&<SettingsPage
