@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { LockKeyhole } from 'lucide-react'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
@@ -72,6 +72,8 @@ export default function App(){
   const [selectedId,setSelectedId]=useState(initialRoute.playerId||players[0]?.id||'')
   const [query,setQuery]=useState('')
   const [syncState,setSyncState]=useState<SyncState>(firebaseConfigured?'saving':'offline')
+  const databaseConnected=useRef(false)
+  const teamAdminExemptionUpdateInFlight=useRef(false)
   const [importOpen,setImportOpen]=useState(false)
   const [returningImportTeam,setReturningImportTeam]=useState('')
   const [playerTab,setPlayerTabState]=useState<PlayerTab>(initialRoute.playerTab||'decision')
@@ -97,6 +99,7 @@ export default function App(){
   })
   const [playerFinanceReady,setPlayerFinanceReady]=useState(!firebaseConfigured)
   const [financeSettings,setFinanceSettings]=useState<FinanceSettings>(()=>normaliseFinanceSettings(JSON.parse(localStorage.getItem('f6financesettings')||'null')||defaultFinanceSettings))
+  const [financeSettingsReady,setFinanceSettingsReady]=useState(!firebaseConfigured)
   const [coachHourlyRates,setCoachHourlyRates]=useState<CoachHourlyRateMap>(()=>normaliseCoachHourlyRateMap(JSON.parse(localStorage.getItem('f6coachhourlyrates')||'{}')))
   const [coachTimesheetEntries,setCoachTimesheetEntries]=useState<CoachTimesheetEntryMap>(()=>normaliseTimesheetEntryMap(JSON.parse(localStorage.getItem('f6coachtimesheetentries')||'{}')))
   const [coachInvoices,setCoachInvoices]=useState<CoachInvoiceMap>(()=>normaliseCoachInvoiceMap(JSON.parse(localStorage.getItem('f6coachinvoices')||'{}')))
@@ -131,6 +134,7 @@ export default function App(){
   const teamSignatories=Object.fromEntries(Object.keys(teamPlans).map(team=>[team,derivedTeamSignatories[team]?.length?derivedTeamSignatories[team]:emailSettings.teamSignatories?.[team]||[]]))
   const teamDivisions=Object.fromEntries(teams.map(team=>[team,emailSettings.teamDetails[team]?.competition||'']))
   const activeEmailSettings={...emailSettings,currentCoachName:signedInCoachName,teamSignatories}
+  const showConnectionState=useCallback(()=>setSyncState(databaseConnected.current?'live':'offline'),[])
 
   const applyRoute=useCallback((route:AppRoute)=>{
     setPageState(route.page)
@@ -176,7 +180,14 @@ export default function App(){
   useEffect(()=>{if(accountAccessReady&&!isAdmin&&page==='settings')navigate({page:'dashboard'},true)},[accountAccessReady,isAdmin,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!canUseTimesheets&&page==='timesheets')navigate({page:'dashboard'},true)},[accountAccessReady,canUseTimesheets,page,navigate])
 
-  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setUser(u);setAuthLoading(false)})},[])
+  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(false);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setUser(u);setAuthLoading(false)})},[])
+  useEffect(()=>{
+    if(demo||!database||!user){databaseConnected.current=false;setSyncState('offline');return}
+    return onValue(ref(database,'.info/connected'),snapshot=>{
+      databaseConnected.current=snapshot.val()===true
+      showConnectionState()
+    },()=>{databaseConnected.current=false;setSyncState('offline')})
+  },[user,demo,showConnectionState])
   useEffect(()=>{
     if(demo){setPlayersReady(true);return}
     if(!database||!user){setPlayersReady(false);return}
@@ -184,14 +195,14 @@ export default function App(){
     const playersRef=ref(database,'players')
     return onValue(playersRef,snapshot=>{
       const value=snapshot.val() as Record<string,Omit<Player,'id'>>|null
-      if(!value){setPlayers([]);setSelectedId('');setPlayersReady(true);setSyncState('live');return}
+      if(!value){setPlayers([]);setSelectedId('');setPlayersReady(true);showConnectionState();return}
       const next=Object.entries(value).map(([id,p])=>normalisePlayer({id,...p} as Player))
-      setPlayers(next);setSelectedId(current=>next.some(p=>p.id===current)?current:(next[0]?.id||''));setPlayersReady(true);setSyncState('live')
-    },()=>{setPlayersReady(true);setSyncState('offline')})
+      setPlayers(next);setSelectedId(current=>next.some(p=>p.id===current)?current:(next[0]?.id||''));setPlayersReady(true);showConnectionState()
+    },()=>{setPlayersReady(true);showConnectionState()})
   },[user,demo])
-  useEffect(()=>{if(!database||!user||demo)return;const plansRef=ref(database,'teamPlans');return onValue(plansRef,snapshot=>{const value=snapshot.val() as TeamPlans|null;if(!value){if(isAdmin)set(plansRef,createDefaultTeamPlans());return}const normalised=normaliseTeamPlans(value);setTeamPlans(normalised);if(isAdmin&&teamPlansNeedMinimumUpgrade(value))set(plansRef,normalised);setSyncState('live')},()=>setSyncState('offline'))},[user,demo,isAdmin])
-  useEffect(()=>{if(!database||!user||demo)return;const settingsRef=ref(database,'emailSettings');return onValue(settingsRef,snapshot=>{const value=snapshot.val() as EmailSettings|null;if(!value){if(isAdmin)set(settingsRef,defaultEmailSettings);return}setEmailSettings(normaliseEmailSettings(value));setSyncState('live')},()=>setSyncState('offline'))},[user,demo,isAdmin])
-  useEffect(()=>{if(!database||!user||demo)return;return onValue(ref(database,'trialSessions'),snapshot=>{const value=snapshot.val() as Record<string,Partial<TrialSession>>|null;setTrialSessions(value?Object.entries(value).map(([id,session])=>normaliseTrialSession(id,session)):[]);setSyncState('live')},()=>setSyncState('offline'))},[user,demo])
+  useEffect(()=>{if(!database||!user||demo)return;const plansRef=ref(database,'teamPlans');return onValue(plansRef,snapshot=>{const value=snapshot.val() as TeamPlans|null;if(!value){if(isAdmin)set(plansRef,createDefaultTeamPlans());return}const normalised=normaliseTeamPlans(value);setTeamPlans(normalised);if(isAdmin&&teamPlansNeedMinimumUpgrade(value))set(plansRef,normalised);showConnectionState()},showConnectionState)},[user,demo,isAdmin,showConnectionState])
+  useEffect(()=>{if(!database||!user||demo)return;const settingsRef=ref(database,'emailSettings');return onValue(settingsRef,snapshot=>{const value=snapshot.val() as EmailSettings|null;if(!value){if(isAdmin)set(settingsRef,defaultEmailSettings);return}setEmailSettings(normaliseEmailSettings(value));showConnectionState()},showConnectionState)},[user,demo,isAdmin,showConnectionState])
+  useEffect(()=>{if(!database||!user||demo)return;return onValue(ref(database,'trialSessions'),snapshot=>{const value=snapshot.val() as Record<string,Partial<TrialSession>>|null;setTrialSessions(value?Object.entries(value).map(([id,session])=>normaliseTrialSession(id,session)):[]);showConnectionState()},showConnectionState)},[user,demo,showConnectionState])
   useEffect(()=>{
     if(demo){setSeasonSettingsReady(true);return}
     if(!database||!user){setSeasonSettingsReady(false);return}
@@ -199,8 +210,8 @@ export default function App(){
     const settingsRef=ref(database,'seasonSettings')
     return onValue(settingsRef,snapshot=>{
       if(!snapshot.exists()){if(isAdmin)set(settingsRef,defaultSeasonSettings);setSeasonSettings(defaultSeasonSettings);setSeasonSettingsReady(true);return}
-      setSeasonSettings(normaliseSeasonSettings(snapshot.val()));setSeasonSettingsReady(true);setSyncState('live')
-    },()=>{setSeasonSettingsReady(true);setSyncState('offline')})
+      setSeasonSettings(normaliseSeasonSettings(snapshot.val()));setSeasonSettingsReady(true);showConnectionState()
+    },()=>{setSeasonSettingsReady(true);showConnectionState()})
   },[user,demo,isAdmin])
   useEffect(()=>{
     if(!database||!user||demo)return
@@ -221,7 +232,7 @@ export default function App(){
     return onValue(ref(database,'playerPhotos'),snapshot=>{
       const value=snapshot.val() as Record<string,unknown>|null
       setPlayerPhotos(value?Object.fromEntries(Object.entries(value).filter((entry):entry is [string,string]=>typeof entry[1]==='string'&&Boolean(entry[1]))):{})
-    },()=>setSyncState('offline'))
+    },showConnectionState)
   },[user,demo])
 
   useEffect(()=>{
@@ -248,11 +259,11 @@ export default function App(){
     if(!database||!user){setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});return}
     const coachUid=user.uid
     const path=(rootPath:string)=>isAdmin?rootPath:`${rootPath}/${coachUid}`
-    const stopRates=onValue(ref(database,path('coachHourlyRates')),snapshot=>{setCoachHourlyRates(normaliseCoachHourlyRateMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));setSyncState('live')},()=>{setCoachHourlyRates({});setSyncState('offline')})
-    const stopEntries=onValue(ref(database,path('coachTimesheetEntries')),snapshot=>{setCoachTimesheetEntries(normaliseTimesheetEntryMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));setSyncState('live')},()=>{setCoachTimesheetEntries({});setSyncState('offline')})
-    const stopInvoices=onValue(ref(database,path('coachInvoices')),snapshot=>{setCoachInvoices(normaliseCoachInvoiceMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));setSyncState('live')},()=>{setCoachInvoices({});setSyncState('offline')})
+    const stopRates=onValue(ref(database,path('coachHourlyRates')),snapshot=>{setCoachHourlyRates(normaliseCoachHourlyRateMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));showConnectionState()},showConnectionState)
+    const stopEntries=onValue(ref(database,path('coachTimesheetEntries')),snapshot=>{setCoachTimesheetEntries(normaliseTimesheetEntryMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));showConnectionState()},showConnectionState)
+    const stopInvoices=onValue(ref(database,path('coachInvoices')),snapshot=>{setCoachInvoices(normaliseCoachInvoiceMap(isAdmin?snapshot.val():{[coachUid]:snapshot.val()}));showConnectionState()},showConnectionState)
     return()=>{stopRates();stopEntries();stopInvoices()}
-  },[user,demo,isAdmin])
+  },[user,demo,isAdmin,showConnectionState])
 
   useEffect(()=>{
     if(!isAdmin||!coachProfiles.length)return
@@ -284,26 +295,28 @@ export default function App(){
 
   useEffect(()=>{
     if(demo){setPlayerFinanceReady(true);return}
-    if(!database||!user||!isAdmin){setPlayerFinance({});setPlayerFinanceReady(false);return}
-    setPlayerFinanceReady(false)
+    if(!database||!user){setPlayerFinance({});setPlayerFinanceReady(false);return}
+    if(!isAdmin){if(accountAccessReady){setPlayerFinance({});setPlayerFinanceReady(false)}return}
     return onValue(ref(database,'playerFinance'),snapshot=>{
       const value=snapshot.val() as Record<string,unknown>|null
       setPlayerFinance(value?Object.fromEntries(Object.entries(value).map(([playerId,finance])=>[playerId,normalisePlayerFinance(playerId,finance)])): {})
       setPlayerFinanceReady(true)
-      setSyncState('live')
-    },()=>{setPlayerFinance({});setPlayerFinanceReady(true);setSyncState('offline')})
-  },[user,demo,isAdmin])
+      showConnectionState()
+    },showConnectionState)
+  },[user,demo,isAdmin,accountAccessReady,showConnectionState])
 
   useEffect(()=>{
-    if(demo)return
-    if(!database||!user||!isAdmin){setFinanceSettings(defaultFinanceSettings);return}
+    if(demo){setFinanceSettingsReady(true);return}
+    if(!database||!user){setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(false);return}
+    if(!isAdmin){if(accountAccessReady){setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(false)}return}
     const settingsRef=ref(database,'financeSettings')
     return onValue(settingsRef,snapshot=>{
-      if(!snapshot.exists()){set(settingsRef,defaultFinanceSettings);setFinanceSettings(defaultFinanceSettings);return}
+      if(!snapshot.exists()){set(settingsRef,defaultFinanceSettings);setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(true);return}
       setFinanceSettings(normaliseFinanceSettings(snapshot.val()))
-      setSyncState('live')
-    },()=>{setFinanceSettings(defaultFinanceSettings);setSyncState('offline')})
-  },[user,demo,isAdmin])
+      setFinanceSettingsReady(true)
+      showConnectionState()
+    },showConnectionState)
+  },[user,demo,isAdmin,accountAccessReady,showConnectionState])
 
   useEffect(()=>{
     if(!database||!user||demo)return
@@ -474,7 +487,7 @@ export default function App(){
           return firebaseSafeValue(data)
         },{applyLocally:false})
       }catch(error){
-        setSyncState('live')
+        showConnectionState()
         throw error
       }
       if(!result.committed){
@@ -482,7 +495,7 @@ export default function App(){
           const latest=normalisePlayer({id:playerId,...result.snapshot.val()} as Player)
           setPlayers(current=>current.map(player=>player.id===playerId?latest:player))
         }
-        setSyncState('live')
+        showConnectionState()
         return 'conflict'
       }
       saved=normalisePlayer({id:playerId,...result.snapshot.val()} as Player)
@@ -798,7 +811,7 @@ export default function App(){
     await recordActivity({category:'finance',action:'player_finance_changed',summary:`Payment record updated for ${player?.name||'confirmed player'}`,detail:`Payment plan: ${stamped.paymentPlan||'Not selected'}.`,team:player?.offeredTeam||player?.suitableTeams[0]||'',entityType:'player',entityId:stamped.playerId})
   }
   useEffect(()=>{
-    if(!isAdmin||!playersReady||!playerFinanceReady)return
+    if(!isAdmin||!playersReady||!playerFinanceReady||teamAdminExemptionUpdateInFlight.current)return
     const teamAdminEmails=new Set(coachProfiles.filter(profile=>profile.role==='team-admin').map(profile=>profile.email.trim().toLowerCase()).filter(Boolean))
     if(!teamAdminEmails.size)return
     const targets=players.filter(player=>teamAdminEmails.has(player.email.trim().toLowerCase())&&normalisePlayerFinance(player.id,playerFinance[player.id]).paymentPlan!=='Non paying')
@@ -807,14 +820,14 @@ export default function App(){
     const updatedBy=user?.email||'Automatic Team Admin exemption'
     const next={...playerFinance}
     targets.forEach(player=>{next[player.id]={...normalisePlayerFinance(player.id,playerFinance[player.id]),paymentPlan:'Non paying',updatedAt,updatedBy}})
-    setPlayerFinance(next)
     if(database&&user&&!demo){
+      teamAdminExemptionUpdateInFlight.current=true
       setSyncState('saving')
       const updates:Record<string,unknown>={}
-      targets.forEach(player=>{updates[`playerFinance/${player.id}/paymentPlan`]='Non paying';updates[`playerFinance/${player.id}/updatedAt`]=updatedAt;updates[`playerFinance/${player.id}/updatedBy`]=updatedBy})
-      void update(ref(database),updates).catch(()=>setSyncState('offline'))
-    }else localStorage.setItem('f6playerfinance',JSON.stringify(next))
-  },[isAdmin,playersReady,playerFinanceReady,coachProfiles,players,playerFinance,user,demo])
+      targets.forEach(player=>{updates[`playerFinance/${player.id}`]=firebaseSafeValue(next[player.id])})
+      void update(ref(database),updates).catch(error=>console.warn('Automatic team administrator finance exemption could not be saved.',error)).finally(()=>{teamAdminExemptionUpdateInFlight.current=false;showConnectionState()})
+    }else{setPlayerFinance(next);localStorage.setItem('f6playerfinance',JSON.stringify(next))}
+  },[isAdmin,playersReady,playerFinanceReady,coachProfiles,players,playerFinance,user,demo,showConnectionState])
   const saveFinanceSettings=async(settings:FinanceSettings,change:'settings'|'forecast'='settings')=>{
     if(!isAdmin)return
     const stamped={...normaliseFinanceSettings(settings),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
@@ -949,7 +962,7 @@ export default function App(){
   return <div className="app">
     <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions}/>
     <main>{isReadOnly&&<div className="read-only-account-banner"><LockKeyhole/><div><b>Welfare account · read-only</b><span>You can view Club Manager information, but this account cannot change it.</span></div></div>}
-      {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} financeReady={playerFinanceReady&&financeSettingsReady} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
       {page==='schedule'&&<SchedulePage
         sessions={trialSessions}
         players={players}
