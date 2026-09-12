@@ -36,6 +36,10 @@ import { WelfarePage, type WelfareView } from './pages/WelfarePage'
 import { defaultSquadRole } from './utils/offers'
 import { hourlyRateForTeam, normaliseCoachHourlyRateMap, normaliseCoachInvoiceMap, normaliseTimesheetEntry, normaliseTimesheetEntryMap, rateBreakdownForEntries, timesheetAmountForEntries, totalTimesheetHours } from './utils/timesheets'
 import { TimesheetsPage } from './pages/TimesheetsPage'
+import { SignupPage } from './pages/SignupPage'
+import { SignupInboxPage } from './pages/SignupInboxPage'
+import { updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
+import { normaliseClubSignup, type ClubSignup, type ClubSignupStatus } from './signup/types'
 import './App.css'
 
 function firebaseSafeValue<T>(value:T):T {
@@ -56,6 +60,7 @@ function recordsWithId(value:unknown){
 
 export default function App(){
   const cleanWelfarePath=/\/welfare\/?$/.test(window.location.pathname)
+  const cleanSignupPath=/\/signup\/?$/.test(window.location.pathname)
   const cleanWelfareView=()=>window.location.hash==='#case'?'case':window.location.hash==='#inbox'?'inbox':'submit'
   const initialRoute:AppRoute=cleanWelfarePath?{page:'welfare',welfareView:cleanWelfareView()}:parseAppHash(window.location.hash)
   const [user,setUser]=useState<User|null>(null)
@@ -121,6 +126,12 @@ export default function App(){
     const stored=JSON.parse(localStorage.getItem('f6activitylog')||'[]') as ActivityLogEntry[]
     return stored
   })
+  const [clubSignups,setClubSignups]=useState<ClubSignup[]>(()=>{
+    const stored=JSON.parse(localStorage.getItem('f6clubsignups')||'[]') as ClubSignup[]
+    return stored.map(item=>normaliseClubSignup(item.id,item)).filter((item):item is ClubSignup=>Boolean(item))
+  })
+  const [clubSignupsReady,setClubSignupsReady]=useState(!firebaseConfigured)
+  const [clubSignupsError,setClubSignupsError]=useState('')
   const sharedPinAdmin=Boolean(user?.email&&user.email===sharedLoginEmail)
   const isAdmin=demo||sharedPinAdmin||coachProfile?.role==='admin'
   const isReadOnly=coachProfile?.role==='welfare'
@@ -322,6 +333,19 @@ export default function App(){
     if(!database||!user||demo)return
     return onValue(ref(database,`playerStars/${user.uid}`),snapshot=>setPlayerStars((snapshot.val() as PlayerStars|null)||{}))
   },[user,demo])
+
+  useEffect(()=>{
+    if(demo){setClubSignupsReady(true);setClubSignupsError('');return}
+    if(!database||!user){setClubSignups([]);setClubSignupsReady(false);setClubSignupsError('');return}
+    setClubSignupsReady(false)
+    setClubSignupsError('')
+    return onValue(ref(database,'clubSignups'),snapshot=>{
+      const value=snapshot.val() as Record<string,unknown>|null
+      setClubSignups(value?Object.entries(value).map(([id,signup])=>normaliseClubSignup(id,signup)).filter((signup):signup is ClubSignup=>Boolean(signup)).sort((left,right)=>right.createdAt-left.createdAt):[])
+      setClubSignupsReady(true)
+      showConnectionState()
+    },()=>{setClubSignupsReady(true);setClubSignupsError('Sign-ups could not be loaded. Check that the latest database rules have been deployed.');showConnectionState()})
+  },[user,demo,showConnectionState])
 
   const activityActor={uid:user?.uid||'local-demo',name:signedInCoachName||coachProfile?.displayName||user?.email||'Local demo',email:user?.email||''}
   const recordActivity=async(draft:ActivityDraft)=>{
@@ -839,6 +863,15 @@ export default function App(){
       : {category:'finance',action:'standard_fees_changed',summary:'Finance settings updated',detail:`NVL/LVA fees, payment dates and ${stamped.customPaymentRules.length} custom arrangement rule${stamped.customPaymentRules.length===1?'':'s'} were saved.`,team:'',entityType:'settings',entityId:'financeSettings'})
   }
   const saveFinanceForecast=(forecast:FinanceForecast)=>saveFinanceSettings({...financeSettings,forecast:{...forecast,updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}},'forecast')
+  const changeClubSignupStatus=async(id:string,status:ClubSignupStatus)=>{
+    if(isReadOnly)return
+    if(database&&user&&!demo){setSyncState('saving');try{await updateClubSignupStatusRemote(id,status)}finally{showConnectionState()}}
+    else{
+      const updatedAt=Date.now()
+      const next=clubSignups.map(signup=>signup.id===id?{...signup,status,updatedAt,handledBy:user?.email||'Local demo'}:signup)
+      setClubSignups(next);localStorage.setItem('f6clubsignups',JSON.stringify(next))
+    }
+  }
   const saveSeasonSettings=async(settings:SeasonSettings)=>{
     if(!isAdmin)return
     const stamped={...normaliseSeasonSettings(settings),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
@@ -955,14 +988,16 @@ export default function App(){
     if(window.location.hash!==nextHash)window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${nextHash}`)
   },[page,requestedSessionId])
 
+  if(cleanSignupPath)return <SignupPage exit={()=>window.location.assign(window.location.pathname.replace(/signup\/?$/,'')||'/')}/>
   if(cleanWelfarePath||page==='welfare')return <WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>cleanWelfarePath?window.location.assign(window.location.pathname.replace(/welfare\/?$/,'')||'/'):navigate({page:'dashboard'})} user={user} accountRole={coachProfile?.role||null} accountLoading={authLoading||Boolean(user&&!coachProfile&&!sharedPinAdmin)}/>
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
 
   return <div className="app">
-    <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions}/>
+    <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions} newSignupCount={clubSignups.filter(signup=>signup.status==='new').length}/>
     <main>{isReadOnly&&<div className="read-only-account-banner"><LockKeyhole/><div><b>Welfare account · read-only</b><span>You can view Club Manager information, but this account cannot change it.</span></div></div>}
       {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} financeReady={playerFinanceReady&&financeSettingsReady} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='signups'&&<SignupInboxPage signups={clubSignups} ready={clubSignupsReady} loadError={clubSignupsError} readOnly={isReadOnly} updateStatus={changeClubSignupStatus}/>}
       {page==='schedule'&&<SchedulePage
         sessions={trialSessions}
         players={players}

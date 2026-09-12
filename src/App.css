@@ -9,6 +9,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .brand b { font-size: 14px; }.brand span { display: block; margin-top: 3px; color: #98a2b3; font-size: 12px; }
 .sidebar nav { display: grid; gap: 5px; }
 .sidebar nav button, .team-list button { width: 100%; border: 0; border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; color: #cbd5e1; background: transparent; text-align: left; transition: background .16s,color .16s; }
+.sidebar nav .nav-count{margin-left:auto;padding:2px 7px;border-radius:999px;color:#231f20;background:#fff200;font-size:9px;font-weight:950}
 .sidebar nav button:hover, .sidebar nav button.active, .team-list button:hover, .team-list button.team-active { color: #fff; background: #273146; }
 .sidebar nav svg { width: 18px; height: 18px; }
 .team-list { margin-top: 29px; }.team-list p { padding: 0 12px; color: #667085; font-size: 10px; font-weight: 900; letter-spacing: .1em; }

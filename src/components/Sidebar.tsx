@@ -1,4 +1,4 @@
-import { Archive, BarChart3, CalendarDays, Clock3, Cloud, CloudOff, HeartHandshake, History, LogOut, Mail, Settings, ShieldCheck, Users, WalletCards } from 'lucide-react'
+import { Archive, BarChart3, CalendarDays, Clock3, Cloud, CloudOff, HeartHandshake, History, LogOut, Mail, Settings, ShieldCheck, UserPlus, Users, WalletCards } from 'lucide-react'
 import type { CoachRole, PageKey, Player, SyncState } from '../types'
 import { teams } from '../data/constants'
 import { ClubLogo } from './ClubLogo'
@@ -23,10 +23,12 @@ type Props = {
   trialsMode: boolean
   onSignOut: () => void
   teamDivisions: Record<string,string>
+  newSignupCount: number
 }
 
 const navItems = [
   { key: 'dashboard' as const, label: 'Dashboard', icon: BarChart3 },
+  { key: 'signups' as const, label: 'Sign-ups', icon: UserPlus },
   { key: 'schedule' as const, label: 'Schedule', icon: CalendarDays },
   { key: 'players' as const, label: 'Players', icon: Users },
   { key: 'emails' as const, label: 'Emails', icon: Mail },
@@ -38,11 +40,11 @@ const navItems = [
   { key: 'settings' as const, label: 'Settings', icon: Settings, adminOnly: true },
 ]
 
-export function Sidebar({page,setPage,players,selectedTeam,openTeam,syncState,signedIn,accountEmail,accountName,sharedAccount,assignedTeams,isAdmin,accountRole,currentSeason,trialsMode,onSignOut,teamDivisions}:Props){
+export function Sidebar({page,setPage,players,selectedTeam,openTeam,syncState,signedIn,accountEmail,accountName,sharedAccount,assignedTeams,isAdmin,accountRole,currentSeason,trialsMode,onSignOut,teamDivisions,newSignupCount}:Props){
   const canUseTimesheets=isAdmin||accountRole==='coach'||accountRole==='assistant-coach'
   return <aside className="sidebar">
     <div className="brand"><ClubLogo/><div><b>Club Manager</b><span>Flaming Six · {currentSeason}</span><em className={`sidebar-mode ${trialsMode?'trials':'season'}`}>{trialsMode?'Trials Mode':'Club Mode'}</em></div></div>
-    <nav>{navItems.filter(item=>(!item.adminOnly||isAdmin)&&(!item.timesheetOnly||canUseTimesheets)&&(trialsMode||item.key!=='emails')).map(({key,label,icon:Icon})=><button key={key} className={page===key?'active':''} onClick={()=>setPage(key)}><Icon/>{label}</button>)}<button onClick={()=>setPage('welfare')}><HeartHandshake/>Welfare</button>{signedIn&&<button className="mobile-sign-out" onClick={onSignOut} aria-label="Sign out" title="Sign out"><LogOut/>Sign out</button>}</nav>
+    <nav>{navItems.filter(item=>(!item.adminOnly||isAdmin)&&(!item.timesheetOnly||canUseTimesheets)&&(trialsMode||item.key!=='emails')).map(({key,label,icon:Icon})=><button key={key} className={page===key?'active':''} onClick={()=>setPage(key)}><Icon/>{label}{key==='signups'&&newSignupCount>0&&<span className="nav-count">{newSignupCount}</span>}</button>)}<button onClick={()=>setPage('welfare')}><HeartHandshake/>Welfare</button>{signedIn&&<button className="mobile-sign-out" onClick={onSignOut} aria-label="Sign out" title="Sign out"><LogOut/>Sign out</button>}</nav>
     <div className="team-list"><p>TEAMS</p>{teams.map(team=><button key={team} className={page==='teams'&&selectedTeam===team?'team-active':''} onClick={()=>openTeam(team)}>{team}<span>{players.filter(player=>trialsMode?(player.suitableTeams.includes(team)||teamMatchesInterestedDivisions(player,team,teamDivisions)):isConfirmedForTeam(player,team)).length}</span></button>)}</div>
     <div className="account-box"><div className={`sync ${syncState}`}>{syncState==='live'?<Cloud/>:<CloudOff/>}{syncState==='live'?'Live and synced':syncState==='saving'?'Syncing…':signedIn?'Offline':'Local demo'}</div>{signedIn&&<div className="signed-in-account"><Users/><span><b>{sharedAccount?'Shared PIN admin':accountName||(isAdmin?'Administrator':accountRole==='welfare'?'Welfare account':accountRole==='team-admin'?'Team administrator':accountRole==='assistant-coach'?'Assistant coach account':'Coach account')}</b>{accountName&&!sharedAccount&&<small>{isAdmin?'Administrator':accountRole==='welfare'?'Welfare · read-only':accountRole==='team-admin'?'Team administrator':accountRole==='assistant-coach'?'Assistant coach':'Coach'}</small>}<small>{accountEmail}</small><small>{isAdmin?'All teams':accountRole==='welfare'?'Read-only access':assignedTeams.length?assignedTeams.join(', '):'No team assigned'}</small></span></div>}{signedIn&&<button onClick={onSignOut}><LogOut/> Sign out</button>}</div>
   </aside>

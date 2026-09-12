@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         app: 'index.html',
         welfare: 'welfare/index.html',
+        signup: 'signup/index.html',
       },
     },
   },

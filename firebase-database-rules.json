@@ -163,6 +163,11 @@
       ".read": false,
       ".write": false,
       ".indexOn": ["deleteAfter"]
+    },
+    "clubSignups": {
+      ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'coach' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'assistant-coach' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'team-admin' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'welfare')",
+      ".write": false,
+      ".indexOn": ["status", "createdAt"]
     }
   }
 }

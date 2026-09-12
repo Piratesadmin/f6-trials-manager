@@ -142,7 +142,7 @@ export type Player = {
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
-export type PageKey = 'dashboard' | 'schedule' | 'players' | 'emails' | 'teams' | 'timesheets' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
+export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'players' | 'emails' | 'teams' | 'timesheets' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
 export type PlayerTab = 'overview' | 'assessment' | 'decision'
 export type FinanceView = 'overview' | 'forecast' | 'payments'
 export type SyncState = 'live' | 'saving' | 'offline'
