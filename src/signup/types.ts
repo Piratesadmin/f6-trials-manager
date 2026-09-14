@@ -1,8 +1,26 @@
 export type ClubSignupStatus = 'new' | 'contacted' | 'closed'
+export type ClubSignupOutcome = 'trial-session' | 'team-offer' | 'more-information' | 'general-follow-up' | 'joined-team' | 'no-offer' | 'player-declined' | 'no-response' | 'withdrew'
+
+export const clubSignupOutcomeOptions:Record<Exclude<ClubSignupStatus,'new'>,{value:ClubSignupOutcome;label:string}[]>={
+  contacted:[
+    {value:'trial-session',label:'Invited to attend a trial session'},
+    {value:'team-offer',label:'Team offer made'},
+    {value:'more-information',label:'Requested more information'},
+    {value:'general-follow-up',label:'General follow-up'},
+  ],
+  closed:[
+    {value:'joined-team',label:'Joined / team offer accepted'},
+    {value:'no-offer',label:'No offer'},
+    {value:'player-declined',label:'Player declined'},
+    {value:'no-response',label:'No response'},
+    {value:'withdrew',label:'Player withdrew'},
+  ],
+}
 
 export type ClubSignup = {
   id:string
   status:ClubSignupStatus
+  statusOutcome:string
   name:string
   email:string
   phone:string
@@ -33,6 +51,7 @@ export function normaliseClubSignup(id:string,value:unknown):ClubSignup|null{
   return{
     id,
     status:clubSignupStatuses.includes(incoming.status as ClubSignupStatus)?incoming.status as ClubSignupStatus:'new',
+    statusOutcome:string('statusOutcome'),
     name:incoming.name,
     email:incoming.email,
     phone:string('phone'),
@@ -56,4 +75,8 @@ export function normaliseClubSignup(id:string,value:unknown):ClubSignup|null{
 
 export function clubSignupStatusLabel(status:ClubSignupStatus){
   return status==='new'?'New':status==='contacted'?'Contacted':'Closed'
+}
+
+export function clubSignupOutcomeLabel(outcome:string){
+  return Object.values(clubSignupOutcomeOptions).flat().find(option=>option.value===outcome)?.label||outcome
 }

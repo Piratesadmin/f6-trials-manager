@@ -39,7 +39,7 @@ import { TimesheetsPage } from './pages/TimesheetsPage'
 import { SignupPage } from './pages/SignupPage'
 import { SignupInboxPage } from './pages/SignupInboxPage'
 import { updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
-import { normaliseClubSignup, type ClubSignup, type ClubSignupStatus } from './signup/types'
+import { normaliseClubSignup, type ClubSignup, type ClubSignupOutcome, type ClubSignupStatus } from './signup/types'
 import './App.css'
 
 function firebaseSafeValue<T>(value:T):T {
@@ -863,12 +863,12 @@ export default function App(){
       : {category:'finance',action:'standard_fees_changed',summary:'Finance settings updated',detail:`NVL/LVA fees, payment dates and ${stamped.customPaymentRules.length} custom arrangement rule${stamped.customPaymentRules.length===1?'':'s'} were saved.`,team:'',entityType:'settings',entityId:'financeSettings'})
   }
   const saveFinanceForecast=(forecast:FinanceForecast)=>saveFinanceSettings({...financeSettings,forecast:{...forecast,updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}},'forecast')
-  const changeClubSignupStatus=async(id:string,status:ClubSignupStatus)=>{
+  const changeClubSignupStatus=async(id:string,status:ClubSignupStatus,statusOutcome:ClubSignupOutcome|'')=>{
     if(isReadOnly)return
-    if(database&&user&&!demo){setSyncState('saving');try{await updateClubSignupStatusRemote(id,status)}finally{showConnectionState()}}
+    if(database&&user&&!demo){setSyncState('saving');try{await updateClubSignupStatusRemote(id,status,statusOutcome)}finally{showConnectionState()}}
     else{
       const updatedAt=Date.now()
-      const next=clubSignups.map(signup=>signup.id===id?{...signup,status,updatedAt,handledBy:user?.email||'Local demo'}:signup)
+      const next=clubSignups.map(signup=>signup.id===id?{...signup,status,statusOutcome,updatedAt,handledBy:user?.email||'Local demo'}:signup)
       setClubSignups(next);localStorage.setItem('f6clubsignups',JSON.stringify(next))
     }
   }

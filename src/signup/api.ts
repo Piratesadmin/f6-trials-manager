@@ -1,6 +1,6 @@
 import { httpsCallable } from 'firebase/functions'
 import { signupManagerFunctions, signupPublicFunctions } from './firebase'
-import type { ClubSignupStatus } from './types'
+import type { ClubSignupOutcome, ClubSignupStatus } from './types'
 
 export type ClubSignupInput={
   name:string
@@ -28,7 +28,7 @@ export async function submitClubSignup(input:ClubSignupInput){
   return result.data
 }
 
-export async function updateClubSignupStatus(signupId:string,status:ClubSignupStatus){
+export async function updateClubSignupStatus(signupId:string,status:ClubSignupStatus,statusOutcome:ClubSignupOutcome|''){
   if(!signupManagerFunctions)throw new Error('The club sign-up service has not been configured.')
-  await httpsCallable<{signupId:string;status:ClubSignupStatus},{updatedAt:number}>(signupManagerFunctions,'updateClubSignupStatus')({signupId,status})
+  await httpsCallable<{signupId:string;status:ClubSignupStatus;statusOutcome:ClubSignupOutcome|''},{updatedAt:number}>(signupManagerFunctions,'updateClubSignupStatus')({signupId,status,statusOutcome})
 }

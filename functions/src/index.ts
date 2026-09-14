@@ -16,6 +16,10 @@ const auditRetention = 365 * day
 const maximumOpenCases = 50
 const maximumActiveSignups = 500
 const signupStatuses = new Set(['new', 'contacted', 'closed'])
+const signupStatusOutcomes: Record<string, Set<string>> = {
+  contacted: new Set(['trial-session', 'team-offer', 'more-information', 'general-follow-up']),
+  closed: new Set(['joined-team', 'no-offer', 'player-declined', 'no-response', 'withdrew']),
+}
 const signupCategories = new Set(['Mens', 'Women’s'])
 const signupDivisions: Record<string, Set<string>> = {
   'Mens': new Set(['NVL Div 1', 'LVA Div 2', 'LVA Div 3']),
@@ -190,6 +194,7 @@ export const submitClubSignup = onCall({region}, async request => {
   const signup = {
     id,
     status: 'new',
+    statusOutcome: '',
     name: text(input.name, 'Full name', 2, 120),
     email: email(input.email),
     phone: text(input.phone, 'Mobile number', 7, 30),
@@ -232,10 +237,12 @@ export const updateClubSignupStatus = onCall({region}, async request => {
   if (!/^JOIN-[A-Z0-9-]+$/.test(id)) throw new HttpsError('not-found', 'Sign-up not found.')
   const status = typeof input.status === 'string' && signupStatuses.has(input.status) ? input.status : null
   if (!status) throw new HttpsError('invalid-argument', 'Choose a valid status.')
+  const statusOutcome = status === 'new' ? '' : typeof input.statusOutcome === 'string' && signupStatusOutcomes[status]?.has(input.statusOutcome) ? input.statusOutcome : null
+  if (status !== 'new' && !statusOutcome) throw new HttpsError('invalid-argument', 'Choose an outcome for this status.')
   const reference = db.ref(`clubSignups/${id}`)
   if (!(await reference.get()).exists()) throw new HttpsError('not-found', 'Sign-up not found.')
   const updatedAt = Date.now()
-  await reference.update({status, updatedAt, handledBy: manager.email})
+  await reference.update({status, statusOutcome, updatedAt, handledBy: manager.email})
   return {updatedAt}
 })
 
