@@ -38,7 +38,7 @@ import { hourlyRateForTeam, normaliseCoachHourlyRateMap, normaliseCoachInvoiceMa
 import { TimesheetsPage } from './pages/TimesheetsPage'
 import { SignupPage } from './pages/SignupPage'
 import { SignupInboxPage } from './pages/SignupInboxPage'
-import { updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
+import { deleteClubSignup as deleteClubSignupRemote, updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
 import { normaliseClubSignup, type ClubSignup, type ClubSignupOutcome, type ClubSignupStatus } from './signup/types'
 import './App.css'
 
@@ -61,7 +61,13 @@ function recordsWithId(value:unknown){
 export default function App(){
   const cleanWelfarePath=/\/welfare\/?$/.test(window.location.pathname)
   const cleanSignupPath=/\/signup\/?$/.test(window.location.pathname)
-  const cleanWelfareView=()=>window.location.hash==='#case'?'case':window.location.hash==='#inbox'?'inbox':'submit'
+  const appRootPath=window.location.pathname.replace(/(?:welfare|signup)\/?$/,'').replace(/index\.html$/,'').replace(/\/?$/,'/')
+  const cleanWelfareView=()=>{
+    if(window.location.hash==='#case')return 'case'
+    if(window.location.hash==='#inbox')return 'inbox'
+    const remembered=recordValue(window.history.state).welfareView
+    return remembered==='case'||remembered==='inbox'?remembered:'submit'
+  }
   const initialRoute:AppRoute=cleanWelfarePath?{page:'welfare',welfareView:cleanWelfareView()}:parseAppHash(window.location.hash)
   const [user,setUser]=useState<User|null>(null)
   const [authLoading,setAuthLoading]=useState(firebaseConfigured)
@@ -169,23 +175,31 @@ export default function App(){
   },[applyRoute])
 
   const navigatePage=useCallback((nextPage:PageKey)=>{
+    if(nextPage==='welfare'){window.location.assign(`${appRootPath}welfare`);return}
     if(nextPage==='players')navigate({page:nextPage,playerId:selectedId||undefined,playerTab})
     else if(nextPage==='emails')navigate({page:nextPage,playerId:selectedId||undefined})
     else if(nextPage==='schedule')navigate({page:nextPage})
     else if(nextPage==='teams')navigate({page:nextPage})
     else navigate({page:nextPage})
-  },[navigate,playerTab,selectedId])
+  },[appRootPath,navigate,playerTab,selectedId])
 
   useEffect(()=>{
-    const handleHashChange=()=>cleanWelfarePath?setWelfareView(cleanWelfareView()):applyRoute(parseAppHash(window.location.hash))
+    if(cleanWelfarePath){
+      const view=cleanWelfareView()
+      setWelfareView(view)
+      if(window.location.hash)window.history.replaceState({...recordValue(window.history.state),welfareView:view},'',`${window.location.pathname}${window.location.search}`)
+      return
+    }
+    const handleHashChange=()=>applyRoute(parseAppHash(window.location.hash))
     window.addEventListener('hashchange',handleHashChange)
-    if(cleanWelfarePath){setWelfareView(cleanWelfareView());return()=>window.removeEventListener('hashchange',handleHashChange)}
     const route=parseAppHash(window.location.hash)
     applyRoute(route)
     const canonicalHash=appHashFor(route)
     if(window.location.hash!==canonicalHash)window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${canonicalHash}`)
     return ()=>window.removeEventListener('hashchange',handleHashChange)
   },[applyRoute,cleanWelfarePath])
+
+  useEffect(()=>{if(!cleanWelfarePath&&page==='welfare')window.location.replace(`${appRootPath}welfare`)},[appRootPath,cleanWelfarePath,page])
 
   useEffect(()=>{if(seasonSettingsReady&&!seasonSettings.trialsMode&&page==='emails')navigate({page:'dashboard'},true)},[seasonSettingsReady,seasonSettings.trialsMode,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!isAdmin&&page==='settings')navigate({page:'dashboard'},true)},[accountAccessReady,isAdmin,page,navigate])
@@ -872,6 +886,11 @@ export default function App(){
       setClubSignups(next);localStorage.setItem('f6clubsignups',JSON.stringify(next))
     }
   }
+  const removeClubSignup=async(id:string)=>{
+    if(isReadOnly)return
+    if(database&&user&&!demo){setSyncState('saving');try{await deleteClubSignupRemote(id)}finally{showConnectionState()}}
+    else{const next=clubSignups.filter(signup=>signup.id!==id);setClubSignups(next);localStorage.setItem('f6clubsignups',JSON.stringify(next))}
+  }
   const saveSeasonSettings=async(settings:SeasonSettings)=>{
     if(!isAdmin)return
     const stamped={...normaliseSeasonSettings(settings),updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}
@@ -977,9 +996,9 @@ export default function App(){
   const selectTeam=(team:string)=>navigate({page:'teams',team},true)
   const selectFinanceView=(financeView:FinanceView)=>navigate({page:'finance',financeView})
   const navigateWelfare=(view:WelfareView)=>{
-    if(!cleanWelfarePath){navigate({page:'welfare',welfareView:view});return}
+    if(!cleanWelfarePath){window.location.assign(`${appRootPath}welfare`);return}
     setWelfareView(view)
-    window.history.replaceState(null,'',`${window.location.pathname}${window.location.search}${view==='submit'?'':`#${view}`}`)
+    window.history.replaceState({...recordValue(window.history.state),welfareView:view},'',`${window.location.pathname}${window.location.search}`)
   }
   const selectScheduleSession=useCallback((id:string)=>{
     setActiveScheduleSessionId(id)
@@ -989,7 +1008,7 @@ export default function App(){
   },[page,requestedSessionId])
 
   if(cleanSignupPath)return <SignupPage exit={()=>window.location.assign(window.location.pathname.replace(/signup\/?$/,'')||'/')}/>
-  if(cleanWelfarePath||page==='welfare')return <WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>cleanWelfarePath?window.location.assign(window.location.pathname.replace(/welfare\/?$/,'')||'/'):navigate({page:'dashboard'})} user={user} accountRole={coachProfile?.role||null} accountLoading={authLoading||Boolean(user&&!coachProfile&&!sharedPinAdmin)}/>
+  if(cleanWelfarePath||page==='welfare')return <WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>cleanWelfarePath?window.location.assign(appRootPath):navigate({page:'dashboard'})} user={user} accountRole={coachProfile?.role||null} accountLoading={authLoading||Boolean(user&&!coachProfile&&!sharedPinAdmin)}/>
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
 
@@ -997,7 +1016,7 @@ export default function App(){
     <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions} newSignupCount={clubSignups.filter(signup=>signup.status==='new').length}/>
     <main>{isReadOnly&&<div className="read-only-account-banner"><LockKeyhole/><div><b>Welfare account · read-only</b><span>You can view Club Manager information, but this account cannot change it.</span></div></div>}
       {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} financeReady={playerFinanceReady&&financeSettingsReady} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
-      {page==='signups'&&<SignupInboxPage signups={clubSignups} ready={clubSignupsReady} loadError={clubSignupsError} readOnly={isReadOnly} updateStatus={changeClubSignupStatus}/>}
+      {page==='signups'&&<SignupInboxPage signups={clubSignups} ready={clubSignupsReady} loadError={clubSignupsError} readOnly={isReadOnly} updateStatus={changeClubSignupStatus} deleteSignup={removeClubSignup}/>}
       {page==='schedule'&&<SchedulePage
         sessions={trialSessions}
         players={players}

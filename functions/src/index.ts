@@ -246,6 +246,17 @@ export const updateClubSignupStatus = onCall({region}, async request => {
   return {updatedAt}
 })
 
+export const deleteClubSignup = onCall({region}, async request => {
+  await requireManager(request)
+  const input = record(request.data)
+  const id = text(input.signupId, 'Sign-up ID', 8, 40).toUpperCase()
+  if (!/^JOIN-[A-Z0-9-]+$/.test(id)) throw new HttpsError('not-found', 'Sign-up not found.')
+  const reference = db.ref(`clubSignups/${id}`)
+  if (!(await reference.get()).exists()) throw new HttpsError('not-found', 'Sign-up not found.')
+  await reference.remove()
+  return {deleted: true}
+})
+
 async function audit(actor: Awaited<ReturnType<typeof requireStaff>>, action: string, targetCaseId = '') {
   const reference = db.ref('welfareAccessLog').push()
   await reference.set({

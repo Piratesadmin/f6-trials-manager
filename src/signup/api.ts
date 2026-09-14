@@ -32,3 +32,8 @@ export async function updateClubSignupStatus(signupId:string,status:ClubSignupSt
   if(!signupManagerFunctions)throw new Error('The club sign-up service has not been configured.')
   await httpsCallable<{signupId:string;status:ClubSignupStatus;statusOutcome:ClubSignupOutcome|''},{updatedAt:number}>(signupManagerFunctions,'updateClubSignupStatus')({signupId,status,statusOutcome})
 }
+
+export async function deleteClubSignup(signupId:string){
+  if(!signupManagerFunctions)throw new Error('The club sign-up service has not been configured.')
+  await httpsCallable<{signupId:string},{deleted:boolean}>(signupManagerFunctions,'deleteClubSignup')({signupId})
+}
