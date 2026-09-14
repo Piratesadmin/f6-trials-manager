@@ -39,7 +39,7 @@ export function SignupPage({exit}:{exit:()=>void}){
   const [photoError,setPhotoError]=useState('')
   const [ageRestrictionOpen,setAgeRestrictionOpen]=useState(false)
   const change=<K extends keyof ClubSignupInput>(key:K,value:ClubSignupInput[K])=>setForm(current=>({...current,[key]:value}))
-  const changeDateOfBirth=(dateOfBirth:string)=>{change('dateOfBirth',dateOfBirth);if(dateOfBirth&&isUnder18(dateOfBirth))setAgeRestrictionOpen(true)}
+  const validateDateOfBirth=(dateOfBirth:string)=>{if(dateOfBirth&&isUnder18(dateOfBirth))setAgeRestrictionOpen(true)}
   const changeCategory=(playingCategory:string)=>setForm(current=>({...current,playingCategory,interestedDivisions:[]}))
   const toggleDivision=(division:string)=>setForm(current=>({...current,interestedDivisions:current.interestedDivisions.includes(division)?current.interestedDivisions.filter(value=>value!==division):[...current.interestedDivisions,division]}))
   const choosePhoto=async(file?:File)=>{
@@ -67,7 +67,7 @@ export function SignupPage({exit}:{exit:()=>void}){
         <label>Full name<input required minLength={2} maxLength={120} autoComplete="name" value={form.name} onChange={event=>change('name',event.target.value)}/></label>
         <label>Email address<input required type="email" maxLength={200} autoComplete="email" value={form.email} onChange={event=>change('email',event.target.value)}/></label>
         <label>Mobile number<input required type="tel" minLength={7} maxLength={30} autoComplete="tel" value={form.phone} onChange={event=>change('phone',event.target.value)}/></label>
-        <label>Date of birth<input required type="date" max={new Date().toISOString().slice(0,10)} autoComplete="bday" value={form.dateOfBirth} onInput={event=>changeDateOfBirth(event.currentTarget.value)} onChange={event=>changeDateOfBirth(event.target.value)}/><small>You must be 18 or over to register.</small></label>
+        <label>Date of birth<input required type="date" max={new Date().toISOString().slice(0,10)} autoComplete="bday" value={form.dateOfBirth} onChange={event=>change('dateOfBirth',event.target.value)} onBlur={event=>validateDateOfBirth(event.currentTarget.value)}/><small>You must be 18 or over to register.</small></label>
         <div className="signup-photo-field"><span className={form.profilePhoto?'has-photo':''}>{form.profilePhoto?<img src={form.profilePhoto} alt="Profile preview"/>:<UserRound/>}</span><div><b>Profile photo <small>Optional</small></b><p>Add a clear photo so coaches can recognise you at a trial. Images are resized before they are uploaded.</p>{photoError&&<em>{photoError}</em>}<div><label className="signup-photo-button"><ImagePlus/>{photoBusy?'Preparing…':form.profilePhoto?'Change photo':'Add photo'}<input type="file" accept="image/*" disabled={photoBusy} onChange={event=>void choosePhoto(event.target.files?.[0])}/></label>{form.profilePhoto&&<button type="button" onClick={()=>change('profilePhoto','')}><Trash2/>Remove</button>}</div></div></div>
       </div></section>
       <section><header><span>2</span><div><h2>Your volleyball</h2><p>Help us find the most relevant team or trial.</p></div></header><div className="signup-grid">
