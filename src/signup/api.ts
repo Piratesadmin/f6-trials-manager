@@ -18,9 +18,6 @@ export type ClubSignupInput={
   availability:string
   heardAboutUs:string
   notes:string
-  guardianName:string
-  guardianEmail:string
-  guardianPhone:string
   consent:boolean
   website:string
 }

@@ -18,9 +18,6 @@ export type ClubSignup = {
   availability:string
   heardAboutUs:string
   notes:string
-  guardianName:string
-  guardianEmail:string
-  guardianPhone:string
   createdAt:number
   updatedAt:number
   handledBy?:string
@@ -51,9 +48,6 @@ export function normaliseClubSignup(id:string,value:unknown):ClubSignup|null{
     availability:string('availability'),
     heardAboutUs:string('heardAboutUs'),
     notes:string('notes'),
-    guardianName:string('guardianName'),
-    guardianEmail:string('guardianEmail'),
-    guardianPhone:string('guardianPhone'),
     createdAt:typeof incoming.createdAt==='number'?incoming.createdAt:0,
     updatedAt:typeof incoming.updatedAt==='number'?incoming.updatedAt:0,
     ...(typeof incoming.handledBy==='string'?{handledBy:incoming.handledBy}:{}),

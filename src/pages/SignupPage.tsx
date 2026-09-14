@@ -1,5 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { ArrowLeft, CheckCircle2, ImagePlus, LockKeyhole, Send, ShieldCheck, Trash2, UserRound, UserPlus } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import { ArrowLeft, CheckCircle2, ImagePlus, LockKeyhole, Send, ShieldAlert, ShieldCheck, Trash2, UserRound, UserPlus } from 'lucide-react'
 import { ClubLogo } from '../components/ClubLogo'
 import { positions } from '../data/constants'
 import { blobToDataUrl, preparePlayerPhoto } from '../utils/photo'
@@ -11,7 +11,7 @@ const divisions:Record<string,string[]>={
   'Mens':['NVL Div 1','LVA Div 2','LVA Div 3'],
   'Women’s':['NVL Div 2','LVA Div 1','LVA Div 2'],
 }
-const blank:ClubSignupInput={name:'',email:'',phone:'',profilePhoto:'',dateOfBirth:'',playingCategory:'',interestedDivisions:[],primaryPosition:'',secondaryPosition:'',playingExperience:'',highestLevelPlayed:'',currentClub:'',availability:'',heardAboutUs:'',notes:'',guardianName:'',guardianEmail:'',guardianPhone:'',consent:false,website:''}
+const blank:ClubSignupInput={name:'',email:'',phone:'',profilePhoto:'',dateOfBirth:'',playingCategory:'',interestedDivisions:[],primaryPosition:'',secondaryPosition:'',playingExperience:'',highestLevelPlayed:'',currentClub:'',availability:'',heardAboutUs:'',notes:'',consent:false,website:''}
 
 function errorMessage(error:unknown){
   const message=error instanceof Error?error.message:''
@@ -37,8 +37,9 @@ export function SignupPage({exit}:{exit:()=>void}){
   const [receipt,setReceipt]=useState('')
   const [photoBusy,setPhotoBusy]=useState(false)
   const [photoError,setPhotoError]=useState('')
-  const under18=useMemo(()=>isUnder18(form.dateOfBirth),[form.dateOfBirth])
+  const [ageRestrictionOpen,setAgeRestrictionOpen]=useState(false)
   const change=<K extends keyof ClubSignupInput>(key:K,value:ClubSignupInput[K])=>setForm(current=>({...current,[key]:value}))
+  const changeDateOfBirth=(dateOfBirth:string)=>{change('dateOfBirth',dateOfBirth);if(dateOfBirth&&isUnder18(dateOfBirth))setAgeRestrictionOpen(true)}
   const changeCategory=(playingCategory:string)=>setForm(current=>({...current,playingCategory,interestedDivisions:[]}))
   const toggleDivision=(division:string)=>setForm(current=>({...current,interestedDivisions:current.interestedDivisions.includes(division)?current.interestedDivisions.filter(value=>value!==division):[...current.interestedDivisions,division]}))
   const choosePhoto=async(file?:File)=>{
@@ -49,7 +50,9 @@ export function SignupPage({exit}:{exit:()=>void}){
     finally{setPhotoBusy(false)}
   }
   const submit=async(event:FormEvent)=>{
-    event.preventDefault();setBusy(true);setError('')
+    event.preventDefault()
+    if(isUnder18(form.dateOfBirth)){setAgeRestrictionOpen(true);return}
+    setBusy(true);setError('')
     try{const result=await submitClubSignup(form);setReceipt(result.signupId);setForm(blank);window.scrollTo({top:0,behavior:'smooth'})}
     catch(submitError){setError(errorMessage(submitError))}
     finally{setBusy(false)}
@@ -64,14 +67,9 @@ export function SignupPage({exit}:{exit:()=>void}){
         <label>Full name<input required minLength={2} maxLength={120} autoComplete="name" value={form.name} onChange={event=>change('name',event.target.value)}/></label>
         <label>Email address<input required type="email" maxLength={200} autoComplete="email" value={form.email} onChange={event=>change('email',event.target.value)}/></label>
         <label>Mobile number<input required type="tel" minLength={7} maxLength={30} autoComplete="tel" value={form.phone} onChange={event=>change('phone',event.target.value)}/></label>
-        <label>Date of birth<input required type="date" max={new Date().toISOString().slice(0,10)} autoComplete="bday" value={form.dateOfBirth} onChange={event=>change('dateOfBirth',event.target.value)}/></label>
+        <label>Date of birth<input required type="date" max={new Date().toISOString().slice(0,10)} autoComplete="bday" value={form.dateOfBirth} onInput={event=>changeDateOfBirth(event.currentTarget.value)} onChange={event=>changeDateOfBirth(event.target.value)}/><small>You must be 18 or over to register.</small></label>
         <div className="signup-photo-field"><span className={form.profilePhoto?'has-photo':''}>{form.profilePhoto?<img src={form.profilePhoto} alt="Profile preview"/>:<UserRound/>}</span><div><b>Profile photo <small>Optional</small></b><p>Add a clear photo so coaches can recognise you at a trial. Images are resized before they are uploaded.</p>{photoError&&<em>{photoError}</em>}<div><label className="signup-photo-button"><ImagePlus/>{photoBusy?'Preparing…':form.profilePhoto?'Change photo':'Add photo'}<input type="file" accept="image/*" disabled={photoBusy} onChange={event=>void choosePhoto(event.target.files?.[0])}/></label>{form.profilePhoto&&<button type="button" onClick={()=>change('profilePhoto','')}><Trash2/>Remove</button>}</div></div></div>
       </div></section>
-      {under18&&<section className="signup-guardian"><header><span><ShieldCheck/></span><div><h2>Parent or guardian</h2><p>Required because the player is currently under 18.</p></div></header><div className="signup-grid">
-        <label>Parent or guardian name<input required minLength={2} maxLength={120} value={form.guardianName} onChange={event=>change('guardianName',event.target.value)}/></label>
-        <label>Parent or guardian email<input required type="email" maxLength={200} value={form.guardianEmail} onChange={event=>change('guardianEmail',event.target.value)}/></label>
-        <label>Parent or guardian phone<input required type="tel" minLength={7} maxLength={30} value={form.guardianPhone} onChange={event=>change('guardianPhone',event.target.value)}/></label>
-      </div></section>}
       <section><header><span>2</span><div><h2>Your volleyball</h2><p>Help us find the most relevant team or trial.</p></div></header><div className="signup-grid">
         <label>Playing category<select required value={form.playingCategory} onChange={event=>changeCategory(event.target.value)}><option value="">Choose one…</option>{categories.map(value=><option key={value}>{value}</option>)}</select></label>
         {form.playingCategory&&<fieldset className="signup-division-picker"><legend>Divisions you’re interested in <small>Select all that apply</small></legend>{divisions[form.playingCategory].map((division,index)=><label key={division} className={form.interestedDivisions.includes(division)?'selected':''}><input type="checkbox" checked={form.interestedDivisions.includes(division)} required={index===0&&!form.interestedDivisions.length} onChange={()=>toggleDivision(division)}/><span>{division}</span></label>)}</fieldset>}
@@ -91,6 +89,7 @@ export function SignupPage({exit}:{exit:()=>void}){
       {error&&<div className="signup-error">{error}</div>}
       <button className="signup-submit" disabled={busy||!form.consent}><Send/>{busy?'Sending…':'Register my interest'}</button>
     </form>
+    {ageRestrictionOpen&&<div className="signup-age-backdrop"><section className="signup-age-dialog" role="alertdialog" aria-modal="true" aria-labelledby="signup-age-title"><ShieldAlert/><p className="signup-eyebrow">Age requirement</p><h2 id="signup-age-title">You must be 18 or over to sign up</h2><p>Flaming Six currently accepts expressions of interest only from players aged 18 or older. Your details have not been submitted.</p><button type="button" autoFocus onClick={()=>{change('dateOfBirth','');setAgeRestrictionOpen(false)}}>I understand</button></section></div>}
   </main><SignupFooter/></div>
 }
 

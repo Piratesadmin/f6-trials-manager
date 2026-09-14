@@ -180,12 +180,7 @@ export const submitClubSignup = onCall({region}, async request => {
   if (input.website) throw new HttpsError('invalid-argument', 'The form could not be submitted.')
   if (input.consent !== true) throw new HttpsError('invalid-argument', 'Consent is required before submitting.')
   const birthDate = dateOfBirth(input.dateOfBirth)
-  const guardianRequired = under18(birthDate)
-  const guardianName = optionalText(input.guardianName, 'Parent or guardian name', 120)
-  const guardianEmail = optionalText(input.guardianEmail, 'Parent or guardian email', 200)
-  const guardianPhone = optionalText(input.guardianPhone, 'Parent or guardian phone', 30)
-  if (guardianRequired && (!guardianName || !guardianEmail || !guardianPhone)) throw new HttpsError('invalid-argument', 'Parent or guardian contact details are required for players under 18.')
-  if (guardianEmail) email(guardianEmail, 'Parent or guardian email')
+  if (under18(birthDate)) throw new HttpsError('invalid-argument', 'You must be 18 or over to register your interest.')
   const now = Date.now()
   const id = createSignupId()
   const playingCategory = choice(input.playingCategory, 'Playing category', signupCategories)
@@ -210,9 +205,6 @@ export const submitClubSignup = onCall({region}, async request => {
     availability: text(input.availability, 'Availability', 5, 1000),
     heardAboutUs: optionalText(input.heardAboutUs, 'How you heard about us', 200),
     notes: optionalText(input.notes, 'Additional information', 2000),
-    guardianName: guardianRequired ? guardianName : '',
-    guardianEmail: guardianRequired ? guardianEmail.toLowerCase() : '',
-    guardianPhone: guardianRequired ? guardianPhone : '',
     createdAt: now,
     updatedAt: now,
   }
