@@ -6,6 +6,7 @@ export const timesheetActivities: TimesheetActivity[] = ['Training','Match','Tri
 const safeText=(value:unknown,max:number)=>typeof value==='string'?value.trim().slice(0,max):''
 const safeDate=(value:unknown)=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)?value:''
 const safeNumber=(value:unknown,max=100000)=>{const amount=Number(value);return Number.isFinite(amount)?Math.min(max,Math.max(0,Math.round(amount*100)/100)):0}
+const safeDuration=(value:unknown,max=24)=>{const amount=Number(value);return Number.isFinite(amount)?Math.min(max,Math.max(0,Math.round(amount*60)/60)):0}
 const recordValue=(value:unknown)=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{}
 
 function normaliseTeamRates(value:unknown){
@@ -26,7 +27,7 @@ export function normaliseTimesheetEntry(coachUid:string,id:string,value:unknown)
   if(!value||typeof value!=='object')return null
   const incoming=value as Partial<CoachTimesheetEntry>
   const date=safeDate(incoming.date)
-  const hours=safeNumber(incoming.hours,24)
+  const hours=safeDuration(incoming.hours)
   if(!date||!hours)return null
   return{
     id,
@@ -57,7 +58,7 @@ export function normaliseCoachInvoice(coachUid:string,id:string,value:unknown):C
     coachName:safeText(incoming.coachName,120),
     coachEmail:safeText(incoming.coachEmail,200),
     entryIds,
-    totalHours:safeNumber(incoming.totalHours,10000),
+    totalHours:safeDuration(incoming.totalHours,10000),
     hourlyRate:safeNumber(incoming.hourlyRate,1000),
     rateBreakdown:normaliseTeamRates(incoming.rateBreakdown),
     totalAmount:safeNumber(incoming.totalAmount,1000000),
@@ -82,7 +83,7 @@ export function normaliseCoachInvoiceMap(value:unknown):CoachInvoiceMap{
 }
 
 export function totalTimesheetHours(entries:CoachTimesheetEntry[]){
-  return Math.round(entries.reduce((total,entry)=>total+entry.hours,0)*100)/100
+  return Math.round(entries.reduce((total,entry)=>total+entry.hours,0)*60)/60
 }
 
 export function timesheetAmount(hours:number,hourlyRate:number){
@@ -119,10 +120,10 @@ export function coachInvoiceFinanceSummary(invoices:CoachInvoiceMap,entries:Coac
       byTeam[entry.team][invoice.status==='Paid'?'paid':'submitted']+=amount
     })
   })
-  Object.values(byTeam).forEach(team=>{team.hours=Math.round(team.hours*100)/100;team.invoiced=Math.round(team.invoiced*100)/100;team.submitted=Math.round(team.submitted*100)/100;team.paid=Math.round(team.paid*100)/100})
+  Object.values(byTeam).forEach(team=>{team.hours=Math.round(team.hours*60)/60;team.invoiced=Math.round(team.invoiced*100)/100;team.submitted=Math.round(team.submitted*100)/100;team.paid=Math.round(team.paid*100)/100})
   return{
     invoices:seasonInvoices,
-    totalHours:Math.round(seasonInvoices.reduce((total,invoice)=>total+invoice.totalHours,0)*100)/100,
+    totalHours:Math.round(seasonInvoices.reduce((total,invoice)=>total+invoice.totalHours,0)*60)/60,
     totalAmount:Math.round(seasonInvoices.reduce((total,invoice)=>total+invoice.totalAmount,0)*100)/100,
     submittedAmount:Math.round(seasonInvoices.filter(invoice=>invoice.status==='Submitted').reduce((total,invoice)=>total+invoice.totalAmount,0)*100)/100,
     paidAmount:Math.round(seasonInvoices.filter(invoice=>invoice.status==='Paid').reduce((total,invoice)=>total+invoice.totalAmount,0)*100)/100,
@@ -131,5 +132,8 @@ export function coachInvoiceFinanceSummary(invoices:CoachInvoiceMap,entries:Coac
 }
 
 export function formatHours(hours:number){
-  return `${hours.toLocaleString('en-GB',{maximumFractionDigits:2})} hr${hours===1?'':'s'}`
+  const totalMinutes=Math.max(0,Math.round(hours*60))
+  const wholeHours=Math.floor(totalMinutes/60)
+  const minutes=totalMinutes%60
+  return [wholeHours?`${wholeHours.toLocaleString('en-GB')} hr${wholeHours===1?'':'s'}`:'',minutes||!wholeHours?`${minutes} min${minutes===1?'':'s'}`:''].filter(Boolean).join(' ')
 }

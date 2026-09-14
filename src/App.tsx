@@ -34,7 +34,7 @@ import { ActivityPage } from './pages/ActivityPage'
 import { ArchivePage } from './pages/ArchivePage'
 import { WelfarePage, type WelfareView } from './pages/WelfarePage'
 import { defaultSquadRole } from './utils/offers'
-import { hourlyRateForTeam, normaliseCoachHourlyRateMap, normaliseCoachInvoiceMap, normaliseTimesheetEntry, normaliseTimesheetEntryMap, rateBreakdownForEntries, timesheetAmountForEntries, totalTimesheetHours } from './utils/timesheets'
+import { formatHours, hourlyRateForTeam, normaliseCoachHourlyRateMap, normaliseCoachInvoiceMap, normaliseTimesheetEntry, normaliseTimesheetEntryMap, rateBreakdownForEntries, timesheetAmountForEntries, totalTimesheetHours } from './utils/timesheets'
 import { TimesheetsPage } from './pages/TimesheetsPage'
 import { SignupPage } from './pages/SignupPage'
 import { SignupInboxPage } from './pages/SignupInboxPage'
@@ -383,12 +383,12 @@ export default function App(){
     const ownEntry=entry.coachUid===currentCoachId&&(coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach')
     if(!isAdmin&&!ownEntry)throw new Error('This account cannot submit coaching hours.')
     const prepared=normaliseTimesheetEntry(entry.coachUid,entry.id,{...entry,updatedAt:Date.now()})
-    if(!prepared)throw new Error('Enter a valid date and number of hours.')
+    if(!prepared)throw new Error('Enter a valid date and duration.')
     if(prepared.invoiceId)throw new Error('Submitted timesheet entries cannot be changed.')
     const next={...coachTimesheetEntries,[prepared.coachUid]:{...coachTimesheetEntries[prepared.coachUid],[prepared.id]:prepared}}
     if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`coachTimesheetEntries/${prepared.coachUid}/${prepared.id}`),prepared)}else localStorage.setItem('f6coachtimesheetentries',JSON.stringify(next))
     setCoachTimesheetEntries(next)
-    await recordActivity({category:'finance',action:'coaching_hours_added',summary:`${prepared.coachName||'Coach'} added coaching hours`,detail:`${prepared.date} · ${prepared.activity} · ${prepared.hours} hours.`,team:prepared.team,entityType:'settings',entityId:prepared.id})
+    await recordActivity({category:'finance',action:'coaching_hours_added',summary:`${prepared.coachName||'Coach'} added coaching time`,detail:`${prepared.date} · ${prepared.activity} · ${formatHours(prepared.hours)}.`,team:prepared.team,entityType:'settings',entityId:prepared.id})
   }
   const deleteCoachTimesheetEntry=async(entry:CoachTimesheetEntry)=>{
     const ownEntry=entry.coachUid===currentCoachId&&(coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach')
@@ -397,7 +397,7 @@ export default function App(){
     const next={...coachTimesheetEntries,[entry.coachUid]:group}
     if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`coachTimesheetEntries/${entry.coachUid}/${entry.id}`),null)}else localStorage.setItem('f6coachtimesheetentries',JSON.stringify(next))
     setCoachTimesheetEntries(next)
-    await recordActivity({category:'finance',action:'coaching_hours_removed',summary:`${entry.coachName||'Coach'} removed draft coaching hours`,detail:`${entry.date} · ${entry.activity} · ${entry.hours} hours.`,team:entry.team,entityType:'settings',entityId:entry.id})
+    await recordActivity({category:'finance',action:'coaching_hours_removed',summary:`${entry.coachName||'Coach'} removed draft coaching time`,detail:`${entry.date} · ${entry.activity} · ${formatHours(entry.hours)}.`,team:entry.team,entityType:'settings',entityId:entry.id})
   }
   const submitCoachInvoice=async(coachUid:string,entryIds:string[])=>{
     const ownCoach=coachUid===currentCoachId&&(coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach')
@@ -425,7 +425,7 @@ export default function App(){
       setCoachTimesheetEntries(nextEntries);setCoachInvoices(nextInvoices)
       localStorage.setItem('f6coachtimesheetentries',JSON.stringify(nextEntries));localStorage.setItem('f6coachinvoices',JSON.stringify(nextInvoices))
     }
-    await recordActivity({category:'finance',action:'coach_invoice_submitted',summary:`${invoice.coachName} submitted ${invoice.invoiceNumber}`,detail:`${invoice.totalHours} hours · ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(invoice.totalAmount)}.`,team:[...new Set(selected.map(entry=>entry.team))].join(', '),entityType:'settings',entityId:id})
+    await recordActivity({category:'finance',action:'coach_invoice_submitted',summary:`${invoice.coachName} submitted ${invoice.invoiceNumber}`,detail:`${formatHours(invoice.totalHours)} · ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(invoice.totalAmount)}.`,team:[...new Set(selected.map(entry=>entry.team))].join(', '),entityType:'settings',entityId:id})
   }
   const markCoachInvoicePaid=async(invoice:CoachInvoice)=>{
     if(!isAdmin)return
