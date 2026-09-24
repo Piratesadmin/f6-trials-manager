@@ -21,6 +21,8 @@ export type ClubSignup = {
   id:string
   status:ClubSignupStatus
   statusOutcome:string
+  joinedTeam?:string
+  transferredPlayerId?:string
   name:string
   email:string
   phone:string
@@ -52,6 +54,8 @@ export function normaliseClubSignup(id:string,value:unknown):ClubSignup|null{
     id,
     status:clubSignupStatuses.includes(incoming.status as ClubSignupStatus)?incoming.status as ClubSignupStatus:'new',
     statusOutcome:string('statusOutcome'),
+    ...(typeof incoming.joinedTeam==='string'?{joinedTeam:incoming.joinedTeam}:{}),
+    ...(typeof incoming.transferredPlayerId==='string'?{transferredPlayerId:incoming.transferredPlayerId}:{}),
     name:incoming.name,
     email:incoming.email,
     phone:string('phone'),

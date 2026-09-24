@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight, Filter, Search, Star } from 'lucide-react'
 import type { Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerStars, PlayerTab, TrialSession } from '../types'
-import { averageRating, trialRegistrationsFor } from '../utils/player'
+import { averageRating, averageRatingOutOfTen, formatPlayerRating, trialRegistrationsFor } from '../utils/player'
 import { PageHeader } from '../components/PageHeader'
 import { PlayerProfile } from '../components/PlayerProfile'
 import { activeFilterCount, emptyPlayerFilters, PlayerFilters, type PlayerFilterValues } from '../components/PlayerFilters'
@@ -59,7 +59,7 @@ export function PlayersPage({ players, sessions, selectedId, openPlayer, query, 
     const matchesAssessment = filters.assessment === 'all' || (filters.assessment === 'assessed' ? rating > 0 : rating === 0)
     const matchesRecommendation = filters.recommendation === 'all' || player.recommendation === filters.recommendation
     const matchesDecision = filters.decision === 'all' || player.decision === filters.decision
-    const matchesRating = !filters.minimumRating || rating >= filters.minimumRating
+    const matchesRating = !filters.minimumRating || averageRatingOutOfTen(player) >= filters.minimumRating
     const searchable = `${player.name} ${player.email} ${player.position} ${player.secondaryPosition} ${player.bibNumber} ${player.recommendation} ${player.interestedDivisions} ${player.playingExperience} ${player.highestLevelPlayed} ${player.trialDate}`.toLowerCase()
     return matchesDivision && matchesStarred && matchesPosition && matchesAttendance && matchesPayment && matchesSession && matchesResponse && matchesAssessment && matchesRecommendation && matchesDecision && matchesRating && searchable.includes(search)
   })
@@ -86,14 +86,13 @@ export function PlayersPage({ players, sessions, selectedId, openPlayer, query, 
         <div className="list-summary"><span>{filtered.length} of {players.length} player{players.length === 1 ? '' : 's'}</span>{((divisionFilter!=='all'&&(divisionFilter!=='assigned'||assignedDivisions.length>0)) || extraFilterCount > 0) && <button onClick={() => { setDivisionFilter('all'); setFilters(emptyPlayerFilters) }}>Clear all filters</button>}</div>
         <div className="rows player-cards">
           {filtered.map(player => {
-            const rating = averageRating(player)
             const starred=Boolean(playerStars[player.id])
             const decisionReminder=decisionReminderDetails(player,sessions)
             const trialEventCount=Object.keys(trialRegistrationsFor(player)).length
             return <div key={player.id} className={`player-row player-card ${selected?.id === player.id ? 'selected' : ''}`}>
               {!readOnly&&<button className={`player-star-toggle ${starred?'starred':''}`} aria-label={`${starred?'Remove':'Add'} ${player.name} ${currentCoachId==='local-demo'?'from the demo shortlist':'from my starred players'}`} title={starred?'Remove from my starred players':'Add to my starred players'} onClick={()=>toggleStar(player.id)}><Star/></button>}
               <button className="player-card-open" onClick={() => selectPlayer(player.id)}>
-                <div className="player-rating"><Star/><b>{rating ? rating.toFixed(1) : '—'}</b></div>
+                <div className="player-rating"><Star/><b>{formatPlayerRating(player)}</b></div>
                 <div className="player-main"><div><b>{player.name}</b>{player.returningPlayer&&<span className="returning-player-badge compact">Returning</span>}{player.bibNumber && <span className="list-bib">#{player.bibNumber}</span>}</div><span>{player.interestedDivisions} · {player.position}{player.secondaryPosition?` / ${player.secondaryPosition}`:''}{trialEventCount?` · ${trialEventCount} trial event${trialEventCount===1?'':'s'}`:''}</span>{decisionReminder.state!=='none'?<small className={`decision-reminder-badge ${decisionReminder.state}`} title={decisionReminderDetailText(decisionReminder)}>{decisionReminder.label}</small>:<small className={`recommendation-badge ${player.decision==='Offer accepted'?'recommendation-offer-accepted':recommendationClass(player.recommendation)}`}>{player.decision==='Offer accepted'?'Offer accepted':player.recommendation || player.decision}</small>}</div>
                 <ChevronRight/>
               </button>

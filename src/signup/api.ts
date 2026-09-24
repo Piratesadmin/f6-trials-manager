@@ -28,9 +28,10 @@ export async function submitClubSignup(input:ClubSignupInput){
   return result.data
 }
 
-export async function updateClubSignupStatus(signupId:string,status:ClubSignupStatus,statusOutcome:ClubSignupOutcome|''){
+export async function updateClubSignupStatus(signupId:string,status:ClubSignupStatus,statusOutcome:ClubSignupOutcome|'',joinedTeam=''){
   if(!signupManagerFunctions)throw new Error('The club sign-up service has not been configured.')
-  await httpsCallable<{signupId:string;status:ClubSignupStatus;statusOutcome:ClubSignupOutcome|''},{updatedAt:number}>(signupManagerFunctions,'updateClubSignupStatus')({signupId,status,statusOutcome})
+  const result=await httpsCallable<{signupId:string;status:ClubSignupStatus;statusOutcome:ClubSignupOutcome|'';joinedTeam:string},{updatedAt:number;playerId?:string}>(signupManagerFunctions,'updateClubSignupStatus')({signupId,status,statusOutcome,joinedTeam})
+  return result.data
 }
 
 export async function deleteClubSignup(signupId:string){

@@ -26,6 +26,7 @@ const signupDivisions: Record<string, Set<string>> = {
   'Women’s': new Set(['NVL Div 2', 'LVA Div 1', 'LVA Div 2']),
 }
 const signupPositions = new Set(['Setter', 'Outside', 'Middle', 'Opposite', 'Libero', 'All-rounder', 'Not sure'])
+const clubTeams = new Set(['Aces', 'Ravens', 'Cobras', 'Coyotes', 'Llamas', 'Meerkats', 'Leopards', 'Pirates'])
 const managerRoles = new Set(['coach', 'assistant-coach', 'team-admin', 'admin'])
 
 type CaseStatus = 'new' | 'open' | 'closed'
@@ -240,10 +241,89 @@ export const updateClubSignupStatus = onCall({region}, async request => {
   const statusOutcome = status === 'new' ? '' : typeof input.statusOutcome === 'string' && signupStatusOutcomes[status]?.has(input.statusOutcome) ? input.statusOutcome : null
   if (status !== 'new' && !statusOutcome) throw new HttpsError('invalid-argument', 'Choose an outcome for this status.')
   const reference = db.ref(`clubSignups/${id}`)
-  if (!(await reference.get()).exists()) throw new HttpsError('not-found', 'Sign-up not found.')
+  const signupSnapshot = await reference.get()
+  if (!signupSnapshot.exists()) throw new HttpsError('not-found', 'Sign-up not found.')
+  const signup = record(signupSnapshot.val())
   const updatedAt = Date.now()
-  await reference.update({status, statusOutcome, updatedAt, handledBy: manager.email})
-  return {updatedAt}
+  if (statusOutcome !== 'joined-team') {
+    await reference.update({status, statusOutcome, updatedAt, handledBy: manager.email})
+    return {updatedAt}
+  }
+  if (status !== 'closed') throw new HttpsError('invalid-argument', 'A joined player must be closed.')
+  const joinedTeam = choice(input.joinedTeam, 'Team', clubTeams)
+  const transferredPlayerId = typeof signup.transferredPlayerId === 'string' && signup.transferredPlayerId ? signup.transferredPlayerId : `signup-${id}`
+  const previousTeam = typeof signup.joinedTeam === 'string' ? signup.joinedTeam : ''
+  if (signup.transferredPlayerId && previousTeam && previousTeam !== joinedTeam) throw new HttpsError('failed-precondition', `This sign-up has already been transferred to ${previousTeam}.`)
+  const existingPlayerSnapshot = await db.ref(`players/${transferredPlayerId}`).get()
+  if (existingPlayerSnapshot.exists()) {
+    await reference.update({status, statusOutcome, joinedTeam: previousTeam || joinedTeam, transferredPlayerId, updatedAt, handledBy: manager.email})
+    return {updatedAt, playerId: transferredPlayerId}
+  }
+  const signupEmail = typeof signup.email === 'string' ? signup.email.toLowerCase() : ''
+  const players = record((await db.ref('players').get()).val())
+  const duplicate = Object.entries(players).find(([playerId, value]) => playerId !== transferredPlayerId && typeof record(value).email === 'string' && String(record(value).email).toLowerCase() === signupEmail)
+  if (duplicate) throw new HttpsError('already-exists', 'A player with this email address is already in the main player list.')
+  const primaryPosition = typeof signup.primaryPosition === 'string' && signup.primaryPosition !== 'Not sure' ? signup.primaryPosition : 'All-rounder'
+  const secondaryPosition = typeof signup.secondaryPosition === 'string' && signup.secondaryPosition !== 'Not sure' ? signup.secondaryPosition : ''
+  const interestedDivisions = Array.isArray(signup.interestedDivisions) ? signup.interestedDivisions.filter(value => typeof value === 'string').join(', ') : ''
+  const playingNotes = [
+    typeof signup.currentClub === 'string' && signup.currentClub ? `Current / recent club: ${signup.currentClub}` : '',
+    typeof signup.availability === 'string' && signup.availability ? `Availability: ${signup.availability}` : '',
+    typeof signup.notes === 'string' ? signup.notes : '',
+  ].filter(Boolean).join('\n\n')
+  const assessment = {serving:0, passing:0, setting:0, attacking:0, blocking:0, defence:0, movement:0, communication:0, attitude:0, overallLevel:0}
+  const player = {
+    sourceSignupId: id,
+    name: typeof signup.name === 'string' ? signup.name : '',
+    email: signupEmail,
+    dateOfBirth: typeof signup.dateOfBirth === 'string' ? signup.dateOfBirth : '',
+    interestedDivisions,
+    position: primaryPosition,
+    secondaryPosition,
+    playingExperience: typeof signup.playingExperience === 'string' ? signup.playingExperience : '',
+    highestLevelPlayed: typeof signup.highestLevelPlayed === 'string' ? signup.highestLevelPlayed : '',
+    photoUrl: '',
+    trialDate: 'Not assigned',
+    trialSessionId: '',
+    trialResponseStatus: '',
+    paid: false,
+    attended: false,
+    trialRegistrations: {},
+    decision: 'Offer accepted',
+    offeredTeam: joinedTeam,
+    offeredPosition: primaryPosition,
+    confirmedTeams: {[joinedTeam]: primaryPosition},
+    offers: [{team: joinedTeam, position: primaryPosition, squadRole: 'Role to be discussed', includeSquadRole: true}],
+    notes: playingNotes,
+    assessment,
+    assessmentNotes: {},
+    assessmentScale: 10,
+    assessmentHistory: {},
+    recommendation: 'Offer',
+    strengths: '',
+    developmentAreas: '',
+    suitableTeams: [joinedTeam],
+    bibNumber: '',
+    teamConsideration: {[joinedTeam]: primaryPosition},
+    emailReviewStatus: 'draft',
+    emailDraft: {responseDeadline: '', coachName: '', personalMessage: ''},
+    communicationHistory: {},
+    returningPlayer: false,
+    updatedAt,
+    updatedBy: manager.email,
+  }
+  const updates: Record<string, unknown> = {
+    [`clubSignups/${id}/status`]: status,
+    [`clubSignups/${id}/statusOutcome`]: statusOutcome,
+    [`clubSignups/${id}/joinedTeam`]: joinedTeam,
+    [`clubSignups/${id}/transferredPlayerId`]: transferredPlayerId,
+    [`clubSignups/${id}/updatedAt`]: updatedAt,
+    [`clubSignups/${id}/handledBy`]: manager.email,
+    [`players/${transferredPlayerId}`]: player,
+  }
+  if (typeof signup.profilePhoto === 'string' && signup.profilePhoto) updates[`playerPhotos/${transferredPlayerId}`] = signup.profilePhoto
+  await db.ref().update(updates)
+  return {updatedAt, playerId: transferredPlayerId}
 })
 
 export const deleteClubSignup = onCall({region}, async request => {

@@ -5,7 +5,7 @@ import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, r
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
 import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
-import { averageRating, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
+import { averageRating, currentRatingScale, emptyAssessment, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
 import { buildCommunication, normaliseEmailSettings, sentDecisionFor } from './utils/email'
@@ -56,6 +56,13 @@ function recordsWithoutId<T extends {id:string}>(items:T[]){
 
 function recordsWithId(value:unknown){
   return Object.entries(recordValue(value)).map(([id,item])=>({...recordValue(item),id}))
+}
+
+function playerFromClubSignup(signup:ClubSignup,team:string,playerId:string,updatedBy:string):Player{
+  const position=signup.primaryPosition&&signup.primaryPosition!=='Not sure'?signup.primaryPosition:'All-rounder'
+  const secondaryPosition=signup.secondaryPosition==='Not sure'?'':signup.secondaryPosition
+  const notes=[signup.currentClub?`Current / recent club: ${signup.currentClub}`:'',signup.availability?`Availability: ${signup.availability}`:'',signup.notes].filter(Boolean).join('\n\n')
+  return normalisePlayer({id:playerId,sourceSignupId:signup.id,name:signup.name,email:signup.email,dateOfBirth:signup.dateOfBirth,interestedDivisions:signup.interestedDivisions.join(', '),position,secondaryPosition,playingExperience:signup.playingExperience,highestLevelPlayed:signup.highestLevelPlayed,photoUrl:'',trialDate:'Not assigned',trialSessionId:'',trialResponseStatus:'',paid:false,attended:false,trialRegistrations:{},decision:'Offer accepted',offeredTeam:team,offeredPosition:position,confirmedTeams:{[team]:position},offers:[{team,position,squadRole:defaultSquadRole,includeSquadRole:true}],notes,assessment:emptyAssessment(),assessmentNotes:{},assessmentScale:currentRatingScale,assessmentHistory:{},recommendation:'Offer',strengths:'',developmentAreas:'',suitableTeams:[team],bibNumber:'',teamConsideration:{[team]:position},emailReviewStatus:'draft',emailDraft:{responseDeadline:'',coachName:'',personalMessage:''},communicationHistory:{},returningPlayer:false,updatedAt:Date.now(),updatedBy})
 }
 
 export default function App(){
@@ -553,8 +560,9 @@ export default function App(){
     if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
     const snapshotId=crypto.randomUUID()
     const recordedBy=activityActor.name
-    const snapshot={id:snapshotId,assessment:{...updated.assessment},average:averageRating(updated),recommendation:updated.recommendation,strengths:updated.strengths,developmentAreas:updated.developmentAreas,suitableTeams:[...updated.suitableTeams],recordedAt:Date.now(),recordedBy}
-    await save({...updated,assessmentHistory:{...updated.assessmentHistory,[snapshotId]:snapshot}},{category:'player',action:'assessment_saved',summary:`Saved a new assessment for ${updated.name}`,detail:`Overall average ${snapshot.average?snapshot.average.toFixed(1):'not rated'} · ${updated.recommendation||'No recommendation'}`,team:updated.offeredTeam||updated.suitableTeams[0]||'',entityType:'player',entityId:updated.id})
+    const scaled={...updated,assessmentScale:10 as const}
+    const snapshot={id:snapshotId,assessment:{...scaled.assessment},assessmentNotes:{...scaled.assessmentNotes},average:averageRating(scaled),ratingScale:10 as const,recommendation:scaled.recommendation,strengths:scaled.strengths,developmentAreas:scaled.developmentAreas,suitableTeams:[...scaled.suitableTeams],recordedAt:Date.now(),recordedBy}
+    await save({...scaled,assessmentHistory:{...scaled.assessmentHistory,[snapshotId]:snapshot}},{category:'player',action:'assessment_saved',summary:`Saved a new assessment for ${scaled.name}`,detail:`Overall average ${snapshot.average?`${snapshot.average.toFixed(1)}/10`:'not rated'} · ${scaled.recommendation||'No recommendation'}`,team:scaled.offeredTeam||scaled.suitableTeams[0]||'',entityType:'player',entityId:scaled.id})
   }
   const importPlayers=async(newPlayers:Omit<Player,'id'>[])=>{
     if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
@@ -877,12 +885,28 @@ export default function App(){
       : {category:'finance',action:'standard_fees_changed',summary:'Finance settings updated',detail:`NVL/LVA fees, payment dates and ${stamped.customPaymentRules.length} custom arrangement rule${stamped.customPaymentRules.length===1?'':'s'} were saved.`,team:'',entityType:'settings',entityId:'financeSettings'})
   }
   const saveFinanceForecast=(forecast:FinanceForecast)=>saveFinanceSettings({...financeSettings,forecast:{...forecast,updatedAt:Date.now(),updatedBy:user?.email||'Local demo'}},'forecast')
-  const changeClubSignupStatus=async(id:string,status:ClubSignupStatus,statusOutcome:ClubSignupOutcome|'')=>{
+  const changeClubSignupStatus=async(id:string,status:ClubSignupStatus,statusOutcome:ClubSignupOutcome|'',joinedTeam='')=>{
     if(isReadOnly)return
-    if(database&&user&&!demo){setSyncState('saving');try{await updateClubSignupStatusRemote(id,status,statusOutcome)}finally{showConnectionState()}}
+    if(database&&user&&!demo){setSyncState('saving');try{await updateClubSignupStatusRemote(id,status,statusOutcome,joinedTeam)}finally{showConnectionState()}}
     else{
       const updatedAt=Date.now()
-      const next=clubSignups.map(signup=>signup.id===id?{...signup,status,statusOutcome,updatedAt,handledBy:user?.email||'Local demo'}:signup)
+      const signup=clubSignups.find(item=>item.id===id)
+      if(!signup)throw new Error('Sign-up not found.')
+      let transferredPlayerId=signup.transferredPlayerId
+      if(statusOutcome==='joined-team'){
+        if(status!=='closed'||!teams.includes(joinedTeam))throw new Error('Choose the team this player joined.')
+        if(signup.transferredPlayerId&&signup.joinedTeam&&signup.joinedTeam!==joinedTeam)throw new Error(`This sign-up has already been transferred to ${signup.joinedTeam}.`)
+        transferredPlayerId=signup.transferredPlayerId||`signup-${signup.id}`
+        const transferred=players.find(player=>player.id===transferredPlayerId)
+        if(!transferred){
+          if(players.some(player=>player.email.trim().toLowerCase()===signup.email.trim().toLowerCase()))throw new Error('A player with this email address is already in the main player list.')
+          const player=playerFromClubSignup(signup,joinedTeam,transferredPlayerId,user?.email||'Local demo')
+          const nextPlayers=[...players,player]
+          setPlayers(nextPlayers);localStorage.setItem('f6players',JSON.stringify(nextPlayers))
+          if(signup.profilePhoto){const nextPhotos={...playerPhotos,[transferredPlayerId]:signup.profilePhoto};setPlayerPhotos(nextPhotos);localStorage.setItem('f6playerphotos',JSON.stringify(nextPhotos))}
+        }
+      }
+      const next=clubSignups.map(item=>item.id===id?{...item,status,statusOutcome,...(statusOutcome==='joined-team'?{joinedTeam,transferredPlayerId}:{}),updatedAt,handledBy:user?.email||'Local demo'}:item)
       setClubSignups(next);localStorage.setItem('f6clubsignups',JSON.stringify(next))
     }
   }

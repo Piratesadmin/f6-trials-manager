@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { BarChart3, Camera, Check, CheckCircle2, ClipboardList, CreditCard, LoaderCircle, Save, Star, Trash2, TrendingUp, UserRound } from 'lucide-react'
-import type { Assessment, AssessmentSnapshot, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerTab, Recommendation, TrialResponseStatus, TrialSession } from '../types'
+import type { Assessment, AssessmentKey, AssessmentNotes, AssessmentSnapshot, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerTab, Recommendation, TrialResponseStatus, TrialSession } from '../types'
 import { positions, reasons, recommendations, teams } from '../data/constants'
-import { assessmentCompletion, assessmentFields, averageRating, confirmedTeamAssignments, setConfirmedTeam, setTrialRegistration, trialRegistrationsFor } from '../utils/player'
+import { assessmentCompletion, assessmentFields, averageRating, confirmedTeamAssignments, currentRatingScale, legacyRatingScale, ratingScaleFor, setConfirmedTeam, setTrialRegistration, trialRegistrationsFor } from '../utils/player'
 import { StarRating } from './StarRating'
 import { formatSessionDate } from '../utils/schedule'
 import { defaultSquadRole } from '../utils/offers'
@@ -38,6 +38,7 @@ const recommendationClass = (recommendation: Recommendation) => recommendation ?
 
 export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save, saveDecision, saveAssessment, starred, toggleStar, photo, uploadPhoto, removePhoto, deletePlayer, isAdmin, readOnly, trialsMode }: Props) {
   const average = averageRating(player)
+  const ratingScale=ratingScaleFor(player)
   const completion = assessmentCompletion(player)
   const initials = player.name.split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2)
   const visibleTabs=trialsMode?tabs:tabs.filter(tab=>tab.key==='overview'||tab.key==='assessment')
@@ -59,8 +60,8 @@ export function PlayerProfile({ player, sessions, activeTab, setActiveTab, save,
           <span className={`recommendation-badge ${recommendationClass(player.recommendation)}`}>{player.recommendation || 'No recommendation yet'}</span>
         </div>
       </div>
-      <div className="profile-hero-actions">{isAdmin&&<button className="profile-delete-player" disabled={deleteBusy} onClick={removePlayer} aria-label={`Permanently delete ${player.name}`} title="Organization administrators only">{deleteBusy?<LoaderCircle className="spin"/>:<Trash2/>}<span>{deleteBusy?'Deleting…':'Delete player'}</span></button>}{!readOnly&&<button className={`profile-star ${starred?'starred':''}`} onClick={toggleStar} aria-label={starred?'Remove from my starred players':'Add to my starred players'} title={starred?'Remove from my starred players':'Add to my starred players'}><Star/></button>}<div className="profile-score" aria-label={average ? `Average rating ${average.toFixed(1)} out of 5` : 'Not yet rated'}>
-        <div><Star/><strong>{average ? average.toFixed(1) : '—'}</strong><span>/ 5</span></div>
+      <div className="profile-hero-actions">{isAdmin&&<button className="profile-delete-player" disabled={deleteBusy} onClick={removePlayer} aria-label={`Permanently delete ${player.name}`} title="Organization administrators only">{deleteBusy?<LoaderCircle className="spin"/>:<Trash2/>}<span>{deleteBusy?'Deleting…':'Delete player'}</span></button>}{!readOnly&&<button className={`profile-star ${starred?'starred':''}`} onClick={toggleStar} aria-label={starred?'Remove from my starred players':'Add to my starred players'} title={starred?'Remove from my starred players':'Add to my starred players'}><Star/></button>}<div className="profile-score" aria-label={average ? `Average rating ${average.toFixed(1)} out of ${ratingScale}` : 'Not yet rated'}>
+        <div><Star/><strong>{average ? average.toFixed(1) : '—'}</strong><span>/ {ratingScale}</span></div>
         <p>{completion}% assessed</p>
       </div></div>
     </header>
@@ -130,28 +131,31 @@ function Overview({ player, sessions, save, photo, uploadPhoto, removePhoto }: P
   </div>
 }
 
-type AssessmentDraft={assessment:Assessment;strengths:string;developmentAreas:string}
-const assessmentDraftFor=(player:Player):AssessmentDraft=>({assessment:{...player.assessment},strengths:player.strengths,developmentAreas:player.developmentAreas})
+type AssessmentDraft={assessment:Assessment;assessmentNotes:AssessmentNotes;assessmentScale:10;strengths:string;developmentAreas:string}
+const assessmentDraftFor=(player:Player):AssessmentDraft=>({assessment:Object.fromEntries(assessmentFields.map(({key})=>[key,ratingScaleFor(player)===legacyRatingScale?player.assessment[key]*2:player.assessment[key]])) as Assessment,assessmentNotes:{...player.assessmentNotes},assessmentScale:currentRatingScale,strengths:player.strengths,developmentAreas:player.developmentAreas})
+const notedSkills=(player:Player)=>new Set<AssessmentKey>(assessmentFields.flatMap(({key})=>player.assessmentNotes?.[key]?[key]:[]))
 
 export function PlayerAssessment({ player, saveAssessment, trialsMode, showHistory = true, onSaved }: Pick<Props, 'player' | 'saveAssessment' | 'trialsMode'> & {showHistory?:boolean;onSaved?:()=>void}) {
   const [draft,setDraft]=useState<AssessmentDraft>(()=>assessmentDraftFor(player))
+  const [expandedNotes,setExpandedNotes]=useState<Set<AssessmentKey>>(()=>notedSkills(player))
   const [busy,setBusy]=useState(false)
   const [saved,setSaved]=useState(false)
-  useEffect(()=>{setDraft(assessmentDraftFor(player));setSaved(false)},[player.id,player.updatedAt])
+  useEffect(()=>{setDraft(assessmentDraftFor(player));setExpandedNotes(notedSkills(player));setSaved(false)},[player.id,player.updatedAt])
   const draftPlayer={...player,...draft}
   const average=averageRating(draftPlayer)
   const completion=assessmentCompletion(draftPlayer)
   const history=Object.values(player.assessmentHistory||{}).sort((a,b)=>a.recordedAt-b.recordedAt)
+  const convertedLegacyRating=ratingScaleFor(player)===legacyRatingScale&&averageRating(player)>0
   const submit=async()=>{setBusy(true);setSaved(false);try{await saveAssessment(draftPlayer);if(onSaved){onSaved();return}setSaved(true);window.setTimeout(()=>setSaved(false),2200)}finally{setBusy(false)}}
 
   return <div className="profile-section">
     <div className="assessment-summary assessment-draft-summary">
-      <div><span className="eyebrow">CURRENT ASSESSMENT</span><h3>{average ? `${average.toFixed(1)} average rating` : 'Not assessed yet'}</h3><p>Update the scores, then save a dated assessment to add it to this player’s progression.</p></div>
+      <div><span className="eyebrow">CURRENT ASSESSMENT · OUT OF 10</span><h3>{average ? `${average.toFixed(1)} / 10 average rating` : 'Not assessed yet'}</h3><p>{convertedLegacyRating?'The previous five-star scores have been proportionally carried into the new ten-star scale. Review them before saving.':'Update the scores, then save a dated assessment to add it to this player’s progression.'}</p></div>
       <div className="assessment-summary-actions"><div className="completion-ring" style={{ '--completion': `${completion * 3.6}deg` } as CSSProperties}><span>{completion}%</span></div><button className="primary save-assessment" disabled={busy||completion===0} onClick={submit}>{busy?<LoaderCircle className="spin"/>:saved?<CheckCircle2/>:<Save/>}{busy?'Saving…':saved?'Assessment saved':'Save assessment'}</button></div>
     </div>
 
     <div className="ratings-grid">
-      {assessmentFields.map(({ key, label, hint }) => <div className="rating-row" key={key}><div><b>{label}</b><span>{hint}</span></div><StarRating label={label} value={draft.assessment[key]} onChange={value=>setDraft(current=>({...current,assessment:{...current.assessment,[key]:value}}))}/><strong>{draft.assessment[key] || '—'}</strong></div>)}
+      {assessmentFields.map(({ key, label, hint }) => <div className="rating-row" key={`${player.id}-${key}`}><div><b>{label}</b><span>{hint}</span></div><StarRating label={label} value={draft.assessment[key]} onChange={value=>setDraft(current=>({...current,assessment:{...current.assessment,[key]:value}}))}/><strong>{draft.assessment[key]?`${draft.assessment[key]}/10`:'—'}</strong><details className="skill-rating-notes" open={expandedNotes.has(key)} onToggle={event=>{const open=event.currentTarget.open;setExpandedNotes(current=>{if(current.has(key)===open)return current;const next=new Set(current);if(open)next.add(key);else next.delete(key);return next})}}><summary><span>Skill notes</span><small>{draft.assessmentNotes[key]?'Comment added':'Add a comment'}</small></summary><textarea aria-label={`${label} skill notes`} maxLength={1000} rows={3} value={draft.assessmentNotes[key]||''} onChange={event=>setDraft(current=>({...current,assessmentNotes:{...current.assessmentNotes,[key]:event.target.value}}))} placeholder={`Add coaching observations about ${label.toLowerCase()}…`}/></details></div>)}
     </div>
 
     <div className="notes-grid">
@@ -167,8 +171,10 @@ function AssessmentProgression({history,trialsMode}:{history:AssessmentSnapshot[
   const recent=history.slice(-8)
   const latest=history.at(-1)
   const previous=history.at(-2)
-  const change=latest&&previous?latest.average-previous.average:0
-  return <section className="assessment-progression"><header><div><span className="eyebrow">PLAYER PROGRESSION</span><h3>Assessment history</h3><p>Every saved assessment is retained as a dated snapshot.</p></div><div className={`progression-change ${change>0?'improved':change<0?'declined':''}`}><TrendingUp/><b>{history.length}</b><span>saved assessment{history.length===1?'':'s'}</span>{latest&&previous&&<small>{change>0?'+':''}{change.toFixed(1)} since previous</small>}</div></header>{history.length?<><div className="progression-chart" aria-label="Saved overall assessment progression">{recent.map((snapshot,index)=><div key={snapshot.id}><span style={{height:`${Math.max(5,snapshot.average/5*100)}%`}}></span><b>{snapshot.average.toFixed(1)}</b><small>{new Date(snapshot.recordedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</small>{index===recent.length-1&&<em>Latest</em>}</div>)}</div><div className="assessment-history-list">{[...history].reverse().map((snapshot,index)=><details key={snapshot.id} open={index===0}><summary><span><b>{new Date(snapshot.recordedAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</b><small>{snapshot.recordedBy||'Club coach'}{trialsMode?` · ${snapshot.recommendation||'No recommendation'}`:''}</small></span><strong><Star/>{snapshot.average.toFixed(1)}</strong></summary><div className="history-skill-grid">{assessmentFields.map(field=><span key={field.key}><b>{field.label}</b><em>{snapshot.assessment[field.key]||'—'}</em></span>)}</div>{(snapshot.strengths||snapshot.developmentAreas)&&<div className="history-notes"><p><b>Strengths</b>{snapshot.strengths||'Not recorded'}</p><p><b>Development</b>{snapshot.developmentAreas||'Not recorded'}</p></div>}</details>)}</div></>:<div className="progression-empty"><BarChart3/><b>No saved assessments yet</b><span>Complete the current ratings and select Save assessment to begin tracking progress.</span></div>}</section>
+  const scale=(snapshot:AssessmentSnapshot)=>snapshot.ratingScale===currentRatingScale?currentRatingScale:legacyRatingScale
+  const equivalent=(snapshot:AssessmentSnapshot)=>snapshot.average*(currentRatingScale/scale(snapshot))
+  const change=latest&&previous?equivalent(latest)-equivalent(previous):0
+  return <section className="assessment-progression"><header><div><span className="eyebrow">PLAYER PROGRESSION</span><h3>Assessment history</h3><p>Every saved assessment retains the rating scale and skill comments used at the time.</p></div><div className={`progression-change ${change>0?'improved':change<0?'declined':''}`}><TrendingUp/><b>{history.length}</b><span>saved assessment{history.length===1?'':'s'}</span>{latest&&previous&&<small>{change>0?'+':''}{change.toFixed(1)} / 10 equivalent since previous</small>}</div></header>{history.length?<><div className="progression-chart" aria-label="Saved overall assessment progression">{recent.map((snapshot,index)=><div key={snapshot.id}><span style={{height:`${Math.max(5,snapshot.average/scale(snapshot)*100)}%`}}></span><b>{snapshot.average.toFixed(1)}/{scale(snapshot)}</b><small>{new Date(snapshot.recordedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</small>{index===recent.length-1&&<em>Latest</em>}</div>)}</div><div className="assessment-history-list">{[...history].reverse().map((snapshot,index)=><details key={snapshot.id} open={index===0}><summary><span><b>{new Date(snapshot.recordedAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</b><small>{snapshot.recordedBy||'Club coach'}{trialsMode?` · ${snapshot.recommendation||'No recommendation'}`:''}</small></span><strong><Star/>{snapshot.average.toFixed(1)} / {scale(snapshot)}</strong></summary><div className="history-skill-grid">{assessmentFields.map(field=><span key={field.key}><b>{field.label}</b><em>{snapshot.assessment[field.key]?`${snapshot.assessment[field.key]}/${scale(snapshot)}`:'—'}</em>{snapshot.assessmentNotes?.[field.key]&&<small>{snapshot.assessmentNotes[field.key]}</small>}</span>)}</div>{(snapshot.strengths||snapshot.developmentAreas)&&<div className="history-notes"><p><b>Strengths</b>{snapshot.strengths||'Not recorded'}</p><p><b>Development</b>{snapshot.developmentAreas||'Not recorded'}</p></div>}</details>)}</div></>:<div className="progression-empty"><BarChart3/><b>No saved assessments yet</b><span>Complete the current ratings and select Save assessment to begin tracking progress.</span></div>}</section>
 }
 
 function DecisionPanel({ player, saveDecision }: Pick<Props, 'player' | 'saveDecision'>) {

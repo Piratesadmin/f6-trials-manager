@@ -1,4 +1,4 @@
-import type { Assessment, AssessmentKey, AssessmentSnapshot, Player, TrialRegistration, TrialResponseStatus } from '../types'
+import type { Assessment, AssessmentKey, AssessmentNotes, AssessmentSnapshot, Player, RatingScale, TrialRegistration, TrialResponseStatus } from '../types'
 import { normaliseOffers } from './offers'
 
 export const assessmentFields: { key: AssessmentKey; label: string; hint: string }[] = [
@@ -29,9 +29,21 @@ export function emptyAssessment(): Assessment {
   }
 }
 
-function normaliseScore(value: unknown) {
+export const currentRatingScale = 10 as const satisfies RatingScale
+export const legacyRatingScale = 5 as const satisfies RatingScale
+
+function normaliseScore(value: unknown, scale: RatingScale) {
   const score = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(score) ? Math.min(5, Math.max(0, Math.round(score))) : 0
+  return Number.isFinite(score) ? Math.min(scale, Math.max(0, Math.round(score))) : 0
+}
+
+function normaliseAssessmentNotes(value:unknown):AssessmentNotes{
+  if(!value||typeof value!=='object')return{}
+  const incoming=value as Partial<Record<AssessmentKey,unknown>>
+  return Object.fromEntries(assessmentFields.flatMap(({key})=>{
+    const note=typeof incoming[key]==='string'?incoming[key].slice(0,1000):''
+    return note.trim()?[[key,note]]:[]
+  }))
 }
 
 function normaliseTrialResponseStatus(value: unknown): TrialResponseStatus {
@@ -137,9 +149,12 @@ export function normalisePlayer(player: Player): Player {
   } = unsafePlayer
   const assessment = emptyAssessment()
   const incoming = player.assessment as Partial<Assessment> | undefined
+  const hasStoredRating=assessmentFields.some(({key})=>Number(incoming?.[key])>0)
+  const assessmentScale:RatingScale=player.assessmentScale===currentRatingScale?currentRatingScale:player.assessmentScale===legacyRatingScale?legacyRatingScale:hasStoredRating?legacyRatingScale:currentRatingScale
   assessmentFields.forEach(({ key }) => {
-    assessment[key] = normaliseScore(incoming?.[key])
+    assessment[key] = normaliseScore(incoming?.[key],assessmentScale)
   })
+  const assessmentNotes=normaliseAssessmentNotes(player.assessmentNotes)
 
   const consideration = player.teamConsideration && typeof player.teamConsideration === 'object'
     ? Object.fromEntries(Object.entries(player.teamConsideration).filter(([team, position]) => Boolean(team) && typeof position === 'string' && Boolean(position)))
@@ -160,11 +175,12 @@ export function normalisePlayer(player: Player): Player {
     ? Object.fromEntries(Object.entries(player.assessmentHistory).flatMap(([id,value])=>{
       if(!value||typeof value!=='object')return[]
       const incomingSnapshot=value as Partial<AssessmentSnapshot>
+      const ratingScale:RatingScale=incomingSnapshot.ratingScale===currentRatingScale?currentRatingScale:legacyRatingScale
       const snapshotAssessment=emptyAssessment()
-      assessmentFields.forEach(({key})=>{snapshotAssessment[key]=normaliseScore(incomingSnapshot.assessment?.[key])})
+      assessmentFields.forEach(({key})=>{snapshotAssessment[key]=normaliseScore(incomingSnapshot.assessment?.[key],ratingScale)})
       const scores=Object.values(snapshotAssessment).filter(score=>score>0)
       const average=scores.length?scores.reduce((total,score)=>total+score,0)/scores.length:0
-      return [[id,{id,assessment:snapshotAssessment,average, recommendation:incomingSnapshot.recommendation||'',strengths:incomingSnapshot.strengths||'',developmentAreas:incomingSnapshot.developmentAreas||'',suitableTeams:Array.isArray(incomingSnapshot.suitableTeams)?incomingSnapshot.suitableTeams.filter(Boolean):[],recordedAt:typeof incomingSnapshot.recordedAt==='number'?incomingSnapshot.recordedAt:0,recordedBy:typeof incomingSnapshot.recordedBy==='string'?incomingSnapshot.recordedBy:''} as AssessmentSnapshot]]
+      return [[id,{id,assessment:snapshotAssessment,assessmentNotes:normaliseAssessmentNotes(incomingSnapshot.assessmentNotes),average,ratingScale,recommendation:incomingSnapshot.recommendation||'',strengths:incomingSnapshot.strengths||'',developmentAreas:incomingSnapshot.developmentAreas||'',suitableTeams:Array.isArray(incomingSnapshot.suitableTeams)?incomingSnapshot.suitableTeams.filter(Boolean):[],recordedAt:typeof incomingSnapshot.recordedAt==='number'?incomingSnapshot.recordedAt:0,recordedBy:typeof incomingSnapshot.recordedBy==='string'?incomingSnapshot.recordedBy:''} as AssessmentSnapshot]]
     }))
     : {}
   const trialRegistrations = trialRegistrationsFor(player)
@@ -201,6 +217,8 @@ export function normalisePlayer(player: Player): Player {
     offeredPosition: confirmedTeams[offeredTeam] || player.offeredPosition || offers.find(offer=>offer.team===offeredTeam)?.position || primary?.position || '',
     confirmedTeams,
     assessment,
+    assessmentNotes,
+    assessmentScale,
     assessmentHistory,
     recommendation: player.recommendation || '',
     strengths: player.strengths || '',
@@ -229,6 +247,21 @@ export function averageRating(player: Player) {
   const values = ratingValues(player)
   if (!values.length) return 0
   return values.reduce((total, score) => total + score, 0) / values.length
+}
+
+export function ratingScaleFor(player:Player):RatingScale{
+  if(player.assessmentScale===currentRatingScale)return currentRatingScale
+  if(player.assessmentScale===legacyRatingScale)return legacyRatingScale
+  return assessmentFields.some(({key})=>Number(player.assessment?.[key])>0)?legacyRatingScale:currentRatingScale
+}
+
+export function averageRatingOutOfTen(player:Player){
+  return averageRating(player)*(currentRatingScale/ratingScaleFor(player))
+}
+
+export function formatPlayerRating(player:Player){
+  const average=averageRating(player)
+  return average?`${average.toFixed(1)}/${ratingScaleFor(player)}`:'—'
 }
 
 export function assessmentCompletion(player: Player) {

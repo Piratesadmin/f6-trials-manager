@@ -4,7 +4,7 @@ import { PageHeader } from '../components/PageHeader'
 import { PlayerAvatar } from '../components/PlayerAvatar'
 import { positions, teams } from '../data/constants'
 import type { FinanceSettings, Player, PlayerFinanceMap, PlayerPhotos, TeamPlans, TrialSession } from '../types'
-import { averageRating, confirmedTeamAssignments, confirmedTeamNames, isConfirmedForTeam, setConfirmedTeam } from '../utils/player'
+import { averageRating, confirmedTeamAssignments, confirmedTeamNames, formatPlayerRating, isConfirmedForTeam, setConfirmedTeam } from '../utils/player'
 import { assignmentForTeam, isPlannedForTeam, minimumSquadSize, minimumTargetForPosition, recommendationMatchesTeam } from '../utils/teamPlanner'
 import { confirmedPosition, effectiveAmountOwed, emptyPlayerFinance, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentStatus } from '../utils/finance'
 import { defaultSquadRole, offerForTeam, primaryOffer } from '../utils/offers'
@@ -301,7 +301,7 @@ function PlannedPlayerCard({ player, photo, team, editable, moveTeams, onOpen, o
   const isOffered = Boolean(offerForTeam(player, team))
   const canConfirm = isOffered && !isConfirmedForTeam(player,team) && (player.decision === 'Offer sent' || player.decision === 'Offer accepted')
   return <div className="planned-player-card">
-    <button className="planner-player-identity" onClick={() => onOpen(player.id)}><PlayerAvatar player={player} photo={photo} fallback={player.bibNumber?`#${player.bibNumber}`:undefined} className="planner-avatar"/><div><b>{player.name}</b><span>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</span></div><ArrowRight/></button>
+    <button className="planner-player-identity" onClick={() => onOpen(player.id)}><PlayerAvatar player={player} photo={photo} fallback={player.bibNumber?`#${player.bibNumber}`:undefined} className="planner-avatar"/><div><b>{player.name}</b><span>{rating ? <><Star/>{formatPlayerRating(player)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</span></div><ArrowRight/></button>
     <label>Position<select disabled={!editable} aria-label={`${player.name} planned position`} value={assignmentForTeam(player,team)||player.position} onChange={event => onPosition(player,event.target.value)}>{positions.map(position=><option key={position}>{position}</option>)}</select></label>
     <label>Team<select disabled={!editable} aria-label={`Move ${player.name} to team`} value={team} onChange={event => onMove(player,event.target.value)}><option>{team}</option>{moveTeams.filter(item=>item!==team).map(item=><option key={item}>{item}</option>)}</select></label>
     <div className="planned-actions">{isOffered ? <><span className="offer-ready-chip"><Check/> {player.decision === 'Offer accepted' ? 'Confirmed for another team' : player.decision}</span>{editable&&canConfirm&&<button className="accept-offer" onClick={()=>onAddToTeam(player)}><UserPlus/>Add to team</button>}</> : editable?<button className="prepare-offer" onClick={() => onPrepareOffer(player)}><MailPlus/>Prepare offer</button>:<span className="view-only-chip"><Lock/>View only</span>}{editable&&<button className="reset-player-workflow" onClick={()=>onReset(player)} title="Remove from this team workflow"><RotateCcw/>Remove</button>}</div>
@@ -310,5 +310,5 @@ function PlannedPlayerCard({ player, photo, team, editable, moveTeams, onOpen, o
 
 function CandidateCard({ player, photo, onOpen }: { player: Player; photo?:string; onOpen:()=>void }) {
   const rating = averageRating(player)
-  return <div className="candidate-card"><button className="candidate-profile" onClick={onOpen}><PlayerAvatar player={player} photo={photo} fallback={player.bibNumber?`#${player.bibNumber}`:undefined} className="planner-avatar"/><div><b>{player.name}</b><span>{player.position} · {player.interestedDivisions} applicant</span><small>{rating ? <><Star/>{rating.toFixed(1)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</small></div></button><button className="add-plan" onClick={onOpen}><ArrowRight/>Open player</button></div>
+  return <div className="candidate-card"><button className="candidate-profile" onClick={onOpen}><PlayerAvatar player={player} photo={photo} fallback={player.bibNumber?`#${player.bibNumber}`:undefined} className="planner-avatar"/><div><b>{player.name}</b><span>{player.position} · {player.interestedDivisions} applicant</span><small>{rating ? <><Star/>{formatPlayerRating(player)}</> : 'Not assessed'} · {player.recommendation || 'No recommendation'}</small></div></button><button className="add-plan" onClick={onOpen}><ArrowRight/>Open player</button></div>
 }

@@ -22,11 +22,15 @@ export type AssessmentKey =
   | 'overallLevel'
 
 export type Assessment = Record<AssessmentKey, number>
+export type AssessmentNotes = Partial<Record<AssessmentKey, string>>
+export type RatingScale = 5 | 10
 
 export type AssessmentSnapshot = {
   id: string
   assessment: Assessment
+  assessmentNotes?: AssessmentNotes
   average: number
+  ratingScale?: RatingScale
   recommendation: Recommendation
   strengths: string
   developmentAreas: string
@@ -101,6 +105,7 @@ export type TrialRegistration = {
 
 export type Player = {
   id: string
+  sourceSignupId?: string
   name: string
   email: string
   dateOfBirth: string
@@ -124,6 +129,8 @@ export type Player = {
   rejectionReason?: string
   notes: string
   assessment: Assessment
+  assessmentNotes?: AssessmentNotes
+  assessmentScale?: RatingScale
   assessmentHistory?: Record<string, AssessmentSnapshot>
   recommendation: Recommendation
   strengths: string
