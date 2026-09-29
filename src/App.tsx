@@ -4,7 +4,7 @@ import { LockKeyhole } from 'lucide-react'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
-import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
+import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, currentRatingScale, emptyAssessment, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
@@ -21,6 +21,7 @@ import { appHashFor, parseAppHash, type AppRoute } from './utils/navigation'
 import { createSystemBackup, downloadSystemBackup, parseSystemBackup, systemBackupPaths, type SystemBackup, type SystemBackupData } from './utils/backup'
 import { Login } from './components/Login'
 import { CsvImportModal } from './components/CsvImportModal'
+import { SpondScheduleImportModal } from './components/SpondScheduleImportModal'
 import { ReturningPlayersImportModal } from './components/ReturningPlayersImportModal'
 import { Sidebar } from './components/Sidebar'
 import { DashboardPage } from './pages/DashboardPage'
@@ -93,6 +94,7 @@ export default function App(){
   const databaseConnected=useRef(false)
   const teamAdminExemptionUpdateInFlight=useRef(false)
   const [importOpen,setImportOpen]=useState(false)
+  const [spondImportOpen,setSpondImportOpen]=useState(false)
   const [returningImportTeam,setReturningImportTeam]=useState('')
   const [playerTab,setPlayerTabState]=useState<PlayerTab>(initialRoute.playerTab||'decision')
   const [financeView,setFinanceViewState]=useState<FinanceView>(initialRoute.financeView||'overview')
@@ -631,6 +633,44 @@ export default function App(){
     navigate({page:'schedule',sessionId})
     await recordActivity({category:'import',action:existingSession?'trial_workbook_updated':'trial_workbook_imported',summary:`${existingSession?'Updated':'Imported'} ${prepared.length} players ${existingSession?'in':'into'} ${sessionRecord.title}`,detail:`${trialDateLabel(sessionRecord.date)} · ${existingSession?'Existing event updated':'Trial event created from workbook'}`,team:'',entityType:'session',entityId:sessionRecord.id})
   }
+  const importSpondEvent=async(session:Omit<TrialSession,'id'>,attendance:Record<string,SessionAttendanceStatus>,existingSessionId?:string)=>{
+    if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
+    const existingSession=existingSessionId?trialSessions.find(item=>item.id===existingSessionId):undefined
+    if(existingSessionId&&!existingSession)throw new Error('The matching event no longer exists. Close the import and try again.')
+    const eventTeams=existingSession?.teams||session.teams
+    if(!isAdmin&&!eventTeams.some(team=>editableTeams.includes(team)))throw new Error('You do not have permission to update this team’s schedule.')
+    const sessionId=existingSession?.id||crypto.randomUUID()
+    const now=Date.now()
+    const actor=user?.email||'Local demo'
+    const sessionRecord:TrialSession=normaliseTrialSession(sessionId,{
+      ...existingSession,
+      ...session,
+      eventType:existingSession?.eventType||session.eventType,
+      teams:eventTeams,
+      opponent:existingSession?.opponent||session.opponent,
+      competition:existingSession?.competition||session.competition,
+      gameLocation:existingSession?.gameLocation||session.gameLocation,
+      recurrenceRule:existingSession?.recurrenceRule||session.recurrenceRule,
+      recurrenceGroupId:existingSession?.recurrenceGroupId||session.recurrenceGroupId,
+      notes:existingSession?.notes||session.notes,
+      attendance:{...existingSession?.attendance,...attendance},
+      createdAt:existingSession?.createdAt||now,
+      updatedAt:now,
+      updatedBy:actor,
+    })
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      const{id,...data}=sessionRecord
+      await set(ref(database,`trialSessions/${id}`),data)
+    }else{
+      const next=existingSession?trialSessions.map(item=>item.id===sessionId?sessionRecord:item):[...trialSessions,sessionRecord]
+      setTrialSessions(next)
+      localStorage.setItem('f6trialsessions',JSON.stringify(next))
+    }
+    navigate({page:'schedule',sessionId})
+    const markCount=Object.keys(attendance).length
+    await recordActivity({category:'import',action:existingSession?'spond_event_updated':'spond_event_imported',summary:`${existingSession?'Updated':'Imported'} ${sessionRecord.title} from Spond`,detail:`${trialDateLabel(sessionRecord.date)} · ${markCount} attendance mark${markCount===1?'':'s'} applied`,team:eventTeams.join(', '),entityType:'session',entityId:sessionRecord.id})
+  }
   const importReturningPlayers=async(team:string,importedPlayers:Omit<Player,'id'>[])=>{
     if(!editableTeams.includes(team))throw new Error(`You do not have permission to import players into ${team}.`)
     const now=Date.now()
@@ -1053,6 +1093,7 @@ export default function App(){
         saveAssessment={saveAssessment}
         openPlayer={id=>openPlayer(id,'overview')}
         onImport={()=>setImportOpen(true)}
+        onSpondImport={()=>setSpondImportOpen(true)}
         teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))}
         requestedSessionId={requestedSessionId}
         onRequestedSessionHandled={()=>setRequestedSessionId('')}
@@ -1088,6 +1129,7 @@ export default function App(){
       />}
     </main>
     {importOpen&&<CsvImportModal existingPlayers={players} existingSessions={trialSessions} onClose={()=>setImportOpen(false)} onImport={importPlayers} onWorkbookImport={importTrialWorkbook}/>}
+    {spondImportOpen&&<SpondScheduleImportModal existingPlayers={players} existingSessions={trialSessions} availableTeams={isAdmin?teams:editableTeams} onClose={()=>setSpondImportOpen(false)} onImport={importSpondEvent}/>}
     {returningImportTeam&&<ReturningPlayersImportModal team={returningImportTeam} existingPlayers={players} onClose={()=>setReturningImportTeam('')} onImport={importReturningPlayers}/>}
   </div>
 }

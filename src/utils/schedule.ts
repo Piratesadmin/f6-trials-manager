@@ -29,12 +29,16 @@ export function normaliseTrialSession(id: string, value: Partial<TrialSession>):
 
 const importMatchText = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim()
 
+export function sessionMatchesImport(existing: TrialSession, incoming: Pick<TrialSession, 'title' | 'date' | 'startTime'>) {
+  return existing.date === incoming.date
+    && existing.startTime === incoming.startTime
+    && importMatchText(existing.title) === importMatchText(incoming.title)
+}
+
 export function trialSessionMatchesImport(existing: TrialSession, incoming: Pick<TrialSession, 'eventType' | 'title' | 'date' | 'startTime'>) {
   return existing.eventType === 'trial'
     && incoming.eventType === 'trial'
-    && existing.date === incoming.date
-    && existing.startTime === incoming.startTime
-    && importMatchText(existing.title) === importMatchText(incoming.title)
+    && sessionMatchesImport(existing,incoming)
 }
 
 export function eventTypeLabel(type: ClubEventType) {

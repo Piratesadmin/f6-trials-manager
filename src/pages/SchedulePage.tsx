@@ -26,6 +26,7 @@ type Props = {
   saveAssessment: (player: Player) => Promise<void>
   openPlayer: (playerId: string) => void
   onImport: () => void
+  onSpondImport: () => void
   teamColours: Record<string,string>
   requestedSessionId?: string
   onRequestedSessionHandled?: () => void
@@ -60,7 +61,7 @@ function calendarHeading(view:CalendarView,focus:Date){
   return first.getMonth()===last.getMonth()?`${first.getDate()}–${last.getDate()} ${last.toLocaleDateString('en-GB',{month:'long',year:'numeric'})}`:`${first.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${last.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`
 }
 
-export function SchedulePage({ sessions, players, playerPhotos, saveSession, saveSessionNotes, saveSessions, deleteSession, savePlayer, saveAssessment, openPlayer, onImport, teamColours, requestedSessionId, onRequestedSessionHandled, eventPhotos, uploadEventPhoto, removeEventPhoto, onSelectedSessionChange, editableTeams, isAdmin, readOnly, trialsMode }: Props) {
+export function SchedulePage({ sessions, players, playerPhotos, saveSession, saveSessionNotes, saveSessions, deleteSession, savePlayer, saveAssessment, openPlayer, onImport, onSpondImport, teamColours, requestedSessionId, onRequestedSessionHandled, eventPhotos, uploadEventPhoto, removeEventPhoto, onSelectedSessionChange, editableTeams, isAdmin, readOnly, trialsMode }: Props) {
   const today = useMemo(() => new Date(), [])
   const [focusDate,setFocusDate]=useState(today)
   const [calendarView,setCalendarView]=useState<CalendarView>('year')
@@ -105,7 +106,7 @@ export function SchedulePage({ sessions, players, playerPhotos, saveSession, sav
   const removeSession=async()=>{if(!selected||!canEditSelected)return;const affected=selected.eventType==='trial'&&assigned.length?` ${assigned.length} assigned player${assigned.length===1?'':'s'} will be removed from this event only.`:'';if(!window.confirm(`Delete ${selected.title}?${affected}`))return;await deleteSession(selected.id);setSelectedId('');setFullScreen(false)}
 
   return <>
-    <PageHeader title="Club schedule" subtitle={readOnly?'View trials, training and competitive fixtures.':trialsMode?'Plan trials, recurring training and competitive fixtures in one shared calendar.':'Plan recurring training and competitive fixtures in one shared calendar.'} action={!readOnly?<div className="schedule-header-actions">{trialsMode&&<button className="secondary" onClick={onImport}><FileSpreadsheet/> Import trial Excel</button>}<button className="primary" onClick={()=>setEditor(newDraft())}><Plus/> Add event</button></div>:undefined}/>
+    <PageHeader title="Club schedule" subtitle={readOnly?'View trials, training and competitive fixtures.':trialsMode?'Plan trials, recurring training and competitive fixtures in one shared calendar.':'Plan recurring training and competitive fixtures in one shared calendar.'} action={!readOnly?<div className="schedule-header-actions">{trialsMode&&<button className="secondary" onClick={onImport}><FileSpreadsheet/> Import trial Excel</button>}<button className="secondary" onClick={onSpondImport}><FileSpreadsheet/> Import from Spond</button><button className="primary" onClick={()=>setEditor(newDraft())}><Plus/> Add event</button></div>:undefined}/>
     <section className="schedule-event-legend"><span><i className="trial"></i>Trials</span><span><i className="training"></i>Training</span><span><i className="game"></i>Games</span>{teams.map(team=><span key={team}><i style={{background:teamColours[team]}}></i>{team}</span>)}</section>
     <section className="schedule-year-toolbar club-calendar-toolbar"><div><span className="eyebrow">CLUB CALENDAR</span><h2>{calendarHeading(calendarView,focusDate)}</h2></div><div className="calendar-view-tabs" aria-label="Calendar view">{(['week','month','year'] as CalendarView[]).map(view=><button key={view} className={calendarView===view?'active':''} onClick={()=>setCalendarView(view)}>{view[0].toUpperCase()+view.slice(1)}</button>)}</div><div className="calendar-navigation"><button aria-label={`Previous ${calendarView}`} onClick={()=>shiftCalendar(-1)}><ChevronLeft/></button><button onClick={()=>setFocusDate(new Date())}>Today</button><button aria-label={`Next ${calendarView}`} onClick={()=>shiftCalendar(1)}><ChevronRight/></button></div></section>
     <section className={`schedule-layout view-${calendarView}`}>

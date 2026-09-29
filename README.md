@@ -395,6 +395,12 @@ The player Overview tab lists every assigned trial event and allows RSVP, paymen
 
 Sessions sync through Firebase under `trialSessions`; each player stores event-specific state under `trialRegistrations/{sessionId}`. Existing records with the older single `trialSessionId` fields are normalised into a registration automatically, so their current assignment is retained without a manual migration.
 
+### Spond training and attendance import
+
+Schedule includes **Import from Spond** for the `.xlsx` participant list exported from a single Spond event. The preview reads the event name, date, times and venue, then matches existing Club Manager players by email or exact name. Recorded Spond attendance maps to **Present**, **Absent** or **Excused**; RSVP-only answers remain unmarked.
+
+Before saving, the importer checks for an existing training session or game with the same normalised name, date and start time. A match is presented as **Update existing event** rather than a new import. Updating retains the event's teams, match details, recurrence, notes and attendance for players omitted from the workbook while applying the newly imported attendance marks. A separate event can still be chosen explicitly.
+
 ## v0.12 Excel player and schedule importer
 
 The import window now accepts both `.csv` and `.xlsx` files. For Excel workbooks matching the Flaming Six attendance export, it automatically:
