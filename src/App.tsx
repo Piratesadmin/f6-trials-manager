@@ -778,6 +778,8 @@ export default function App(){
   const saveTrialSessionSeries=async(sessions:TrialSession[])=>{
     if(isReadOnly)return
     if(!sessions.length)return
+    const existingIds=new Set(trialSessions.map(session=>session.id))
+    const updating=sessions.every(session=>existingIds.has(session.id))
     const now=Date.now()
     const actor=user?.email||'Local demo'
     const stamped=sessions.map(session=>({...normaliseTrialSession(session.id,session),createdAt:session.createdAt||now,updatedAt:now,updatedBy:actor}))
@@ -792,7 +794,7 @@ export default function App(){
       setTrialSessions(next)
       localStorage.setItem('f6trialsessions',JSON.stringify(next))
     }
-    await recordActivity({category:'schedule',action:'recurring_series_created',summary:`Created ${stamped.length} recurring sessions`,detail:stamped[0]?`${stamped[0].title} from ${trialDateLabel(stamped[0].date)}`:'Recurring training series',team:stamped[0]?.teams.join(', ')||'',entityType:'session',entityId:stamped[0]?.id||''})
+    await recordActivity({category:'schedule',action:updating?'recurring_series_updated':'recurring_series_created',summary:`${updating?'Updated':'Created'} ${stamped.length} recurring session${stamped.length===1?'':'s'}`,detail:stamped[0]?`${stamped[0].title} from ${trialDateLabel(stamped[0].date)}`:'Recurring training series',team:stamped[0]?.teams.join(', ')||'',entityType:'session',entityId:stamped[0]?.id||''})
   }
   const deleteTrialSession=async(sessionId:string)=>{
     if(isReadOnly)return

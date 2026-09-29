@@ -258,6 +258,7 @@ Email signatures are role-aware and team-specific. Every coach assigned to an of
 - New Training events can repeat every week, every two weeks or every month until a selected end date.
 - Before saving, the event editor shows how many training sessions will be created.
 - Each generated occurrence is saved as a real shared calendar event and can be edited or removed individually.
+- Editing a recurring event now asks whether to update only that occurrence or that event and every future occurrence. Future updates keep each event's date and attendance while applying the edited name, times, venue, teams and notes.
 - Recurring sessions carry a recurrence badge in their event details.
 - The Schedule can switch between **Week**, **Month** and **Year** views.
 - Week view provides a seven-day agenda with full event cards and quick Add buttons.
