@@ -15,6 +15,7 @@ export type ParsedSpondEvent = {
   attendance: SpondAttendanceRow[]
   warnings: string[]
   sourceSheet: string
+  inferredYear: boolean
 }
 
 const clean=(value:string)=>value.toLowerCase().replace(/[’‘]/g,"'").replace(/[_–—-]+/g,' ').replace(/\s+/g,' ').trim()
@@ -57,7 +58,7 @@ export function spondAttendanceStatus(value:string):SessionAttendanceStatus|''{
   if(!status)return''
   if(status.includes('valid absence')||status.includes('excused')||status.includes('approved absence'))return'excused'
   if(status.includes('not attended')||status.includes('did not attend')||status.includes('absent')||status.includes('no show')||status.includes("can't go")||status.includes('cannot go')||status.includes('declined'))return'absent'
-  if(status.includes('attended')||status.includes('present')||status.includes('late'))return'present'
+  if(status==='going'||status.includes('attended')||status.includes('present')||status.includes('late'))return'present'
   return''
 }
 
@@ -81,17 +82,19 @@ function parseAttendance(rows:SpondRow[],found:NonNullable<ReturnType<typeof fin
   return result
 }
 
-function dateKey(value:Cell){
-  if(value instanceof Date)return value.getFullYear()>=2000?`${value.getFullYear()}-${pad(value.getMonth()+1)}-${pad(value.getDate())}`:''
+function parsedDate(value:Cell){
+  if(value instanceof Date)return value.getFullYear()>=2000?{date:`${value.getFullYear()}-${pad(value.getMonth()+1)}-${pad(value.getDate())}`,inferredYear:false}:null
   const source=text(value).trim()
   const iso=source.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/)
-  if(iso)return`${iso[1]}-${pad(Number(iso[2]))}-${pad(Number(iso[3]))}`
+  if(iso)return{date:`${iso[1]}-${pad(Number(iso[2]))}-${pad(Number(iso[3]))}`,inferredYear:false}
   const british=source.match(/\b(\d{1,2})[/.](\d{1,2})[/.](20\d{2})\b/)
-  if(british)return`${british[3]}-${pad(Number(british[2]))}-${pad(Number(british[1]))}`
-  const named=source.match(/\b(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(20\d{2})\b/i)
-  if(named){const months=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];return`${named[3]}-${pad(months.indexOf(named[2].slice(0,3).toLowerCase())+1)}-${pad(Number(named[1]))}`}
-  return''
+  if(british)return{date:`${british[3]}-${pad(Number(british[2]))}-${pad(Number(british[1]))}`,inferredYear:false}
+  const named=source.match(/\b(\d{1,2})\.?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(20\d{2}))?\b/i)
+  if(named){const months=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];const year=Number(named[3])||new Date().getFullYear();return{date:`${year}-${pad(months.indexOf(named[2].slice(0,3).toLowerCase())+1)}-${pad(Number(named[1]))}`,inferredYear:!named[3]}}
+  return null
 }
+
+const dateKey=(value:Cell)=>parsedDate(value)?.date||''
 
 function times(value:Cell){
   if(value instanceof Date)return value.getHours()||value.getMinutes()?{startTime:`${pad(value.getHours())}:${pad(value.getMinutes())}`,endTime:''}:{startTime:'',endTime:''}
@@ -111,13 +114,14 @@ function labelledValue(rows:SpondRow[],labels:string[]){
 
 function metadata(rows:SpondRow[],headerRow:number,fileName:string){
   const cells=rows.slice(0,headerRow).flat().filter(value=>text(value))
-  const date=cells.map(dateKey).find(Boolean)||''
+  const detectedDate=cells.map(parsedDate).find(value=>value?.date)||null
   const time=cells.map(times).find(value=>value.startTime)||{startTime:'',endTime:''}
   const labelledTitle=labelledValue(rows,['event','event name','title','activity'])
   const ignored=/^(event|event name|title|activity|date|time|location|venue|attendance|participant list|attendance history)$/i
   const firstText=cells.map(text).find(value=>value&&!ignored.test(value)&&!dateKey(value)&&!times(value).startTime)||''
   const fallback=fileName.replace(/\.xlsx$/i,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim()
-  return{title:labelledTitle||firstText||fallback||'Spond event',date,startTime:time.startTime,endTime:time.endTime,venue:labelledValue(rows,['location','venue','place'])}
+  const unlabelledVenue=text(rows[2]?.find(value=>text(value)))
+  return{title:labelledTitle||firstText||fallback||'Spond event',date:detectedDate?.date||'',inferredYear:detectedDate?.inferredYear||false,startTime:time.startTime,endTime:time.endTime,venue:labelledValue(rows,['location','venue','place'])||unlabelledVenue}
 }
 
 function eventType(title:string):ClubEventType{return /\b(match|game|fixture|cup|league)\b/i.test(title)?'game':'training'}
@@ -133,10 +137,11 @@ export async function parseSpondEventWorkbook(file:File):Promise<ParsedSpondEven
   if(!attendance.length)throw new Error('The participant table does not contain any names.')
   const warnings:string[]=[]
   if(!details.date)warnings.push('The event date was not detected. Add it before continuing.')
+  if(details.inferredYear)warnings.push(`Spond omitted the year, so ${new Date().getFullYear()} was assumed. Check the event date before continuing.`)
   if(!details.startTime)warnings.push('The start time was not detected. Add it before continuing so duplicate events can be matched accurately.')
-  if(!attendance.some(row=>row.status))warnings.push('No recorded attendance values were detected. RSVP-only values such as Going or Unanswered are not treated as actual attendance.')
+  if(!attendance.some(row=>row.status))warnings.push('No attendance or RSVP values that can be applied were detected.')
   return{
     session:{eventType:eventType(details.title),title:details.title,date:details.date,startTime:details.startTime,endTime:details.endTime,venue:details.venue,teams:[],opponent:'',competition:'',gameLocation:'',recurrenceRule:'',recurrenceGroupId:'',notes:`Imported from Spond file ${file.name}`,attendance:{}},
-    attendance,warnings,sourceSheet:selected.name,
+    attendance,warnings,sourceSheet:selected.name,inferredYear:details.inferredYear,
   }
 }

@@ -646,6 +646,7 @@ export default function App(){
       ...existingSession,
       ...session,
       eventType:existingSession?.eventType||session.eventType,
+      title:existingSession?.title||session.title,
       teams:eventTeams,
       opponent:existingSession?.opponent||session.opponent,
       competition:existingSession?.competition||session.competition,

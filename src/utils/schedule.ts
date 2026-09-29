@@ -35,6 +35,12 @@ export function sessionMatchesImport(existing: TrialSession, incoming: Pick<Tria
     && importMatchText(existing.title) === importMatchText(incoming.title)
 }
 
+export function findSpondMatchingSession(existingSessions: TrialSession[], incoming: Pick<TrialSession, 'title' | 'date' | 'startTime'>) {
+  if (!incoming.date || !incoming.startTime) return undefined
+  const eligible = existingSessions.filter(existing => existing.eventType !== 'trial' && existing.date === incoming.date && existing.startTime === incoming.startTime)
+  return eligible.find(existing => sessionMatchesImport(existing,incoming)) || (eligible.length === 1 ? eligible[0] : undefined)
+}
+
 export function trialSessionMatchesImport(existing: TrialSession, incoming: Pick<TrialSession, 'eventType' | 'title' | 'date' | 'startTime'>) {
   return existing.eventType === 'trial'
     && incoming.eventType === 'trial'

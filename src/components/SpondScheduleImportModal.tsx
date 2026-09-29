@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CalendarDays, CheckCircle2, FileSpreadsheet, RefreshCw, Upload, UserCheck, Users, X } from 'lucide-react'
 import type { ClubEventType, Player, SessionAttendanceStatus, TrialSession } from '../types'
-import { formatSessionDate, sessionMatchesImport } from '../utils/schedule'
+import { findSpondMatchingSession, formatSessionDate } from '../utils/schedule'
 import { parseSpondEventWorkbook, type ParsedSpondEvent, type SpondAttendanceRow } from '../utils/spond'
 
 type Props={
@@ -35,7 +35,7 @@ export function SpondScheduleImportModal({existingPlayers,existingSessions,avail
   const[createSeparate,setCreateSeparate]=useState(false)
   const[busy,setBusy]=useState(false)
   const[error,setError]=useState('')
-  const matchingSession=session?existingSessions.find(existing=>existing.eventType!=='trial'&&sessionMatchesImport(existing,session)):undefined
+  const matchingSession=session?findSpondMatchingSession(existingSessions,session):undefined
   const matchedRows=useMemo(()=>matchAttendance(parsed?.attendance||[],existingPlayers),[parsed,existingPlayers])
   const recordedRows=matchedRows.filter(row=>row.player&&row.status)
   const unmatchedRows=matchedRows.filter(row=>!row.player)
@@ -86,7 +86,7 @@ export function SpondScheduleImportModal({existingPlayers,existingSessions,avail
         {(!matchingSession||createSeparate)&&<div className="spond-team-picker"><div><span className="eyebrow">TEAMS</span><h3>Select the attending squad</h3><p>{matchingSession?'Choose the team or teams for the separate event.':'No existing event matched this name, date and start time, so a new schedule event will be created.'}</p></div><div>{availableTeams.map(team=><button type="button" key={team} className={session.teams.includes(team)?'selected':''} onClick={()=>toggleTeam(team)}>{session.teams.includes(team)&&<CheckCircle2/>}{team}</button>)}</div></div>}
         {parsed.warnings.map(warning=><div className="import-alert warning" key={warning}><AlertTriangle/>{warning}</div>)}
         <div className="import-results spond-import-results"><div className="result-good"><UserCheck/><b>{recordedRows.length}</b><span>Attendance ready</span></div><div><Users/><b>{unrecordedRows.length}</b><span>Matched, no attendance</span></div><div><AlertTriangle/><b>{unmatchedRows.length}</b><span>Players not matched</span></div></div>
-        <div className="excel-import-note"><CalendarDays/><p><b>Attended and late</b> become Present. <b>Not attended</b> becomes Absent, and <b>Valid absence</b> becomes Excused. RSVP-only answers are left unmarked.</p></div>
+        <div className="excel-import-note"><CalendarDays/><p><b>Going, attended and late</b> become Present. <b>Can’t go and not attended</b> become Absent, <b>Valid absence</b> becomes Excused, and <b>Not answered</b> remains unmarked.</p></div>
         <div className="preview-table-wrap"><table className="preview-table"><thead><tr><th>Spond player</th><th>Email</th><th>Spond value</th><th>Club Manager player</th><th>Import result</th></tr></thead><tbody>{matchedRows.slice(0,12).map((row,index)=><tr key={`${row.email}-${row.name}-${index}`}><td>{row.name||'—'}</td><td>{row.email||'—'}</td><td>{row.sourceStatus||'Not recorded'}</td><td>{row.player?.name||'—'}</td><td><span className={`row-status ${!row.player?'invalid':row.status?'ready':'duplicate'}`}>{!row.player?(row.ambiguous?'Ambiguous name':'Not matched'):row.status?row.status[0].toUpperCase()+row.status.slice(1):'Unmarked'}</span></td></tr>)}</tbody></table>{matchedRows.length>12&&<p className="preview-more">Showing 12 of {matchedRows.length} players</p>}</div>
         {error&&<div className="import-alert error"><AlertTriangle/>{error}</div>}
         <div className="modal-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy} onClick={submit}><Upload/>{busy?'Saving…':matchingSession&&!createSeparate?`Update event and ${recordedRows.length} attendance marks`:`Import event and ${recordedRows.length} attendance marks`}</button></div>

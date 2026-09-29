@@ -397,9 +397,9 @@ Sessions sync through Firebase under `trialSessions`; each player stores event-s
 
 ### Spond training and attendance import
 
-Schedule includes **Import from Spond** for the `.xlsx` participant list exported from a single Spond event. The preview reads the event name, date, times and venue, then matches existing Club Manager players by email or exact name. Recorded Spond attendance maps to **Present**, **Absent** or **Excused**; RSVP-only answers remain unmarked.
+Schedule includes **Import from Spond** for the `.xlsx` participant list exported from a single Spond event. The preview reads the event name, date, times and venue, then matches existing Club Manager players by email or exact name. Spond's **Going** response maps to **Present**, **Can't go** maps to **Absent**, and **Not answered** remains unmarked. Registered attendance values such as attended, late and valid absence are also recognised.
 
-Before saving, the importer checks for an existing training session or game with the same normalised name, date and start time. A match is presented as **Update existing event** rather than a new import. Updating retains the event's teams, match details, recurrence, notes and attendance for players omitted from the workbook while applying the newly imported attendance marks. A separate event can still be chosen explicitly.
+Before saving, the importer checks for an existing training session or game with the same normalised name, date and start time. If Spond uses a generic title such as **Training**, a unique event at the same date and start time is also treated as a match. A match is presented as **Update existing event** rather than a new import. Updating retains the event's title, teams, match details, recurrence, notes and attendance for players omitted from the workbook while applying the newly imported attendance marks. A separate event can still be chosen explicitly.
 
 ## v0.12 Excel player and schedule importer
 
