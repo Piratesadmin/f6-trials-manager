@@ -149,7 +149,7 @@ export type Player = {
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
-export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'players' | 'emails' | 'teams' | 'timesheets' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
+export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
 export type PlayerTab = 'overview' | 'assessment' | 'decision'
 export type FinanceView = 'overview' | 'forecast' | 'payments'
 export type SyncState = 'live' | 'saving' | 'offline'
@@ -348,6 +348,45 @@ export type TrialSession = {
   updatedBy?: string
 }
 
+export type IncidentType = 'injury' | 'accident' | 'near-miss'
+export type IncidentSeverity = 'minor' | 'moderate' | 'serious'
+export type IncidentStatus = 'open' | 'monitoring' | 'closed'
+export type IncidentPersonType = 'player' | 'coach' | 'spectator' | 'other'
+
+export type IncidentReport = {
+  id: string
+  team: string
+  eventId: string
+  eventTitle: string
+  occurredOn: string
+  occurredAt: string
+  personType: IncidentPersonType
+  playerId: string
+  personName: string
+  type: IncidentType
+  severity: IncidentSeverity
+  location: string
+  description: string
+  immediateAction: string
+  firstAidGiven: boolean
+  firstAidDetails: string
+  emergencyServices: boolean
+  parentGuardianNotified: boolean
+  witnesses: string
+  followUp: string
+  status: IncidentStatus
+  createdAt: number
+  createdByUid: string
+  createdByName: string
+  createdByEmail: string
+  updatedAt: number
+  updatedByUid: string
+  updatedByName: string
+  closedAt?: number
+  closedByUid?: string
+  closedByName?: string
+}
+
 export type CoachRole = 'admin' | 'team-admin' | 'coach' | 'assistant-coach' | 'welfare'
 
 export type CoachProfile = {
@@ -358,8 +397,8 @@ export type CoachProfile = {
   teams: Record<string, boolean>
 }
 
-export type ActivityCategory = 'player' | 'schedule' | 'email' | 'team' | 'finance' | 'settings' | 'access' | 'import' | 'season'
-export type ActivityEntityType = 'player' | 'session' | 'team' | 'season' | 'settings'
+export type ActivityCategory = 'player' | 'schedule' | 'incident' | 'email' | 'team' | 'finance' | 'settings' | 'access' | 'import' | 'season'
+export type ActivityEntityType = 'player' | 'session' | 'incident' | 'team' | 'season' | 'settings'
 
 export type ActivityLogEntry = {
   id: string

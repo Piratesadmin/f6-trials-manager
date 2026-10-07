@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Archive, CalendarDays, ChevronRight, ClipboardList, Download, Filter, Mail, Search, Settings, ShieldCheck, UserCog, Users, WalletCards } from 'lucide-react'
+import { Archive, CalendarDays, ChevronRight, ClipboardList, Download, Filter, Mail, Search, Settings, ShieldAlert, ShieldCheck, UserCog, Users, WalletCards } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 import { teams } from '../data/constants'
 import type { ActivityCategory, ActivityLogEntry, Player, TrialSession } from '../types'
@@ -13,7 +13,7 @@ type Props = {
   openSession: (sessionId: string) => void
 }
 
-const categoryIcons = { player: Users, schedule: CalendarDays, email: Mail, team: ShieldCheck, finance: WalletCards, settings: Settings, access: UserCog, import: ClipboardList, season: Archive }
+const categoryIcons = { player: Users, schedule: CalendarDays, incident: ShieldAlert, email: Mail, team: ShieldCheck, finance: WalletCards, settings: Settings, access: UserCog, import: ClipboardList, season: Archive }
 
 function csvCell(value: string | number) {
   return `"${String(value).replaceAll('"', '""')}"`

@@ -4,7 +4,7 @@ import { LockKeyhole } from 'lucide-react'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
-import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
+import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, IncidentReport, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, currentRatingScale, emptyAssessment, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
@@ -16,6 +16,7 @@ import { responseDeadlineDetails } from './utils/deadline'
 import { createActivityEntry, describePlayerChange, normaliseActivityEntry } from './utils/activity'
 import { createSeasonArchive, defaultSeasonSettings, normaliseSeasonArchive, normaliseSeasonSettings } from './utils/season'
 import { createArchivedPlayerRecord, normaliseArchivedPlayerRecord } from './utils/archivedPlayers'
+import { incidentReportsFromFirebase, normaliseIncidentReport } from './utils/incidents'
 import { applyDecisionDraft, decisionDraftFor, sameDecisionDraft } from './utils/decision'
 import { appHashFor, parseAppHash, type AppRoute } from './utils/navigation'
 import { createSystemBackup, downloadSystemBackup, parseSystemBackup, systemBackupPaths, type SystemBackup, type SystemBackupData } from './utils/backup'
@@ -39,6 +40,7 @@ import { formatHours, hourlyRateForTeam, normaliseCoachHourlyRateMap, normaliseC
 import { TimesheetsPage } from './pages/TimesheetsPage'
 import { SignupPage } from './pages/SignupPage'
 import { SignupInboxPage } from './pages/SignupInboxPage'
+import { IncidentsPage } from './pages/IncidentsPage'
 import { deleteClubSignup as deleteClubSignupRemote, updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
 import { normaliseClubSignup, type ClubSignup, type ClubSignupOutcome, type ClubSignupStatus } from './signup/types'
 import './App.css'
@@ -127,6 +129,10 @@ export default function App(){
     const stored=JSON.parse(localStorage.getItem('f6trialsessions')||'[]') as TrialSession[]
     return stored.map(session=>normaliseTrialSession(session.id,session))
   })
+  const [incidentReports,setIncidentReports]=useState<IncidentReport[]>(()=>{
+    const stored=JSON.parse(localStorage.getItem('f6incidentreports')||'[]') as unknown[]
+    return stored.flatMap((item,index)=>{const source=item&&typeof item==='object'?item as Partial<IncidentReport>:{};const report=normaliseIncidentReport(source.id||`local-${index}`,item);return report?[report]:[]})
+  })
   const [seasonSettings,setSeasonSettings]=useState<SeasonSettings>(()=>normaliseSeasonSettings(JSON.parse(localStorage.getItem('f6seasonsettings')||'null')||defaultSeasonSettings))
   const [seasonSettingsReady,setSeasonSettingsReady]=useState(!firebaseConfigured)
   const [seasonArchives,setSeasonArchives]=useState<SeasonArchive[]>(()=>{
@@ -152,6 +158,7 @@ export default function App(){
   const isReadOnly=coachProfile?.role==='welfare'
   const accountAccessReady=demo||sharedPinAdmin||Boolean(coachProfile)
   const canUseTimesheets=isAdmin||coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach'
+  const canUseIncidents=isAdmin||coachProfile?.role==='team-admin'||coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach'
   const editableTeams=isAdmin?Object.keys(teamPlans):assignedTeamNames(coachProfile)
   const defaultTeam=editableTeams[0]||teams[0]
   const currentCoachId=user?.uid||'local-demo'
@@ -213,8 +220,9 @@ export default function App(){
   useEffect(()=>{if(seasonSettingsReady&&!seasonSettings.trialsMode&&page==='emails')navigate({page:'dashboard'},true)},[seasonSettingsReady,seasonSettings.trialsMode,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!isAdmin&&page==='settings')navigate({page:'dashboard'},true)},[accountAccessReady,isAdmin,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!canUseTimesheets&&page==='timesheets')navigate({page:'dashboard'},true)},[accountAccessReady,canUseTimesheets,page,navigate])
+  useEffect(()=>{if(accountAccessReady&&!canUseIncidents&&page==='incidents')navigate({page:'dashboard'},true)},[accountAccessReady,canUseIncidents,page,navigate])
 
-  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(false);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setUser(u);setAuthLoading(false)})},[])
+  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(false);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setIncidentReports([]);setUser(u);setAuthLoading(false)})},[])
   useEffect(()=>{
     if(demo||!database||!user){databaseConnected.current=false;setSyncState('offline');return}
     return onValue(ref(database,'.info/connected'),snapshot=>{
@@ -237,6 +245,19 @@ export default function App(){
   useEffect(()=>{if(!database||!user||demo)return;const plansRef=ref(database,'teamPlans');return onValue(plansRef,snapshot=>{const value=snapshot.val() as TeamPlans|null;if(!value){if(isAdmin)set(plansRef,createDefaultTeamPlans());return}const normalised=normaliseTeamPlans(value);setTeamPlans(normalised);if(isAdmin&&teamPlansNeedMinimumUpgrade(value))set(plansRef,normalised);showConnectionState()},showConnectionState)},[user,demo,isAdmin,showConnectionState])
   useEffect(()=>{if(!database||!user||demo)return;const settingsRef=ref(database,'emailSettings');return onValue(settingsRef,snapshot=>{const value=snapshot.val() as EmailSettings|null;if(!value){if(isAdmin)set(settingsRef,defaultEmailSettings);return}setEmailSettings(normaliseEmailSettings(value));showConnectionState()},showConnectionState)},[user,demo,isAdmin,showConnectionState])
   useEffect(()=>{if(!database||!user||demo)return;return onValue(ref(database,'trialSessions'),snapshot=>{const value=snapshot.val() as Record<string,Partial<TrialSession>>|null;setTrialSessions(value?Object.entries(value).map(([id,session])=>normaliseTrialSession(id,session)):[]);showConnectionState()},showConnectionState)},[user,demo,showConnectionState])
+  useEffect(()=>{
+    if(demo)return
+    if(!database||!user||!accountAccessReady||!canUseIncidents){setIncidentReports([]);return}
+    const activeDatabase=database
+    if(isAdmin)return onValue(ref(activeDatabase,'incidentReports'),snapshot=>{setIncidentReports(incidentReportsFromFirebase(snapshot.val()));showConnectionState()},showConnectionState)
+    const reportsByTeam:Record<string,IncidentReport[]>={}
+    const publish=()=>setIncidentReports(editableTeams.flatMap(team=>reportsByTeam[team]||[]))
+    const stops=editableTeams.map(team=>onValue(ref(activeDatabase,`incidentReports/${team}`),snapshot=>{
+      reportsByTeam[team]=incidentReportsFromFirebase({[team]:snapshot.val()})
+      publish();showConnectionState()
+    },showConnectionState))
+    return()=>stops.forEach(stop=>stop())
+  },[user,demo,accountAccessReady,canUseIncidents,isAdmin,editableTeams.join('|'),showConnectionState])
   useEffect(()=>{
     if(demo){setSeasonSettingsReady(true);return}
     if(!database||!user){setSeasonSettingsReady(false);return}
@@ -470,6 +491,7 @@ export default function App(){
         archivedPlayers,
         seasonArchives:Object.fromEntries(seasonArchives.map(archive=>[archive.id,archive])),
         auditLog:Object.fromEntries(activityLog.map(entry=>[entry.id,entry])),
+        incidentReports:Object.fromEntries(teams.map(team=>[team,Object.fromEntries(incidentReports.filter(report=>report.team===team).map(report=>[report.id,report]))])),
       }
     }
     const backup=createSystemBackup(firebaseSafeValue(data))
@@ -478,6 +500,7 @@ export default function App(){
   }
   const restoreSystemBackup=async(candidate:SystemBackup)=>{
     if(!isAdmin)throw new Error('Administrator access is required.')
+    const includesIncidentReports=Boolean(candidate.data&&Object.hasOwn(candidate.data,'incidentReports'))
     const backup=parseSystemBackup(JSON.stringify(candidate))
     await exportSystemBackup('f6-pre-restore-backup')
     if(database&&user&&!demo){
@@ -485,7 +508,7 @@ export default function App(){
       const currentAudit=(await get(ref(database,'auditLog'))).val()
       const data={...backup.data}
       if(coachProfile)data.coachProfiles={...recordValue(data.coachProfiles),[user.uid]:coachProfile}
-      const updates=Object.fromEntries(systemBackupPaths.filter(path=>path!=='auditLog').map(path=>[path,data[path]]))
+      const updates=Object.fromEntries(systemBackupPaths.filter(path=>path!=='auditLog'&&(path!=='incidentReports'||includesIncidentReports)).map(path=>[path,data[path]]))
       await update(ref(database),firebaseSafeValue(updates))
       const currentAuditEntries=recordValue(currentAudit)
       const missingAuditEntries=Object.fromEntries(Object.entries(recordValue(data.auditLog)).filter(([id])=>!Object.hasOwn(currentAuditEntries,id)))
@@ -510,6 +533,7 @@ export default function App(){
         f6archivedplayers:backup.data.archivedPlayers||{},
         f6seasonarchives:recordsWithId(backup.data.seasonArchives),
         f6activitylog:recordsWithId(backup.data.auditLog),
+        ...(includesIncidentReports?{f6incidentreports:incidentReportsFromFirebase(backup.data.incidentReports)}:{}),
       }
       Object.entries(localValues).forEach(([key,value])=>localStorage.setItem(key,JSON.stringify(value)))
     }
@@ -745,6 +769,32 @@ export default function App(){
     setEmailSettings(next)
     if(database&&user&&!demo){setSyncState('saving');await set(ref(database,'emailSettings'),next)}else{localStorage.setItem('f6emailsettings',JSON.stringify(next))}
     await recordActivity({category:'settings',action:'club_settings_changed',summary:'Club communication and team settings updated',detail:'Email defaults, team details or calendar colours were saved.',team:'',entityType:'settings',entityId:'emailSettings'})
+  }
+  const saveIncidentReport=async(report:IncidentReport)=>{
+    if(!canUseIncidents||isReadOnly)throw new Error('This account cannot change incident reports.')
+    const previous=incidentReports.find(item=>item.id===report.id)
+    if(!report.team||(!isAdmin&&!editableTeams.includes(report.team)))throw new Error('Choose one of your assigned teams.')
+    if(previous&&previous.team!==report.team)throw new Error('The team cannot be changed after a report is created.')
+    if(!report.occurredOn||!report.personName.trim()||!report.location.trim()||!report.description.trim()||!report.immediateAction.trim())throw new Error('Complete all required fields before saving.')
+    const now=Date.now()
+    const actorName=activityActor.name
+    const closed=report.status==='closed'
+    const stamped:IncidentReport={
+      ...report,
+      personName:report.personName.trim(),location:report.location.trim(),description:report.description.trim(),immediateAction:report.immediateAction.trim(),firstAidDetails:report.firstAidDetails.trim(),witnesses:report.witnesses.trim(),followUp:report.followUp.trim(),
+      createdAt:previous?.createdAt||now,
+      createdByUid:previous?.createdByUid||activityActor.uid,
+      createdByName:previous?.createdByName||actorName,
+      createdByEmail:previous?.createdByEmail||activityActor.email,
+      updatedAt:now,updatedByUid:activityActor.uid,updatedByName:actorName,
+      ...(closed?{closedAt:previous?.status==='closed'&&previous.closedAt?previous.closedAt:now,closedByUid:previous?.status==='closed'&&previous.closedByUid?previous.closedByUid:activityActor.uid,closedByName:previous?.status==='closed'&&previous.closedByName?previous.closedByName:actorName}:{closedAt:undefined,closedByUid:undefined,closedByName:undefined}),
+    }
+    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`incidentReports/${stamped.team}/${stamped.id}`),firebaseSafeValue(stamped))}
+    else{
+      const next=previous?incidentReports.map(item=>item.id===stamped.id?stamped:item):[stamped,...incidentReports]
+      setIncidentReports(next);localStorage.setItem('f6incidentreports',JSON.stringify(next))
+    }
+    await recordActivity({category:'incident',action:previous?(stamped.status==='closed'&&previous.status!=='closed'?'incident_closed':'incident_updated'):'incident_reported',summary:`${previous?'Updated':'Reported'} ${stamped.type.replace('-',' ')} involving ${stamped.personName}`,detail:`${stamped.occurredOn} · ${stamped.severity} · ${stamped.status}.`,team:stamped.team,entityType:'incident',entityId:stamped.id})
   }
   const saveTrialSession=async(session:TrialSession)=>{
     if(isReadOnly)return
@@ -1080,7 +1130,7 @@ export default function App(){
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
 
   return <div className="app">
-    <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions} newSignupCount={clubSignups.filter(signup=>signup.status==='new').length}/>
+    <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions} newSignupCount={clubSignups.filter(signup=>signup.status==='new').length} openIncidentCount={incidentReports.filter(report=>report.status!=='closed').length}/>
     <main>{isReadOnly&&<div className="read-only-account-banner"><LockKeyhole/><div><b>Welfare account · read-only</b><span>You can view Club Manager information, but this account cannot change it.</span></div></div>}
       {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} financeReady={playerFinanceReady&&financeSettingsReady} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
       {page==='signups'&&<SignupInboxPage signups={clubSignups} ready={clubSignupsReady} loadError={clubSignupsError} readOnly={isReadOnly} updateStatus={changeClubSignupStatus} deleteSignup={removeClubSignup}/>}
@@ -1109,6 +1159,7 @@ export default function App(){
         readOnly={isReadOnly}
         trialsMode={seasonSettings.trialsMode}
       />}
+      {page==='incidents'&&canUseIncidents&&<IncidentsPage reports={incidentReports} players={players} sessions={trialSessions} assignedTeams={editableTeams} isAdmin={isAdmin} readOnly={isReadOnly} saveReport={saveIncidentReport}/>}
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} readOnly={isReadOnly} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions} readOnly={isReadOnly}/>}
       {page==='teams'&&<TeamsPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}

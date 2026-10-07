@@ -80,5 +80,5 @@ export function describePlayerChange(before: Player | undefined, after: Player):
 }
 
 export const activityCategoryLabels: Record<ActivityLogEntry['category'], string> = {
-  player: 'Players', schedule: 'Schedule', email: 'Emails', team: 'Teams', finance: 'Finance', settings: 'Settings', access: 'Access', import: 'Imports', season: 'Season',
+  player: 'Players', schedule: 'Schedule', incident: 'Incidents', email: 'Emails', team: 'Teams', finance: 'Finance', settings: 'Settings', access: 'Access', import: 'Imports', season: 'Season',
 }

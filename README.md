@@ -4,6 +4,16 @@ A GitHub Pages app with Firebase Authentication and Firebase Realtime Database. 
 
 Version 0.26 turns trialist cleanup into a recoverable archive, creating a searchable replacement pool for the remainder of the season.
 
+## Incident reporting
+
+- Coaches, Assistant coaches and Team administrators can record injuries, accidents and near misses for their assigned teams; administrators can see the club-wide register.
+- Reports capture the person involved, optional linked player and schedule event, date, time, location, severity, factual description, immediate action, first aid, emergency-service and parent/guardian notifications, witnesses and follow-up notes.
+- Reports move through Open, Monitoring and Closed states. Closing retains the report; the incident screen deliberately has no delete action.
+- Every create, update and closure is attributed to the signed-in account and added to the administrator Activity log.
+- Coaches can export the incident records they are permitted to see as CSV. Full system backups include the complete incident register, while older backups remain compatible and do not erase newer incident records merely because that collection is absent.
+- Incident records are stored by team. Firebase rules restrict individual coaching accounts to assigned teams and permit club-wide access only to administrators and the shared club account.
+- Publish the supplied Firebase Realtime Database rules before using this feature. No data migration or new GitHub secret is required.
+
 ## Timesheets and coach invoices
 
 Coach and assistant-coach accounts can record dated hours against their assigned teams and submit draft entries as an invoice. Administrators act as the treasurer: they set each eligible coach's hourly rate for each assigned team, review the submitted entry breakdown, and mark invoices as paid. Multi-team invoices calculate each entry using its team's snapshotted rate. Submitted invoices automatically appear in the finance payment history and are reconciled against each team's planned coaching budget in the forecast; paid invoices retain their payment date and status. Rates, entries, and invoices are private to the coach and administrators and are included in full system backups.
