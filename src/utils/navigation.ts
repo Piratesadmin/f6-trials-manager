@@ -11,9 +11,9 @@ export type AppRoute = {
   welfareView?: WelfareView
 }
 
-const pages: PageKey[] = ['dashboard','signups','schedule','incidents','players','emails','teams','timesheets','finance','activity','archive','settings','welfare']
+const pages: PageKey[] = ['dashboard','signups','schedule','incidents','players','emails','teams','timesheets','expenses','finance','activity','archive','settings','welfare']
 const playerTabs: PlayerTab[] = ['overview','assessment','decision']
-const financeViews: FinanceView[] = ['overview','forecast','payments']
+const financeViews: FinanceView[] = ['overview','players','expenses','forecast','payments']
 
 const safeDecode = (value = '') => {
   try { return decodeURIComponent(value) } catch { return '' }

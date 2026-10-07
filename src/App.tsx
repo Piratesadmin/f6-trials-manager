@@ -4,7 +4,7 @@ import { LockKeyhole } from 'lucide-react'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
-import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, FinanceForecast, FinanceSettings, FinanceView, IncidentReport, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
+import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, ExpenseClaim, ExpenseStatus, FinanceForecast, FinanceSettings, FinanceView, IncidentReport, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, currentRatingScale, emptyAssessment, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
@@ -17,6 +17,7 @@ import { createActivityEntry, describePlayerChange, normaliseActivityEntry } fro
 import { createSeasonArchive, defaultSeasonSettings, normaliseSeasonArchive, normaliseSeasonSettings } from './utils/season'
 import { createArchivedPlayerRecord, normaliseArchivedPlayerRecord } from './utils/archivedPlayers'
 import { incidentReportsFromFirebase, normaliseIncidentReport } from './utils/incidents'
+import { expenseClaimsFromFirebase, normaliseExpenseClaim } from './utils/expenses'
 import { applyDecisionDraft, decisionDraftFor, sameDecisionDraft } from './utils/decision'
 import { appHashFor, parseAppHash, type AppRoute } from './utils/navigation'
 import { createSystemBackup, downloadSystemBackup, parseSystemBackup, systemBackupPaths, type SystemBackup, type SystemBackupData } from './utils/backup'
@@ -41,6 +42,7 @@ import { TimesheetsPage } from './pages/TimesheetsPage'
 import { SignupPage } from './pages/SignupPage'
 import { SignupInboxPage } from './pages/SignupInboxPage'
 import { IncidentsPage } from './pages/IncidentsPage'
+import { ExpensesPage, type ExpenseDraft } from './pages/ExpensesPage'
 import { deleteClubSignup as deleteClubSignupRemote, updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
 import { normaliseClubSignup, type ClubSignup, type ClubSignupOutcome, type ClubSignupStatus } from './signup/types'
 import './App.css'
@@ -133,6 +135,10 @@ export default function App(){
     const stored=JSON.parse(localStorage.getItem('f6incidentreports')||'[]') as unknown[]
     return stored.flatMap((item,index)=>{const source=item&&typeof item==='object'?item as Partial<IncidentReport>:{};const report=normaliseIncidentReport(source.id||`local-${index}`,item);return report?[report]:[]})
   })
+  const [expenseClaims,setExpenseClaims]=useState<ExpenseClaim[]>(()=>{
+    const stored=JSON.parse(localStorage.getItem('f6expenseclaims')||'[]') as unknown[]
+    return stored.flatMap((item,index)=>{const source=item&&typeof item==='object'?item as Partial<ExpenseClaim>:{};const claim=normaliseExpenseClaim(source.id||`local-${index}`,item);return claim?[claim]:[]})
+  })
   const [seasonSettings,setSeasonSettings]=useState<SeasonSettings>(()=>normaliseSeasonSettings(JSON.parse(localStorage.getItem('f6seasonsettings')||'null')||defaultSeasonSettings))
   const [seasonSettingsReady,setSeasonSettingsReady]=useState(!firebaseConfigured)
   const [seasonArchives,setSeasonArchives]=useState<SeasonArchive[]>(()=>{
@@ -159,6 +165,7 @@ export default function App(){
   const accountAccessReady=demo||sharedPinAdmin||Boolean(coachProfile)
   const canUseTimesheets=isAdmin||coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach'
   const canUseIncidents=isAdmin||coachProfile?.role==='team-admin'||coachProfile?.role==='coach'||coachProfile?.role==='assistant-coach'
+  const canSubmitExpenses=isAdmin||Boolean(coachProfile?.canSubmitExpenses)
   const editableTeams=isAdmin?Object.keys(teamPlans):assignedTeamNames(coachProfile)
   const defaultTeam=editableTeams[0]||teams[0]
   const currentCoachId=user?.uid||'local-demo'
@@ -221,8 +228,9 @@ export default function App(){
   useEffect(()=>{if(accountAccessReady&&!isAdmin&&page==='settings')navigate({page:'dashboard'},true)},[accountAccessReady,isAdmin,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!canUseTimesheets&&page==='timesheets')navigate({page:'dashboard'},true)},[accountAccessReady,canUseTimesheets,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!canUseIncidents&&page==='incidents')navigate({page:'dashboard'},true)},[accountAccessReady,canUseIncidents,page,navigate])
+  useEffect(()=>{if(accountAccessReady&&!canSubmitExpenses&&page==='expenses')navigate({page:'dashboard'},true)},[accountAccessReady,canSubmitExpenses,page,navigate])
 
-  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(false);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setIncidentReports([]);setUser(u);setAuthLoading(false)})},[])
+  useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(false);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setIncidentReports([]);setExpenseClaims([]);setUser(u);setAuthLoading(false)})},[])
   useEffect(()=>{
     if(demo||!database||!user){databaseConnected.current=false;setSyncState('offline');return}
     return onValue(ref(database,'.info/connected'),snapshot=>{
@@ -258,6 +266,16 @@ export default function App(){
     },showConnectionState))
     return()=>stops.forEach(stop=>stop())
   },[user,demo,accountAccessReady,canUseIncidents,isAdmin,editableTeams.join('|'),showConnectionState])
+  useEffect(()=>{
+    if(demo)return
+    if(!database||!user||!accountAccessReady||!canSubmitExpenses){setExpenseClaims([]);return}
+    const activeDatabase=database
+    const expenseRef=ref(activeDatabase,isAdmin?'expenseClaims':`expenseClaims/${user.uid}`)
+    return onValue(expenseRef,snapshot=>{
+      const value=isAdmin?snapshot.val():{[user.uid]:snapshot.val()}
+      setExpenseClaims(expenseClaimsFromFirebase(value));showConnectionState()
+    },showConnectionState)
+  },[user,demo,accountAccessReady,canSubmitExpenses,isAdmin,showConnectionState])
   useEffect(()=>{
     if(demo){setSeasonSettingsReady(true);return}
     if(!database||!user){setSeasonSettingsReady(false);return}
@@ -492,6 +510,7 @@ export default function App(){
         seasonArchives:Object.fromEntries(seasonArchives.map(archive=>[archive.id,archive])),
         auditLog:Object.fromEntries(activityLog.map(entry=>[entry.id,entry])),
         incidentReports:Object.fromEntries(teams.map(team=>[team,Object.fromEntries(incidentReports.filter(report=>report.team===team).map(report=>[report.id,report]))])),
+        expenseClaims:Object.fromEntries([...new Set(expenseClaims.map(claim=>claim.claimantUid))].map(uid=>[uid,Object.fromEntries(expenseClaims.filter(claim=>claim.claimantUid===uid).map(claim=>[claim.id,claim]))])),
       }
     }
     const backup=createSystemBackup(firebaseSafeValue(data))
@@ -501,6 +520,7 @@ export default function App(){
   const restoreSystemBackup=async(candidate:SystemBackup)=>{
     if(!isAdmin)throw new Error('Administrator access is required.')
     const includesIncidentReports=Boolean(candidate.data&&Object.hasOwn(candidate.data,'incidentReports'))
+    const includesExpenseClaims=Boolean(candidate.data&&Object.hasOwn(candidate.data,'expenseClaims'))
     const backup=parseSystemBackup(JSON.stringify(candidate))
     await exportSystemBackup('f6-pre-restore-backup')
     if(database&&user&&!demo){
@@ -508,7 +528,7 @@ export default function App(){
       const currentAudit=(await get(ref(database,'auditLog'))).val()
       const data={...backup.data}
       if(coachProfile)data.coachProfiles={...recordValue(data.coachProfiles),[user.uid]:coachProfile}
-      const updates=Object.fromEntries(systemBackupPaths.filter(path=>path!=='auditLog'&&(path!=='incidentReports'||includesIncidentReports)).map(path=>[path,data[path]]))
+      const updates=Object.fromEntries(systemBackupPaths.filter(path=>path!=='auditLog'&&(path!=='incidentReports'||includesIncidentReports)&&(path!=='expenseClaims'||includesExpenseClaims)).map(path=>[path,data[path]]))
       await update(ref(database),firebaseSafeValue(updates))
       const currentAuditEntries=recordValue(currentAudit)
       const missingAuditEntries=Object.fromEntries(Object.entries(recordValue(data.auditLog)).filter(([id])=>!Object.hasOwn(currentAuditEntries,id)))
@@ -534,6 +554,7 @@ export default function App(){
         f6seasonarchives:recordsWithId(backup.data.seasonArchives),
         f6activitylog:recordsWithId(backup.data.auditLog),
         ...(includesIncidentReports?{f6incidentreports:incidentReportsFromFirebase(backup.data.incidentReports)}:{}),
+        ...(includesExpenseClaims?{f6expenseclaims:expenseClaimsFromFirebase(backup.data.expenseClaims)}:{}),
       }
       Object.entries(localValues).forEach(([key,value])=>localStorage.setItem(key,JSON.stringify(value)))
     }
@@ -929,7 +950,27 @@ export default function App(){
     if(!isAdmin)return
     const next=normaliseCoachProfile(profile.uid,profile,profile.email)
     if(database&&user&&!demo){await set(ref(database,`coachProfiles/${next.uid}`),next)}else setCoachProfiles(current=>current.map(item=>item.uid===next.uid?next:item))
-    await recordActivity({category:'access',action:'account_permissions_changed',summary:`Updated access for ${next.displayName}`,detail:`${next.role} · ${assignedTeamNames(next).join(', ')||'No assigned team'}`,team:assignedTeamNames(next).join(', '),entityType:'settings',entityId:next.uid})
+    await recordActivity({category:'access',action:'account_permissions_changed',summary:`Updated access for ${next.displayName}`,detail:`${next.role} · ${assignedTeamNames(next).join(', ')||'No assigned team'} · Expenses ${next.canSubmitExpenses?'enabled':'disabled'}`,team:assignedTeamNames(next).join(', '),entityType:'settings',entityId:next.uid})
+  }
+  const submitExpenseClaim=async(draft:ExpenseDraft)=>{
+    if(!canSubmitExpenses||isReadOnly)throw new Error('This account is not authorised to submit expenses.')
+    const amount=Math.round(Number(draft.amount)*100)/100
+    if(!draft.purchaseDate||!draft.supplier.trim()||!draft.description.trim()||!Number.isFinite(amount)||amount<=0)throw new Error('Complete the purchase date, supplier, description and amount.')
+    if(amount>10000)throw new Error('A single expense claim cannot exceed £10,000.')
+    if(draft.team&&!isAdmin&&!editableTeams.includes(draft.team))throw new Error('Choose one of your assigned teams or Club-wide.')
+    const now=Date.now();const id=crypto.randomUUID();const claimantUid=user?.uid||'local-demo';const claimantName=activityActor.name
+    const claim:ExpenseClaim={id,claimantUid,claimantName,claimantEmail:user?.email||'',purchaseDate:draft.purchaseDate,team:draft.team,category:draft.category,supplier:draft.supplier.trim(),description:draft.description.trim(),amount,receiptReference:draft.receiptReference.trim(),notes:draft.notes.trim(),status:'Submitted',submittedAt:now,updatedAt:now,updatedByUid:claimantUid,updatedByName:claimantName}
+    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`expenseClaims/${claimantUid}/${id}`),firebaseSafeValue(claim))}
+    else{const next=[claim,...expenseClaims];setExpenseClaims(next);localStorage.setItem('f6expenseclaims',JSON.stringify(next))}
+    await recordActivity({category:'finance',action:'expense_submitted',summary:`${claimantName} submitted a ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(amount)} expense`,detail:`${claim.supplier} · ${claim.description}`.slice(0,500),team:claim.team,entityType:'settings',entityId:id})
+  }
+  const updateExpenseStatus=async(claim:ExpenseClaim,status:ExpenseStatus)=>{
+    if(!isAdmin)throw new Error('Administrator access is required.')
+    const now=Date.now();const actorName=activityActor.name
+    const updated:ExpenseClaim={...claim,status,updatedAt:now,updatedByUid:activityActor.uid,updatedByName:actorName,...(status==='Approved'||status==='Rejected'?{decidedAt:now}:{decidedAt:claim.decidedAt}),...(status==='Paid'?{paidAt:now}:{paidAt:claim.paidAt})}
+    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`expenseClaims/${claim.claimantUid}/${claim.id}`),firebaseSafeValue(updated))}
+    else{const next=expenseClaims.map(item=>item.id===claim.id?updated:item);setExpenseClaims(next);localStorage.setItem('f6expenseclaims',JSON.stringify(next))}
+    await recordActivity({category:'finance',action:`expense_${status.toLowerCase()}`,summary:`${status} expense for ${claim.claimantName}`,detail:`${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(claim.amount)} · ${claim.supplier} · ${claim.description}`.slice(0,500),team:claim.team,entityType:'settings',entityId:claim.id})
   }
   const savePlayerFinance=async(finance:PlayerFinance)=>{
     if(!isAdmin)return
@@ -1130,9 +1171,31 @@ export default function App(){
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
 
   return <div className="app">
-    <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions} newSignupCount={clubSignups.filter(signup=>signup.status==='new').length} openIncidentCount={incidentReports.filter(report=>report.status!=='closed').length}/>
+    <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions} newSignupCount={clubSignups.filter(signup=>signup.status==='new').length} openIncidentCount={incidentReports.filter(report=>report.status!=='closed').length} canSubmitExpenses={canSubmitExpenses}/>
     <main>{isReadOnly&&<div className="read-only-account-banner"><LockKeyhole/><div><b>Welfare account · read-only</b><span>You can view Club Manager information, but this account cannot change it.</span></div></div>}
-      {page==='dashboard'&&<DashboardPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} setPage={navigatePage} openPlayer={(id,tab='decision')=>openPlayer(id,tab)} openEmail={openEmail} openSchedule={openSchedule} assignedTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} financeReady={playerFinanceReady&&financeSettingsReady} playerStars={playerStars} trialsMode={seasonSettings.trialsMode}/>}
+      {page==='dashboard'&&<DashboardPage
+        players={players}
+        playerPhotos={playerPhotos}
+        sessions={trialSessions}
+        settings={activeEmailSettings}
+        teamPlans={teamPlans}
+        setPage={navigatePage}
+        openTeam={openTeam}
+        openPlayer={(id,tab='decision')=>openPlayer(id,tab)}
+        openEmail={openEmail}
+        openSchedule={openSchedule}
+        assignedTeams={editableTeams}
+        isAdmin={isAdmin}
+        accountRole={coachProfile?.role||null}
+        canSubmitExpenses={canSubmitExpenses}
+        newSignupCount={clubSignups.filter(signup=>signup.status==='new').length}
+        openIncidentCount={incidentReports.filter(report=>report.status!=='closed').length}
+        finances={playerFinance}
+        financeSettings={financeSettings}
+        financeReady={playerFinanceReady&&financeSettingsReady}
+        playerStars={playerStars}
+        trialsMode={seasonSettings.trialsMode}
+      />}
       {page==='signups'&&<SignupInboxPage signups={clubSignups} ready={clubSignupsReady} loadError={clubSignupsError} readOnly={isReadOnly} updateStatus={changeClubSignupStatus} deleteSignup={removeClubSignup}/>}
       {page==='schedule'&&<SchedulePage
         sessions={trialSessions}
@@ -1164,7 +1227,8 @@ export default function App(){
       {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions} readOnly={isReadOnly}/>}
       {page==='teams'&&<TeamsPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
       {page==='timesheets'&&canUseTimesheets&&<TimesheetsPage isAdmin={isAdmin} currentUid={currentCoachId} currentEmail={user?.email||''} currentProfile={coachProfile} currentSeason={seasonSettings.currentSeason} coachProfiles={coachProfiles} hourlyRates={coachHourlyRates} entries={coachTimesheetEntries} invoices={coachInvoices} saveHourlyRate={saveCoachHourlyRate} saveEntry={saveCoachTimesheetEntry} deleteEntry={deleteCoachTimesheetEntry} submitInvoice={submitCoachInvoice} markInvoicePaid={markCoachInvoicePaid}/>}
-      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} coachProfiles={coachProfiles} coachInvoices={coachInvoices} timesheetEntries={coachTimesheetEntries} currentSeason={seasonSettings.currentSeason} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView} onOpenTimesheets={()=>navigatePage('timesheets')}/>}
+      {page==='expenses'&&canSubmitExpenses&&<ExpensesPage claims={expenseClaims.filter(claim=>claim.claimantUid===currentCoachId)} availableTeams={editableTeams} submitClaim={submitExpenseClaim}/>}
+      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} coachProfiles={coachProfiles} coachInvoices={coachInvoices} timesheetEntries={coachTimesheetEntries} currentSeason={seasonSettings.currentSeason} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView} onOpenTimesheets={()=>navigatePage('timesheets')} expenseClaims={expenseClaims} updateExpenseStatus={updateExpenseStatus}/>}
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
       {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
       {page==='settings'&&isAdmin&&<SettingsPage

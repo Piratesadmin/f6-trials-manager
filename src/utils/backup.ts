@@ -17,6 +17,7 @@ export const systemBackupPaths = [
   'seasonArchives',
   'auditLog',
   'incidentReports',
+  'expenseClaims',
 ] as const
 
 export type SystemBackupPath = typeof systemBackupPaths[number]
@@ -49,7 +50,7 @@ export function parseSystemBackup(text: string): SystemBackup {
   if (typeof parsed.exportedAt !== 'string' || Number.isNaN(Date.parse(parsed.exportedAt))) throw new Error('The backup export date is missing or invalid.')
   if (!isRecord(parsed.data)) throw new Error('The backup data is missing or invalid.')
   const backupData = parsed.data as Record<string, unknown>
-  const optionalLegacyPaths = new Set<SystemBackupPath>(['coachHourlyRates','coachTimesheetEntries','coachInvoices','incidentReports'])
+  const optionalLegacyPaths = new Set<SystemBackupPath>(['coachHourlyRates','coachTimesheetEntries','coachInvoices','incidentReports','expenseClaims'])
   const missing = systemBackupPaths.filter(path => !Object.hasOwn(backupData, path) && !optionalLegacyPaths.has(path))
   if (missing.length) throw new Error(`The backup is incomplete. Missing: ${missing.join(', ')}.`)
   const invalid = systemBackupPaths.filter(path => Object.hasOwn(backupData,path) && backupData[path] !== null && !isRecord(backupData[path]))

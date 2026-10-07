@@ -149,9 +149,9 @@ export type Player = {
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
-export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
+export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'expenses' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
 export type PlayerTab = 'overview' | 'assessment' | 'decision'
-export type FinanceView = 'overview' | 'forecast' | 'payments'
+export type FinanceView = 'overview' | 'players' | 'expenses' | 'forecast' | 'payments'
 export type SyncState = 'live' | 'saving' | 'offline'
 export type PositionTargets = Record<string, number>
 export type TeamPlans = Record<string, PositionTargets>
@@ -321,6 +321,32 @@ export type CoachInvoice = {
 
 export type CoachInvoiceMap = Record<string, Record<string, CoachInvoice>>
 
+export type ExpenseCategory = 'Equipment' | 'Kit & clothing' | 'Training supplies' | 'Venue' | 'Travel' | 'Officials' | 'Events' | 'Rewards & awards' | 'Food & refreshments' | 'Medical & first aid' | 'Membership & affiliation' | 'League & registration' | 'Marketing & printing' | 'Technology & software' | 'Professional services' | 'Fundraising' | 'Storage' | 'Other'
+export type ExpenseStatus = 'Submitted' | 'Approved' | 'Rejected' | 'Paid'
+
+export type ExpenseClaim = {
+  id: string
+  claimantUid: string
+  claimantName: string
+  claimantEmail: string
+  purchaseDate: string
+  team: string
+  category: ExpenseCategory
+  supplier: string
+  description: string
+  amount: number
+  receiptReference: string
+  notes: string
+  status: ExpenseStatus
+  submittedAt: number
+  updatedAt: number
+  updatedByUid: string
+  updatedByName: string
+  decisionNote?: string
+  decidedAt?: number
+  paidAt?: number
+}
+
 export type ClubEventType = 'trial' | 'training' | 'game'
 export type GameLocation = '' | 'Home' | 'Away'
 export type RecurrenceRule = '' | 'weekly' | 'fortnightly' | 'monthly'
@@ -395,6 +421,7 @@ export type CoachProfile = {
   email: string
   role: CoachRole
   teams: Record<string, boolean>
+  canSubmitExpenses: boolean
 }
 
 export type ActivityCategory = 'player' | 'schedule' | 'incident' | 'email' | 'team' | 'finance' | 'settings' | 'access' | 'import' | 'season'

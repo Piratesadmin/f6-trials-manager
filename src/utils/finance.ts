@@ -103,6 +103,8 @@ export function feeBandForTeam(team: string) {
 }
 
 export function standardFeeForTeam(team: string, settings: FinanceSettings) {
+  const forecastFee=settings.forecast.teams[team]?.fullFee
+  if(typeof forecastFee==='number'&&forecastFee>0)return forecastFee
   return feeBandForTeam(team) === 'NVL' ? settings.nvlFee : settings.lvaFee
 }
 

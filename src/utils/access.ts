@@ -8,6 +8,7 @@ export function createCoachProfile(uid: string, email: string, admin = false): C
     displayName: email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
     role: admin ? 'admin' : 'coach',
     teams: {},
+    canSubmitExpenses: admin,
   }
 }
 
@@ -30,6 +31,7 @@ export function normaliseCoachProfile(uid: string, value: unknown, fallbackEmail
     displayName: typeof incoming.displayName === 'string' && incoming.displayName.trim() ? incoming.displayName : createCoachProfile(uid, fallbackEmail).displayName,
     role,
     teams: role === 'welfare' ? {} : Object.fromEntries((role === 'team-admin' ? assignedTeams.slice(0,1) : assignedTeams).map(team => [team, true])),
+    canSubmitExpenses: role==='admin'||(role!=='welfare'&&incoming.canSubmitExpenses===true),
   }
 }
 
