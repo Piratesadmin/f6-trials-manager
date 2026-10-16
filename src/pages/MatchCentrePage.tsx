@@ -70,7 +70,7 @@ export function MatchCentrePage({availableTeams,signedIn}:Props) {
     {source:'lva' as const,label:'London Volleyball League',url:'https://competitions.volleyzone.co.uk/fixture-and-results/lva/',available:true,message:''},
   ]
   return <>
-    <PageHeader title="F6 Match Centre" subtitle="Fixtures, results and league tables for every Flaming Six team." action={<button className="primary" onClick={()=>void load(true)} disabled={loading||!signedIn}>{loading?<LoaderCircle className="spin"/>:<RefreshCw/>} Refresh</button>}/>
+    <PageHeader title="F6 Match Centre" subtitle="Fixtures through May 2027, results and league tables for every Flaming Six team." action={<button className="primary" onClick={()=>void load(true)} disabled={loading||!signedIn}>{loading?<LoaderCircle className="spin"/>:<RefreshCw/>} Refresh</button>}/>
     <section className="match-centre-status">
       <div><Trophy/><span><b>Official competition data</b><small>{data?`Last checked ${new Date(data.updatedAt).toLocaleString('en-GB')}`:'NVL and LVA via VolleyZone'}</small></span></div>
       <div className="match-source-links">{sourceLinks.map(source=><a key={source.source} className={source.available?'':'unavailable'} href={source.url} target="_blank" rel="noreferrer"><span>{sourceLabel(source.source)}</span>{source.available?'Live':'Unavailable'}<ExternalLink/></a>)}</div>

@@ -99,6 +99,7 @@ const monthNumbers: Record<string, string> = {
   january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
   july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
 }
+const fixtureEndDate = '2027-05-31'
 
 function clean(value: string | undefined | null) {
   return (value || '').replace(/\s+/g, ' ').trim()
@@ -140,7 +141,7 @@ function parseMatch($: CheerioAPI, element: Parameters<CheerioAPI>[0], config: S
   const date = isoDate(displayDate)
   const centre = node.find('.flag-box > ul.list-unstyled > li').eq(1)
   const centreText = clean(centre.text())
-  const times = [...centreText.matchAll(/\b([01]?\d|2[0-3]):[0-5]\d\b/g)].map(match => match[0].padStart(5, '0'))
+  const times = [...centreText.matchAll(/(?:^|[^\d])([01]?\d|2[0-3]):([0-5]\d)/g)].map(match => `${match[1].padStart(2, '0')}:${match[2]}`)
   const link = node.find('a[href*="fixture_id="]').first().attr('href') || config.url
   const fixtureId = link.match(/[?&]fixture_id=(\d+)/)?.[1] || `${date}-${homeTeam}-${awayTeam}`
   const details = detailsFor($, element)
@@ -173,7 +174,7 @@ function parseMatch($: CheerioAPI, element: Parameters<CheerioAPI>[0], config: S
 
 function competitionIds($: CheerioAPI) {
   const divisions = new Map<string, string>()
-  $('#select_comp_live option[value]').each((_, option) => {
+  $('select#select_comp option[value], select#select_comp_live option[value]').each((_, option) => {
     const id = clean($(option).attr('value'))
     const name = clean($(option).text())
     if (id && name && !/^all divisions?$/i.test(name)) divisions.set(name.toLowerCase(), id)
@@ -185,7 +186,18 @@ function parsePage(html: string, config: SourceConfig) {
   const $ = load(html)
   const fixtures = $('.FixContents').toArray().map(element => parseMatch($, element, config, false)).filter((item): item is MatchCentreMatch => Boolean(item && item.date))
   const results = $('.resultContentsParent').toArray().map(element => parseMatch($, element, config, true)).filter((item): item is MatchCentreMatch => Boolean(item && item.date))
-  return {fixtures, results, divisions: competitionIds($)}
+  return {
+    fixtures,
+    results,
+    divisions: competitionIds($),
+    seasonId: clean($('select#select_season_fixture').val() as string || $('select#select_season_live').val() as string || ''),
+    userId: html.match(/userId:\s*['"]?(\d+)['"]?/)?.[1] || '298568',
+  }
+}
+
+function parseFixtureMarkup(markup: string, config: SourceConfig) {
+  const $ = load(markup)
+  return $('.FixContents').toArray().map(element => parseMatch($, element, config, false)).filter((item): item is MatchCentreMatch => Boolean(item && item.date && item.date <= fixtureEndDate))
 }
 
 async function fetchText(url: string, init?: RequestInit) {
@@ -234,10 +246,27 @@ function parseTable(html: string, config: SourceConfig, competition: string, com
 async function fetchSource(config: SourceConfig) {
   const html = await fetchText(config.url)
   const page = parsePage(html, config)
-  const relevantCompetitions = [...new Set([...page.fixtures, ...page.results].map(match => match.competition).filter(Boolean))]
+  const relevantCompetitions = [...new Set([...page.fixtures, ...page.results].filter(match => match.clubTeam).map(match => match.competition).filter(Boolean))]
     .map(name => ({name, id: page.divisions.get(name.toLowerCase()) || ''}))
     .filter(item => item.id)
-  const tables = (await Promise.all(relevantCompetitions.map(async competition => {
+  const [fixtureGroups, tables] = await Promise.all([
+    Promise.all(relevantCompetitions.map(async competition => {
+      const body = new URLSearchParams({
+        seasonidgrp: page.seasonId,
+        fix_compID: competition.id,
+        pageTitle: 'Fixture and Results',
+        userId: page.userId,
+        lastSegment: config.slug,
+      })
+      const response = await fetchText('https://competitions.volleyzone.co.uk/wp-admin/admin-ajax.php?action=fetch_fixture_by_competition', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+        body,
+      })
+      const payload = JSON.parse(response) as {fixtures?: string}
+      return parseFixtureMarkup(payload.fixtures || '', config)
+    })),
+    Promise.all(relevantCompetitions.map(async competition => {
     const body = new URLSearchParams({competition_id: competition.id, pageTitle: 'Fixture and Results', lastSegment: config.slug})
     const response = await fetchText('https://competitions.volleyzone.co.uk/wp-admin/admin-ajax.php?action=fetch_table_by_competition', {
       method: 'POST',
@@ -246,8 +275,17 @@ async function fetchSource(config: SourceConfig) {
     })
     const payload = JSON.parse(response) as {CompTables?: string}
     return parseTable(payload.CompTables || '', config, competition.name, competition.id)
-  }))).filter((table): table is MatchCentreTable => Boolean(table))
-  return {fixtures: page.fixtures, results: page.results, tables}
+    })),
+  ])
+  const fixtureById = new Map<string, MatchCentreMatch>()
+  for (const fixture of [...page.fixtures, ...fixtureGroups.flat()]) {
+    if (fixture.date <= fixtureEndDate) fixtureById.set(fixture.id, fixture)
+  }
+  return {
+    fixtures: [...fixtureById.values()],
+    results: page.results,
+    tables: tables.filter((table): table is MatchCentreTable => Boolean(table)),
+  }
 }
 
 export async function loadMatchCentre(): Promise<MatchCentreData> {
