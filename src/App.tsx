@@ -43,6 +43,7 @@ import { SignupPage } from './pages/SignupPage'
 import { SignupInboxPage } from './pages/SignupInboxPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { ExpensesPage, type ExpenseDraft } from './pages/ExpensesPage'
+import { MatchCentrePage } from './pages/MatchCentrePage'
 import { deleteClubSignup as deleteClubSignupRemote, updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
 import { normaliseClubSignup, type ClubSignup, type ClubSignupOutcome, type ClubSignupStatus } from './signup/types'
 import './App.css'
@@ -1222,6 +1223,7 @@ export default function App(){
         readOnly={isReadOnly}
         trialsMode={seasonSettings.trialsMode}
       />}
+      {page==='match-centre'&&<MatchCentrePage availableTeams={isAdmin||isReadOnly?teams:editableTeams} signedIn={Boolean(user)}/>}
       {page==='incidents'&&canUseIncidents&&<IncidentsPage reports={incidentReports} players={players} sessions={trialSessions} assignedTeams={editableTeams} isAdmin={isAdmin} readOnly={isReadOnly} saveReport={saveIncidentReport}/>}
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} readOnly={isReadOnly} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions} readOnly={isReadOnly}/>}

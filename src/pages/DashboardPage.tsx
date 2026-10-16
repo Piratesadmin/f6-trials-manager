@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ArrowRight, CalendarClock, CalendarDays, CheckCircle2, ClipboardCheck, Clock3, HeartHandshake, Mail, ReceiptText, ShieldAlert, ShieldCheck, Star, UserPlus, UserRoundCheck, Users, WalletCards, X, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CalendarClock, CalendarDays, CheckCircle2, ClipboardCheck, Clock3, HeartHandshake, Mail, ReceiptText, ShieldAlert, ShieldCheck, Star, Trophy, UserPlus, UserRoundCheck, Users, WalletCards, X, type LucideIcon } from 'lucide-react'
 import type { CoachRole, EmailSettings, FinanceSettings, PageKey, Player, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, TeamPlans, TrialSession } from '../types'
 import { PageHeader } from '../components/PageHeader'
 import { PlayerAvatar } from '../components/PlayerAvatar'
@@ -84,6 +84,7 @@ export function DashboardPage({players,playerPhotos,sessions,settings,teamPlans,
   const shortcuts:DashboardShortcut[]=[
     {key:'teams',label:teamShortcutLabel,description:teamShortcutDescription,icon:ShieldCheck,tone:'team',onClick:()=>assignedTeams[0]?openTeam(assignedTeams[0]):setPage('teams')},
     {key:'schedule',label:'Schedule',description:nextSession?`${formatSessionDate(nextSession.date)} · ${nextSession.title}`:'View training, games and club events',icon:CalendarDays,tone:'schedule',onClick:()=>setPage('schedule')},
+    {key:'match-centre',label:'F6 Match Centre',description:'Fixtures, results and league tables',icon:Trophy,tone:'matches',onClick:()=>setPage('match-centre')},
     {key:'signups',label:'Sign-ups',description:newSignupCount?`${newSignupCount} new sign-up${newSignupCount===1?'':'s'} to review`:'Review new player registrations',icon:UserPlus,tone:'signups',badge:newSignupCount,onClick:()=>setPage('signups')},
     ...(canUseIncidents?[{key:'incidents',label:'Incident reports',description:openIncidentCount?`${openIncidentCount} open report${openIncidentCount===1?'':'s'}`:'Record an injury or accident',icon:ShieldAlert,tone:'incidents',badge:openIncidentCount,onClick:()=>setPage('incidents')}]:[]),
     ...(canUseTimesheets?[{key:'timesheets',label:'Timesheets',description:isAdmin?'Review coaching hours and invoices':'Log coaching hours and submit invoices',icon:Clock3,tone:'timesheets',onClick:()=>setPage('timesheets')}]:[]),

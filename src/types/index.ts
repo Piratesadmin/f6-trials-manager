@@ -149,7 +149,7 @@ export type Player = {
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
-export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'expenses' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
+export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'match-centre' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'expenses' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
 export type PlayerTab = 'overview' | 'assessment' | 'decision'
 export type FinanceView = 'overview' | 'players' | 'expenses' | 'forecast' | 'payments'
 export type SyncState = 'live' | 'saving' | 'offline'
@@ -157,6 +157,61 @@ export type PositionTargets = Record<string, number>
 export type TeamPlans = Record<string, PositionTargets>
 export type PlayerStars = Record<string, boolean>
 export type PlayerPhotos = Record<string, string>
+
+export type MatchSource = 'nvl' | 'lva'
+
+export type MatchCentreMatch = {
+  id: string
+  source: MatchSource
+  sourceUrl: string
+  clubTeam: string
+  date: string
+  displayDate: string
+  startTime: string
+  matchStartTime: string
+  homeTeam: string
+  awayTeam: string
+  competition: string
+  venue: string
+  referees: string[]
+  homeScore?: number
+  awayScore?: number
+  sets?: Array<{home:number;away:number}>
+}
+
+export type MatchCentreStanding = {
+  position: number
+  team: string
+  played: number
+  won: number
+  drawn: number
+  lost: number
+  setsFor: number
+  setsAgainst: number
+  setDifference: number
+  pointsFor: number
+  pointsAgainst: number
+  pointsRatio: string
+  points: number
+}
+
+export type MatchCentreTable = {
+  id: string
+  source: MatchSource
+  sourceUrl: string
+  competition: string
+  clubTeams: string[]
+  standings: MatchCentreStanding[]
+}
+
+export type MatchCentreData = {
+  updatedAt: number
+  stale: boolean
+  fixtures: MatchCentreMatch[]
+  results: MatchCentreMatch[]
+  tables: MatchCentreTable[]
+  sources: Array<{source:MatchSource;label:string;url:string;available:boolean;message:string}>
+}
 
 export type PaymentPlan = '' | 'Fully paid' | '2 instalments' | 'Standing order' | 'Non paying' | 'Custom'
 

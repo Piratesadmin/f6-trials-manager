@@ -3,6 +3,7 @@ import {initializeApp} from 'firebase-admin/app'
 import {getDatabase, type DataSnapshot} from 'firebase-admin/database'
 import {HttpsError, onCall, type CallableRequest} from 'firebase-functions/v2/https'
 import {onSchedule} from 'firebase-functions/v2/scheduler'
+import {loadMatchCentre, type MatchCentreData} from './matchCentre.js'
 
 initializeApp()
 const db = getDatabase()
@@ -28,6 +29,9 @@ const signupDivisions: Record<string, Set<string>> = {
 const signupPositions = new Set(['Setter', 'Outside', 'Middle', 'Opposite', 'Libero', 'All-rounder', 'Not sure'])
 const clubTeams = new Set(['Aces', 'Ravens', 'Cobras', 'Coyotes', 'Llamas', 'Meerkats', 'Leopards', 'Pirates'])
 const managerRoles = new Set(['coach', 'assistant-coach', 'team-admin', 'admin'])
+const clubReaderRoles = new Set([...managerRoles, 'welfare'])
+const matchCentreCacheDuration = 15 * 60 * 1000
+const matchCentreMinimumRefresh = 60 * 1000
 
 type CaseStatus = 'new' | 'open' | 'closed'
 type StoredCase = {
@@ -179,6 +183,31 @@ async function requireManager(request: CallableRequest<unknown>) {
   if (accountEmail !== 'trials@flamingsix.co.uk' && (typeof role !== 'string' || !managerRoles.has(role))) throw new HttpsError('permission-denied', 'Club Manager access is required.')
   return {email: accountEmail}
 }
+
+async function requireClubReader(request: CallableRequest<unknown>) {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to Club Manager.')
+  const accountEmail = typeof request.auth.token.email === 'string' ? request.auth.token.email.toLowerCase() : ''
+  const role = (await db.ref(`coachProfiles/${request.auth.uid}/role`).get()).val()
+  if (accountEmail !== 'trials@flamingsix.co.uk' && (typeof role !== 'string' || !clubReaderRoles.has(role))) throw new HttpsError('permission-denied', 'Club Manager access is required.')
+}
+
+export const getMatchCentre = onCall({region, timeoutSeconds: 60, memory: '512MiB'}, async request => {
+  await requireClubReader(request)
+  const force = record(request.data).force === true
+  const cacheReference = db.ref('matchCentreCache')
+  const cached = (await cacheReference.get()).val() as MatchCentreData | null
+  const cacheAge = cached?.updatedAt ? Date.now() - cached.updatedAt : Number.POSITIVE_INFINITY
+  if (cached && cacheAge < (force ? matchCentreMinimumRefresh : matchCentreCacheDuration)) return {...cached, stale: false}
+  try {
+    const data = await loadMatchCentre()
+    await cacheReference.set(data)
+    return data
+  } catch (error) {
+    console.error('Match Centre refresh failed', error)
+    if (cached) return {...cached, stale: true}
+    throw new HttpsError('unavailable', 'The NVL and LVA feeds could not be reached. Please try again shortly.')
+  }
+})
 
 export const submitClubSignup = onCall({region}, async request => {
   const input = record(request.data)
