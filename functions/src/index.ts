@@ -192,8 +192,8 @@ async function requireClubReader(request: CallableRequest<unknown>) {
 }
 
 export const getMatchCentre = onCall({region, timeoutSeconds: 60, memory: '512MiB'}, async request => {
-  await requireClubReader(request)
   const force = record(request.data).force === true
+  if (force) await requireClubReader(request)
   const cacheReference = db.ref('matchCentreCacheV2')
   const cached = (await cacheReference.get()).val() as MatchCentreData | null
   const cacheAge = cached?.updatedAt ? Date.now() - cached.updatedAt : Number.POSITIVE_INFINITY

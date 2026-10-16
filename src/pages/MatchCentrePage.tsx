@@ -6,7 +6,17 @@ import type {MatchCentreData, MatchCentreMatch, MatchCentreTable} from '../types
 import '../matchCentre.css'
 
 type View = 'fixtures' | 'results' | 'tables'
-type Props = {availableTeams:string[]; signedIn:boolean}
+type Props = {availableTeams:string[]; canRefresh:boolean}
+const localCacheKey='f6-match-centre-cache-v1'
+
+function readLocalCache():MatchCentreData|null{
+  try{
+    const value=localStorage.getItem(localCacheKey)
+    if(!value)return null
+    const parsed=JSON.parse(value) as MatchCentreData
+    return parsed&&Array.isArray(parsed.fixtures)&&Array.isArray(parsed.results)&&Array.isArray(parsed.tables)?parsed:null
+  }catch{return null}
+}
 
 const sourceLabel = (source:'nvl'|'lva') => source.toUpperCase()
 const friendlyError = (reason:unknown) => {
@@ -49,18 +59,17 @@ function LeagueTable({table}:{table:MatchCentreTable}) {
   </section>
 }
 
-export function MatchCentrePage({availableTeams,signedIn}:Props) {
-  const [data,setData]=useState<MatchCentreData|null>(null)
+export function MatchCentrePage({availableTeams,canRefresh}:Props) {
+  const [data,setData]=useState<MatchCentreData|null>(()=>readLocalCache())
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState('')
   const [view,setView]=useState<View>('fixtures')
   const [team,setTeam]=useState(availableTeams.length===1?availableTeams[0]:'all')
   const load=useCallback(async(force=false)=>{
-    if(!signedIn){setError('Sign in to load live competition data. Official source links are available below.');return}
     setLoading(true);setError('')
-    try{setData(await getMatchCentre(force))}catch(reason){setError(friendlyError(reason))}
+    try{const latest=await getMatchCentre(force);setData(latest);try{localStorage.setItem(localCacheKey,JSON.stringify(latest))}catch{/* The live response should still be usable when browser storage is unavailable. */}}catch(reason){setError(friendlyError(reason));setData(current=>current?{...current,stale:true}:null)}
     finally{setLoading(false)}
-  },[signedIn])
+  },[])
   useEffect(()=>{void load()},[load])
   const fixtures=useMemo(()=>data?.fixtures.filter(match=>team==='all'||match.clubTeam===team)||[],[data,team])
   const results=useMemo(()=>data?.results.filter(match=>team==='all'||match.clubTeam===team)||[],[data,team])
@@ -70,7 +79,7 @@ export function MatchCentrePage({availableTeams,signedIn}:Props) {
     {source:'lva' as const,label:'London Volleyball League',url:'https://competitions.volleyzone.co.uk/fixture-and-results/lva/',available:true,message:''},
   ]
   return <>
-    <PageHeader title="F6 Match Centre" subtitle="Fixtures through May 2027, results and league tables for every Flaming Six team." action={<button className="primary" onClick={()=>void load(true)} disabled={loading||!signedIn}>{loading?<LoaderCircle className="spin"/>:<RefreshCw/>} Refresh</button>}/>
+    <PageHeader title="F6 Match Centre" subtitle="Fixtures through May 2027, results and league tables for every Flaming Six team." action={canRefresh?<button className="primary" onClick={()=>void load(true)} disabled={loading}>{loading?<LoaderCircle className="spin"/>:<RefreshCw/>} Refresh</button>:undefined}/>
     <section className="match-centre-status">
       <div><Trophy/><span><b>Official competition data</b><small>{data?`Last checked ${new Date(data.updatedAt).toLocaleString('en-GB')}`:'NVL and LVA via VolleyZone'}</small></span></div>
       <div className="match-source-links">{sourceLinks.map(source=><a key={source.source} className={source.available?'':'unavailable'} href={source.url} target="_blank" rel="noreferrer"><span>{sourceLabel(source.source)}</span>{source.available?'Live':'Unavailable'}<ExternalLink/></a>)}</div>

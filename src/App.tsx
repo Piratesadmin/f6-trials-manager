@@ -4,7 +4,7 @@ import { LockKeyhole } from 'lucide-react'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
-import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, ExpenseClaim, ExpenseStatus, FinanceForecast, FinanceSettings, FinanceView, IncidentReport, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
+import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, ExpenseClaim, ExpenseStatus, FinanceForecast, FinanceSettings, FinanceView, IncidentReport, MatchCentreMatch, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, currentRatingScale, emptyAssessment, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
@@ -44,6 +44,7 @@ import { SignupInboxPage } from './pages/SignupInboxPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { ExpensesPage, type ExpenseDraft } from './pages/ExpensesPage'
 import { MatchCentrePage } from './pages/MatchCentrePage'
+import { getMatchCentre } from './matchCentre/api'
 import { deleteClubSignup as deleteClubSignupRemote, updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
 import { normaliseClubSignup, type ClubSignup, type ClubSignupOutcome, type ClubSignupStatus } from './signup/types'
 import './App.css'
@@ -1169,6 +1170,7 @@ export default function App(){
   if(cleanSignupPath)return <SignupPage exit={()=>window.location.assign(window.location.pathname.replace(/signup\/?$/,'')||'/')}/>
   if(cleanWelfarePath||page==='welfare')return <WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>cleanWelfarePath?window.location.assign(appRootPath):navigate({page:'dashboard'})} user={user} accountRole={coachProfile?.role||null} accountLoading={authLoading||Boolean(user&&!coachProfile&&!sharedPinAdmin)}/>
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
+  if(page==='match-centre'&&!user&&!demo)return <main className="public-match-centre"><MatchCentrePage availableTeams={teams} canRefresh={false}/></main>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
 
   return <div className="app">
@@ -1211,6 +1213,7 @@ export default function App(){
         openPlayer={id=>openPlayer(id,'overview')}
         onImport={()=>setImportOpen(true)}
         onSpondImport={()=>setSpondImportOpen(true)}
+        onSyncFixtures={async()=>{if(isReadOnly)throw new Error('You do not have permission to sync fixtures.');const data=await getMatchCentre(true);const allowed=new Set(isAdmin?teams:editableTeams);return data.fixtures.filter((match:MatchCentreMatch)=>allowed.has(match.clubTeam))}}
         teamColours={Object.fromEntries(Object.entries(activeEmailSettings.teamDetails).map(([team,details])=>[team,details.calendarColor]))}
         requestedSessionId={requestedSessionId}
         onRequestedSessionHandled={()=>setRequestedSessionId('')}
@@ -1223,7 +1226,7 @@ export default function App(){
         readOnly={isReadOnly}
         trialsMode={seasonSettings.trialsMode}
       />}
-      {page==='match-centre'&&<MatchCentrePage availableTeams={isAdmin||isReadOnly?teams:editableTeams} signedIn={Boolean(user)}/>}
+      {page==='match-centre'&&<MatchCentrePage availableTeams={isAdmin||isReadOnly?teams:editableTeams} canRefresh={Boolean(user)}/>}
       {page==='incidents'&&canUseIncidents&&<IncidentsPage reports={incidentReports} players={players} sessions={trialSessions} assignedTeams={editableTeams} isAdmin={isAdmin} readOnly={isReadOnly} saveReport={saveIncidentReport}/>}
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} readOnly={isReadOnly} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions} readOnly={isReadOnly}/>}

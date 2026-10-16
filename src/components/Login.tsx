@@ -48,6 +48,7 @@ export function Login({ onDemo }: { onDemo: () => void }) {
     {error && <div className="login-error">{error}</div>}
     <button className="primary login-button" disabled={busy || (mode === 'pin' ? pin.length < 4 : !email.trim() || password.length < 6)}>{busy ? 'Signing in…' : mode === 'pin' ? 'Open Club Manager' : 'Sign in to Club Manager'}</button>
     <p className="pin-help">{mode === 'pin' ? 'Use the shared PIN provided by the club committee.' : 'Coach, assistant-coach and team-administrator accounts are created by a club administrator.'}</p>
+    <a className="public-match-centre-link" href="#/match-centre">View the public F6 Match Centre</a>
     {!firebaseConfigured && <><div className="setup-warning">Firebase is not configured.</div><button type="button" className="demo-button" onClick={onDemo}>Open local demo</button></>}
   </form></div>
 }
