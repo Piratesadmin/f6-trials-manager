@@ -4,7 +4,7 @@ import { LockKeyhole } from 'lucide-react'
 import { get, limitToLast, onValue, orderByChild, query as firebaseQuery, ref, runTransaction, set, update } from 'firebase/database'
 import { auth, database, firebaseConfigured, sharedLoginEmail } from './firebase'
 import { defaultEmailSettings, initialPlayers, teams } from './data/constants'
-import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, ExpenseClaim, ExpenseStatus, FinanceForecast, FinanceSettings, FinanceView, IncidentReport, MatchCentreMatch, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
+import type { ActivityDraft, ActivityLogEntry, ArchivedPlayerRecord, ArchivedPlayersMap, CoachHourlyRateMap, CoachInvoice, CoachInvoiceMap, CoachProfile, CoachTimesheetEntry, CoachTimesheetEntryMap, EmailSettings, ExpenseClaim, ExpenseStatus, FinanceForecast, FinanceSettings, FinanceView, IncidentReport, MatchCentreMatch, PageKey, Player, PlayerDecisionDraft, PlayerDecisionSaveResult, PlayerFinance, PlayerFinanceMap, PlayerPhotos, PlayerStars, PlayerTab, RefereeInvoiceMap, SeasonArchive, SeasonSettings, SessionAttendanceStatus, SessionPhotos, SyncState, TeamPlans, TrialSession } from './types'
 import { averageRating, currentRatingScale, emptyAssessment, normalisePlayer, setConfirmedTeam, setTrialRegistration, trialRegistrationFor } from './utils/player'
 import { createDefaultTeamPlans, minimumTargetForPosition, normaliseTeamPlans, teamPlansNeedMinimumUpgrade } from './utils/teamPlanner'
 import { assignedEmailSignatoriesForTeam, assignedTeamNames, createCoachProfile, normaliseCoachProfile } from './utils/access'
@@ -44,6 +44,7 @@ import { SignupInboxPage } from './pages/SignupInboxPage'
 import { IncidentsPage } from './pages/IncidentsPage'
 import { ExpensesPage, type ExpenseDraft } from './pages/ExpensesPage'
 import { MatchCentrePage } from './pages/MatchCentrePage'
+import { RefereeInvoicePage } from './pages/RefereeInvoicePage'
 import { getMatchCentre } from './matchCentre/api'
 import { deleteClubSignup as deleteClubSignupRemote, updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
 import { normaliseClubSignup, type ClubSignup, type ClubSignupOutcome, type ClubSignupStatus } from './signup/types'
@@ -87,6 +88,7 @@ export default function App(){
   const [authLoading,setAuthLoading]=useState(firebaseConfigured)
   const [demo,setDemo]=useState(!firebaseConfigured)
   const [page,setPageState]=useState<PageKey>(initialRoute.page)
+  const [refereeToken,setRefereeToken]=useState(initialRoute.refereeToken||'')
   const [requestedSessionId,setRequestedSessionId]=useState(initialRoute.sessionId||'')
   const [activeScheduleSessionId,setActiveScheduleSessionId]=useState('')
   const [players,setPlayers]=useState<Player[]>(()=>{
@@ -129,6 +131,7 @@ export default function App(){
   const [coachHourlyRates,setCoachHourlyRates]=useState<CoachHourlyRateMap>(()=>normaliseCoachHourlyRateMap(JSON.parse(localStorage.getItem('f6coachhourlyrates')||'{}')))
   const [coachTimesheetEntries,setCoachTimesheetEntries]=useState<CoachTimesheetEntryMap>(()=>normaliseTimesheetEntryMap(JSON.parse(localStorage.getItem('f6coachtimesheetentries')||'{}')))
   const [coachInvoices,setCoachInvoices]=useState<CoachInvoiceMap>(()=>normaliseCoachInvoiceMap(JSON.parse(localStorage.getItem('f6coachinvoices')||'{}')))
+  const [refereeInvoices,setRefereeInvoices]=useState<RefereeInvoiceMap>(()=>JSON.parse(localStorage.getItem('f6refereeinvoices')||'{}') as RefereeInvoiceMap)
   const [trialSessions,setTrialSessions]=useState<TrialSession[]>(()=>{
     const stored=JSON.parse(localStorage.getItem('f6trialsessions')||'[]') as TrialSession[]
     return stored.map(session=>normaliseTrialSession(session.id,session))
@@ -180,6 +183,7 @@ export default function App(){
 
   const applyRoute=useCallback((route:AppRoute)=>{
     setPageState(route.page)
+    if(route.page==='referee-invoice')setRefereeToken(route.refereeToken||'')
     if(route.page==='emails')setSelectedId(route.playerId||'')
     else if(route.playerId)setSelectedId(route.playerId)
     if(route.page==='players'){
@@ -278,6 +282,10 @@ export default function App(){
       setExpenseClaims(expenseClaimsFromFirebase(value));showConnectionState()
     },showConnectionState)
   },[user,demo,accountAccessReady,canSubmitExpenses,isAdmin,showConnectionState])
+  useEffect(()=>{
+    if(demo||!database||!user||!isAdmin){setRefereeInvoices({});return}
+    return onValue(ref(database,'refereeInvoices'),snapshot=>{const value=snapshot.val() as RefereeInvoiceMap|null;const next=value&&typeof value==='object'?value:{};setRefereeInvoices(next);localStorage.setItem('f6refereeinvoices',JSON.stringify(next))},showConnectionState)
+  },[user,demo,isAdmin,showConnectionState])
   useEffect(()=>{
     if(demo){setSeasonSettingsReady(true);return}
     if(!database||!user){setSeasonSettingsReady(false);return}
@@ -1168,6 +1176,7 @@ export default function App(){
   },[page,requestedSessionId])
 
   if(cleanSignupPath)return <SignupPage exit={()=>window.location.assign(window.location.pathname.replace(/signup\/?$/,'')||'/')}/>
+  if(page==='referee-invoice')return <RefereeInvoicePage token={refereeToken}/>
   if(cleanWelfarePath||page==='welfare')return <WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>cleanWelfarePath?window.location.assign(appRootPath):navigate({page:'dashboard'})} user={user} accountRole={coachProfile?.role||null} accountLoading={authLoading||Boolean(user&&!coachProfile&&!sharedPinAdmin)}/>
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(page==='match-centre'&&!user&&!demo)return <main className="public-match-centre"><MatchCentrePage availableTeams={teams} canRefresh={false}/></main>
@@ -1233,7 +1242,7 @@ export default function App(){
       {page==='teams'&&<TeamsPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
       {page==='timesheets'&&canUseTimesheets&&<TimesheetsPage isAdmin={isAdmin} currentUid={currentCoachId} currentEmail={user?.email||''} currentProfile={coachProfile} currentSeason={seasonSettings.currentSeason} coachProfiles={coachProfiles} hourlyRates={coachHourlyRates} entries={coachTimesheetEntries} invoices={coachInvoices} saveHourlyRate={saveCoachHourlyRate} saveEntry={saveCoachTimesheetEntry} deleteEntry={deleteCoachTimesheetEntry} submitInvoice={submitCoachInvoice} markInvoicePaid={markCoachInvoicePaid}/>}
       {page==='expenses'&&canSubmitExpenses&&<ExpensesPage claims={expenseClaims.filter(claim=>claim.claimantUid===currentCoachId)} availableTeams={editableTeams} submitClaim={submitExpenseClaim}/>}
-      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} coachProfiles={coachProfiles} coachInvoices={coachInvoices} timesheetEntries={coachTimesheetEntries} currentSeason={seasonSettings.currentSeason} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView} onOpenTimesheets={()=>navigatePage('timesheets')} expenseClaims={expenseClaims} updateExpenseStatus={updateExpenseStatus}/>}
+      {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} coachProfiles={coachProfiles} coachInvoices={coachInvoices} timesheetEntries={coachTimesheetEntries} currentSeason={seasonSettings.currentSeason} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView} onOpenTimesheets={()=>navigatePage('timesheets')} expenseClaims={expenseClaims} updateExpenseStatus={updateExpenseStatus} refereeInvoices={refereeInvoices} refereeSessions={trialSessions} canManageRefereeInvoices={Boolean(database&&user&&!demo)}/>}
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
       {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
       {page==='settings'&&isAdmin&&<SettingsPage

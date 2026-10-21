@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { AlertTriangle, Banknote, BarChart3, Calculator, CheckCircle2, Download, Landmark, Mail, ReceiptText, Search, Users, WalletCards, X } from 'lucide-react'
+import { AlertTriangle, Banknote, BarChart3, Calculator, CheckCircle2, Download, Landmark, Mail, ReceiptText, Search, ShieldCheck, Users, WalletCards, X } from 'lucide-react'
 import { FinanceForecastPage } from '../components/FinanceForecast'
 import { PlayerPaymentDrawer, StatementReconciliation } from '../components/FinancePaymentTools'
 import { FinanceExpenses } from '../components/FinanceExpenses'
+import { FinanceRefereeInvoices } from '../components/FinanceRefereeInvoices'
 import { PageHeader } from '../components/PageHeader'
 import { PlayerAvatar } from '../components/PlayerAvatar'
 import { teams } from '../data/constants'
-import type { CoachInvoiceMap, CoachProfile, CoachTimesheetEntryMap, ExpenseClaim, ExpenseStatus, FinanceForecast, FinanceSettings, FinanceView, PaymentPlan, Player, PlayerFinance, PlayerFinanceMap, PlayerPhotos } from '../types'
+import type { CoachInvoiceMap, CoachProfile, CoachTimesheetEntryMap, ExpenseClaim, ExpenseStatus, FinanceForecast, FinanceSettings, FinanceView, PaymentPlan, Player, PlayerFinance, PlayerFinanceMap, PlayerPhotos, RefereeInvoiceMap, TrialSession } from '../types'
 import { confirmedTeam, customPaymentRuleFor, effectiveAmountOwed, emptyPlayerFinance, feeBandForTeam, formatCurrency, outstandingAmount, paymentDeadlineDetails, paymentPlans, paymentReferenceFor, paymentStatus, recordedAmountPaid, standardFeeForPlayer, standardFeeForTeam } from '../utils/finance'
 import { confirmedPositionForTeam, confirmedTeamNames, isConfirmedForTeam } from '../utils/player'
 import { coachInvoiceFinanceSummary } from '../utils/timesheets'
@@ -29,6 +30,9 @@ type Props = {
   onOpenTimesheets: ()=>void
   expenseClaims: ExpenseClaim[]
   updateExpenseStatus: (claim:ExpenseClaim,status:ExpenseStatus)=>Promise<void>
+  refereeInvoices: RefereeInvoiceMap
+  refereeSessions: TrialSession[]
+  canManageRefereeInvoices: boolean
 }
 
 const chartColours=['#ef6c19','#ffcf18','#7c3aed','#16a34a','#2563eb','#db2777','#0f766e','#dc2626']
@@ -45,7 +49,7 @@ function pieStyle(values:number[],colours=chartColours):CSSProperties{
   return{background:`conic-gradient(${stops.join(',')})`}
 }
 
-export function FinancePage({ players, playerPhotos, finances, financeSettings, coachProfiles, coachInvoices, timesheetEntries, currentSeason, saveFinance, saveForecast, onOpenPlayer, clubName, view, setView, onOpenTimesheets, expenseClaims, updateExpenseStatus }: Props) {
+export function FinancePage({ players, playerPhotos, finances, financeSettings, coachProfiles, coachInvoices, timesheetEntries, currentSeason, saveFinance, saveForecast, onOpenPlayer, clubName, view, setView, onOpenTimesheets, expenseClaims, updateExpenseStatus, refereeInvoices, refereeSessions, canManageRefereeInvoices }: Props) {
   const confirmed = useMemo(() => players.filter(player => Boolean(confirmedTeam(player))), [players])
   const teamAdminEmails=useMemo(()=>new Set(coachProfiles.filter(profile=>profile.role==='team-admin').map(profile=>profile.email.trim().toLowerCase()).filter(Boolean)),[coachProfiles])
   const [query, setQuery] = useState('')
@@ -144,6 +148,12 @@ export function FinancePage({ players, playerPhotos, finances, financeSettings, 
     <FinanceExpenses claims={expenseClaims} updateStatus={updateExpenseStatus}/>
   </>
 
+  if(view==='referees')return <>
+    <PageHeader title="Finance: referee invoices" subtitle="Collect and manage separate match invoices for first referee, second referee and scorer."/>
+    <FinanceSubnav view={view} setView={setView}/>
+    <FinanceRefereeInvoices sessions={refereeSessions} invoices={refereeInvoices} canManage={canManageRefereeInvoices}/>
+  </>
+
   if(view==='forecast')return <>
     <PageHeader title="Finance: forecast" subtitle="Plan season income, delivery costs and club P&L in one shared model."/>
     <FinanceSubnav view={view} setView={setView}/>
@@ -194,7 +204,7 @@ export function FinancePage({ players, playerPhotos, finances, financeSettings, 
 }
 
 function FinanceSubnav({view,setView}:{view:FinanceView;setView:(view:FinanceView)=>void}){
-  return <nav className="finance-subnav" aria-label="Finance sections"><button className={view==='overview'?'active':''} onClick={()=>setView('overview')}><BarChart3/>Overview</button><button className={view==='players'?'active':''} onClick={()=>setView('players')}><Users/>Players</button><button className={view==='expenses'?'active':''} onClick={()=>setView('expenses')}><ReceiptText/>Expenses</button><button className={view==='forecast'?'active':''} onClick={()=>setView('forecast')}><Calculator/>Forecast</button><button className={view==='payments'?'active':''} onClick={()=>setView('payments')}><ReceiptText/>Payments & emails</button></nav>
+  return <nav className="finance-subnav" aria-label="Finance sections"><button className={view==='overview'?'active':''} onClick={()=>setView('overview')}><BarChart3/>Overview</button><button className={view==='players'?'active':''} onClick={()=>setView('players')}><Users/>Players</button><button className={view==='expenses'?'active':''} onClick={()=>setView('expenses')}><ReceiptText/>Expenses</button><button className={view==='referees'?'active':''} onClick={()=>setView('referees')}><ShieldCheck/>Referees</button><button className={view==='forecast'?'active':''} onClick={()=>setView('forecast')}><Calculator/>Forecast</button><button className={view==='payments'?'active':''} onClick={()=>setView('payments')}><ReceiptText/>Payments & emails</button></nav>
 }
 
 function FinanceActivityPage({entries,playerPhotos,coachInvoices,timesheetEntries,currentSeason,onManage,onOpenTimesheets}:{entries:Array<{player:Player;finance:PlayerFinance;owed:number;outstanding:number}>;playerPhotos:PlayerPhotos;coachInvoices:CoachInvoiceMap;timesheetEntries:CoachTimesheetEntryMap;currentSeason:string;onManage:(playerId:string)=>void;onOpenTimesheets:()=>void}){

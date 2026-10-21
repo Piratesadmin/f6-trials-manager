@@ -1,6 +1,7 @@
-import {randomBytes, randomInt, scryptSync, timingSafeEqual} from 'node:crypto'
+import {createHash, randomBytes, randomInt, scryptSync, timingSafeEqual} from 'node:crypto'
 import {initializeApp} from 'firebase-admin/app'
 import {getDatabase, type DataSnapshot} from 'firebase-admin/database'
+import {getStorage} from 'firebase-admin/storage'
 import {HttpsError, onCall, type CallableRequest} from 'firebase-functions/v2/https'
 import {onSchedule} from 'firebase-functions/v2/scheduler'
 import {loadMatchCentre, type MatchCentreData} from './matchCentre.js'
@@ -32,6 +33,10 @@ const managerRoles = new Set(['coach', 'assistant-coach', 'team-admin', 'admin']
 const clubReaderRoles = new Set([...managerRoles, 'welfare'])
 const matchCentreCacheDuration = 15 * 60 * 1000
 const matchCentreMinimumRefresh = 60 * 1000
+const refereeRoles = ['first-referee', 'second-referee', 'scorer'] as const
+const refereeRoleLabels: Record<(typeof refereeRoles)[number], string> = {'first-referee': 'First referee', 'second-referee': 'Second referee', scorer: 'Scorer'}
+const refereeInvoiceStatuses = new Set(['Submitted', 'Approved', 'Rejected', 'Paid'])
+const maximumRefereeInvoiceFileBytes = 2 * 1024 * 1024
 
 type CaseStatus = 'new' | 'open' | 'closed'
 type StoredCase = {
@@ -191,6 +196,42 @@ async function requireClubReader(request: CallableRequest<unknown>) {
   if (accountEmail !== 'trials@flamingsix.co.uk' && (typeof role !== 'string' || !clubReaderRoles.has(role))) throw new HttpsError('permission-denied', 'Club Manager access is required.')
 }
 
+async function requireFinanceAdmin(request: CallableRequest<unknown>) {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to Club Manager.')
+  const accountEmail = typeof request.auth.token.email === 'string' ? request.auth.token.email.toLowerCase() : ''
+  const role = (await db.ref(`coachProfiles/${request.auth.uid}/role`).get()).val()
+  if (accountEmail !== 'trials@flamingsix.co.uk' && role !== 'admin') throw new HttpsError('permission-denied', 'Finance administrator access is required.')
+  return {uid: request.auth.uid, email: accountEmail, displayName: String((await db.ref(`coachProfiles/${request.auth.uid}/displayName`).get()).val() || accountEmail)}
+}
+
+function refereeTokenHash(token: string) { return createHash('sha256').update(token).digest('hex') }
+
+function validRefereeToken(value: unknown) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{40,80}$/.test(value)) throw new HttpsError('not-found', 'This referee invoice link is invalid or has expired.')
+  return value
+}
+
+function validFixtureId(value: unknown) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,120}$/.test(value)) throw new HttpsError('invalid-argument', 'Fixture ID is invalid.')
+  return value
+}
+
+async function refereeInvoiceByToken(value: unknown) {
+  const token = validRefereeToken(value)
+  const tokenHash = refereeTokenHash(token)
+  const tokenEntry = record((await db.ref(`refereeInvoiceTokens/${tokenHash}`).get()).val())
+  const fixtureId = validFixtureId(tokenEntry.fixtureId)
+  const role = choice(tokenEntry.role, 'referee role', new Set<string>(refereeRoles)) as (typeof refereeRoles)[number]
+  const [inviteSnapshot, invoiceSnapshot] = await Promise.all([
+    db.ref(`refereeInvoiceInvites/${fixtureId}/${role}`).get(),
+    db.ref(`refereeInvoices/${fixtureId}/${role}`).get(),
+  ])
+  const invite = record(inviteSnapshot.val())
+  const invoice = record(invoiceSnapshot.val())
+  if (invite.tokenHash !== tokenHash || invoice.inviteHash !== tokenHash) throw new HttpsError('not-found', 'This referee invoice link is invalid or has expired.')
+  return {token, tokenHash, fixtureId, role, invite, invoice}
+}
+
 export const getMatchCentre = onCall({region, timeoutSeconds: 60, memory: '512MiB'}, async request => {
   const force = record(request.data).force === true
   if (force) await requireClubReader(request)
@@ -207,6 +248,127 @@ export const getMatchCentre = onCall({region, timeoutSeconds: 60, memory: '512Mi
     if (cached) return {...cached, stale: true}
     throw new HttpsError('unavailable', 'The NVL and LVA feeds could not be reached. Please try again shortly.')
   }
+})
+
+export const createRefereeInvoiceLinks = onCall({region}, async request => {
+  const actor = await requireFinanceAdmin(request)
+  const input = record(request.data)
+  const fixtureId = validFixtureId(input.fixtureId)
+  const fixtureDate = text(input.fixtureDate, 'Fixture date', 10, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fixtureDate) || Number.isNaN(Date.parse(`${fixtureDate}T00:00:00Z`))) throw new HttpsError('invalid-argument', 'Fixture date is invalid.')
+  const team = choice(input.team, 'team', clubTeams)
+  const fixtureTitle = text(input.fixtureTitle, 'Fixture', 3, 160)
+  const opponent = text(input.opponent, 'Opponent', 1, 160)
+  const venue = optionalText(input.venue, 'Venue', 200)
+  const competition = optionalText(input.competition, 'Competition', 160)
+  const expiresAt = Math.max(Date.now() + 30 * day, Date.parse(`${fixtureDate}T00:00:00Z`) + 120 * day)
+  const updates: Record<string, unknown> = {}
+  const links: Partial<Record<(typeof refereeRoles)[number], string>> = {}
+  const now = Date.now()
+  for (const role of refereeRoles) {
+    const invoiceReference = db.ref(`refereeInvoices/${fixtureId}/${role}`)
+    const current = record((await invoiceReference.get()).val())
+    if (['Submitted', 'Approved', 'Paid'].includes(String(current.status))) continue
+    const token = randomBytes(32).toString('base64url')
+    const tokenHash = refereeTokenHash(token)
+    if (typeof current.inviteHash === 'string') updates[`refereeInvoiceTokens/${current.inviteHash}`] = null
+    updates[`refereeInvoiceTokens/${tokenHash}`] = {fixtureId, role}
+    updates[`refereeInvoiceInvites/${fixtureId}/${role}`] = {tokenHash, expiresAt, active: true, issuedAt: now, issuedBy: actor.email}
+    updates[`refereeInvoices/${fixtureId}/${role}`] = {
+      id: `${fixtureId}-${role}`, fixtureId, fixtureDate, fixtureTitle, team, opponent, venue, competition, role,
+      status: 'Link ready', invoiceNumber: '', refereeName: '', email: '', amount: 0, notes: '', inviteHash: tokenHash,
+      updatedAt: now, updatedBy: actor.displayName,
+    }
+    links[role] = token
+  }
+  if (Object.keys(updates).length) await db.ref().update(updates)
+  return {links, expiresAt}
+})
+
+export const getRefereeInvoiceInvite = onCall({region}, async request => {
+  const verified = await refereeInvoiceByToken(record(request.data).token)
+  const invoice = verified.invoice
+  if (invoice.status === 'Link ready' && Number(verified.invite.expiresAt) < Date.now()) throw new HttpsError('not-found', 'This referee invoice link has expired. Please contact the club finance team for a new link.')
+  return {
+    fixtureId: verified.fixtureId,
+    fixtureDate: String(invoice.fixtureDate || ''),
+    fixtureTitle: String(invoice.fixtureTitle || ''),
+    team: String(invoice.team || ''),
+    venue: String(invoice.venue || ''),
+    competition: String(invoice.competition || ''),
+    role: verified.role,
+    roleLabel: refereeRoleLabels[verified.role],
+    submitted: invoice.status !== 'Link ready',
+  }
+})
+
+export const submitRefereeInvoice = onCall({region, timeoutSeconds: 60, memory: '512MiB'}, async request => {
+  const input = record(request.data)
+  const verified = await refereeInvoiceByToken(input.token)
+  if (verified.invoice.status !== 'Link ready' || Number(verified.invite.expiresAt) < Date.now()) throw new HttpsError('failed-precondition', 'This invoice link has already been used or has expired.')
+  const refereeName = text(input.refereeName, 'Your name', 2, 120)
+  const contactEmail = email(input.email, 'Email address')
+  const invoiceNumber = text(input.invoiceNumber, 'Invoice number', 1, 80)
+  const amount = Number(input.amount)
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10000 || Math.round(amount * 100) !== amount * 100) throw new HttpsError('invalid-argument', 'Enter an invoice amount greater than £0 and no more than £10,000, to two decimal places.')
+  const notes = optionalText(input.notes, 'Invoice details', 1200)
+  let attachmentPath = ''
+  let attachmentName = ''
+  const attachment = record(input.attachment)
+  if (Object.keys(attachment).length) {
+    const contentType = choice(attachment.contentType, 'attachment type', new Set(['application/pdf', 'image/jpeg', 'image/png']))
+    const base64 = attachment.base64
+    if (typeof base64 !== 'string' || base64.length > Math.ceil(maximumRefereeInvoiceFileBytes * 4 / 3) + 8 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) throw new HttpsError('invalid-argument', 'The invoice file must be a PDF, JPEG or PNG no larger than 2 MB.')
+    const contents = Buffer.from(base64, 'base64')
+    if (!contents.length || contents.length > maximumRefereeInvoiceFileBytes) throw new HttpsError('invalid-argument', 'The invoice file must be a PDF, JPEG or PNG no larger than 2 MB.')
+    const signatures: Record<string, boolean> = {'application/pdf': contents.subarray(0, 5).toString('ascii') === '%PDF-', 'image/jpeg': contents[0] === 0xff && contents[1] === 0xd8, 'image/png': contents.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))}
+    if (!signatures[contentType]) throw new HttpsError('invalid-argument', 'The uploaded file does not match its file type.')
+    attachmentName = optionalText(attachment.name, 'File name', 160).replace(/[\\/]/g, '_') || 'invoice'
+    const extension = contentType === 'application/pdf' ? 'pdf' : contentType === 'image/jpeg' ? 'jpg' : 'png'
+    attachmentPath = `referee-invoices/${verified.fixtureId}/${verified.role}/${randomBytes(12).toString('hex')}.${extension}`
+    await getStorage().bucket().file(attachmentPath).save(contents, {metadata: {contentType, cacheControl: 'private, max-age=0, no-transform'}, resumable: false})
+  }
+  const now = Date.now()
+  const result = await db.ref(`refereeInvoices/${verified.fixtureId}/${verified.role}`).transaction(currentValue => {
+    const current = record(currentValue)
+    if (current.status !== 'Link ready' || current.inviteHash !== verified.tokenHash) return
+    return {...current, status: 'Submitted', invoiceNumber, refereeName, email: contactEmail, amount, notes, submittedAt: now, updatedAt: now, updatedBy: refereeName, ...(attachmentPath ? {attachmentPath, attachmentName} : {})}
+  })
+  if (!result.committed) {
+    if (attachmentPath) await getStorage().bucket().file(attachmentPath).delete({ignoreNotFound: true})
+    throw new HttpsError('failed-precondition', 'This invoice link has already been used. Please contact the club finance team if you need to make a change.')
+  }
+  await db.ref(`refereeInvoiceInvites/${verified.fixtureId}/${verified.role}/active`).set(false)
+  return {submittedAt: now}
+})
+
+export const updateRefereeInvoiceStatus = onCall({region}, async request => {
+  const actor = await requireFinanceAdmin(request)
+  const input = record(request.data)
+  const fixtureId = validFixtureId(input.fixtureId)
+  const role = choice(input.role, 'referee role', new Set<string>(refereeRoles)) as (typeof refereeRoles)[number]
+  const status = choice(input.status, 'invoice status', refereeInvoiceStatuses)
+  const reference = db.ref(`refereeInvoices/${fixtureId}/${role}`)
+  const now = Date.now()
+  const result = await reference.transaction(currentValue => {
+    const current = record(currentValue)
+    if (current.status === 'Submitted' && (status === 'Approved' || status === 'Rejected')) return {...current, status, updatedAt: now, updatedBy: actor.displayName, reviewedAt: now}
+    if (current.status === 'Approved' && status === 'Paid') return {...current, status, updatedAt: now, updatedBy: actor.displayName, paidAt: now}
+    return
+  })
+  if (!result.committed) throw new HttpsError('failed-precondition', 'That invoice cannot move to the selected status.')
+  return {updatedAt: now}
+})
+
+export const getRefereeInvoiceAttachmentUrl = onCall({region}, async request => {
+  await requireFinanceAdmin(request)
+  const input = record(request.data)
+  const fixtureId = validFixtureId(input.fixtureId)
+  const role = choice(input.role, 'referee role', new Set<string>(refereeRoles)) as (typeof refereeRoles)[number]
+  const invoice = record((await db.ref(`refereeInvoices/${fixtureId}/${role}`).get()).val())
+  if (typeof invoice.attachmentPath !== 'string' || !invoice.attachmentPath.startsWith(`referee-invoices/${fixtureId}/${role}/`)) throw new HttpsError('not-found', 'No invoice attachment is available.')
+  const [url] = await getStorage().bucket().file(invoice.attachmentPath).getSignedUrl({action: 'read', expires: Date.now() + 15 * 60 * 1000})
+  return {url}
 })
 
 export const submitClubSignup = onCall({region}, async request => {

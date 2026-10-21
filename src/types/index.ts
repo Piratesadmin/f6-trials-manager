@@ -149,9 +149,9 @@ export type Player = {
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
-export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'match-centre' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'expenses' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare'
+export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'match-centre' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'expenses' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare' | 'referee-invoice'
 export type PlayerTab = 'overview' | 'assessment' | 'decision'
-export type FinanceView = 'overview' | 'players' | 'expenses' | 'forecast' | 'payments'
+export type FinanceView = 'overview' | 'players' | 'expenses' | 'forecast' | 'payments' | 'referees'
 export type SyncState = 'live' | 'saving' | 'offline'
 export type PositionTargets = Record<string, number>
 export type TeamPlans = Record<string, PositionTargets>
@@ -375,6 +375,32 @@ export type CoachInvoice = {
 }
 
 export type CoachInvoiceMap = Record<string, Record<string, CoachInvoice>>
+
+export type RefereeRole = 'first-referee' | 'second-referee' | 'scorer'
+export type RefereeInvoiceStatus = 'Link ready' | 'Submitted' | 'Approved' | 'Rejected' | 'Paid'
+export type RefereeInvoice = {
+  id: string
+  fixtureId: string
+  fixtureDate: string
+  fixtureTitle: string
+  team: string
+  opponent: string
+  venue: string
+  competition: string
+  role: RefereeRole
+  status: RefereeInvoiceStatus
+  invoiceNumber: string
+  refereeName: string
+  email: string
+  amount: number
+  notes: string
+  submittedAt?: number
+  updatedAt: number
+  updatedBy: string
+  attachmentName?: string
+  attachmentPath?: string
+}
+export type RefereeInvoiceMap = Record<string, Partial<Record<RefereeRole, RefereeInvoice>>>
 
 export type ExpenseCategory = 'Equipment' | 'Kit & clothing' | 'Training supplies' | 'Venue' | 'Travel' | 'Officials' | 'Events' | 'Rewards & awards' | 'Food & refreshments' | 'Medical & first aid' | 'Membership & affiliation' | 'League & registration' | 'Marketing & printing' | 'Technology & software' | 'Professional services' | 'Fundraising' | 'Storage' | 'Other'
 export type ExpenseStatus = 'Submitted' | 'Approved' | 'Rejected' | 'Paid'
