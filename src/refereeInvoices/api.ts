@@ -11,6 +11,7 @@ export type RefereeInvoiceInvite = {
   fixtureId: string
   fixtureDate: string
   fixtureTitle: string
+  invoiceNumber: string
   team: string
   venue: string
   competition: string
@@ -20,7 +21,7 @@ export type RefereeInvoiceInvite = {
 }
 
 export type RefereeInvoiceAttachment = {name:string;contentType:string;base64:string}
-export type RefereeInvoiceDraft = {refereeName:string;email:string;invoiceNumber:string;amount:number;notes:string;attachment?:RefereeInvoiceAttachment}
+export type RefereeInvoiceDraft = {refereeName:string;email:string;feeAmount:number;travelAmount:number;bankAccountName:string;bankSortCode:string;bankAccountNumber:string;notes:string;travelReceipt?:RefereeInvoiceAttachment}
 
 export async function createRefereeInvoiceLinks(fixture:{fixtureId:string;fixtureDate:string;fixtureTitle:string;team:string;opponent:string;venue:string;competition:string}) {
   const result=await call<typeof fixture,{links:Partial<Record<RefereeRole,string>>;expiresAt:number}>('createRefereeInvoiceLinks')(fixture)
@@ -40,7 +41,7 @@ export async function updateRefereeInvoiceStatus(fixtureId:string,role:RefereeRo
   await call<{fixtureId:string;role:RefereeRole;status:RefereeInvoiceStatus},{updatedAt:number}>('updateRefereeInvoiceStatus')({fixtureId,role,status})
 }
 
-export async function getRefereeInvoiceAttachmentUrl(fixtureId:string,role:RefereeRole) {
-  const result=await call<{fixtureId:string;role:RefereeRole},{url:string}>('getRefereeInvoiceAttachmentUrl')({fixtureId,role})
+export async function getRefereeInvoiceAttachmentUrl(fixtureId:string,role:RefereeRole,kind:'invoice'|'travel-receipt'='invoice') {
+  const result=await call<{fixtureId:string;role:RefereeRole;kind:'invoice'|'travel-receipt'},{url:string}>('getRefereeInvoiceAttachmentUrl')({fixtureId,role,kind})
   return result.data.url
 }

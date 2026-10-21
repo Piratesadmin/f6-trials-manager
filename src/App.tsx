@@ -131,7 +131,7 @@ export default function App(){
   const [coachHourlyRates,setCoachHourlyRates]=useState<CoachHourlyRateMap>(()=>normaliseCoachHourlyRateMap(JSON.parse(localStorage.getItem('f6coachhourlyrates')||'{}')))
   const [coachTimesheetEntries,setCoachTimesheetEntries]=useState<CoachTimesheetEntryMap>(()=>normaliseTimesheetEntryMap(JSON.parse(localStorage.getItem('f6coachtimesheetentries')||'{}')))
   const [coachInvoices,setCoachInvoices]=useState<CoachInvoiceMap>(()=>normaliseCoachInvoiceMap(JSON.parse(localStorage.getItem('f6coachinvoices')||'{}')))
-  const [refereeInvoices,setRefereeInvoices]=useState<RefereeInvoiceMap>(()=>JSON.parse(localStorage.getItem('f6refereeinvoices')||'{}') as RefereeInvoiceMap)
+  const [refereeInvoices,setRefereeInvoices]=useState<RefereeInvoiceMap>({})
   const [trialSessions,setTrialSessions]=useState<TrialSession[]>(()=>{
     const stored=JSON.parse(localStorage.getItem('f6trialsessions')||'[]') as TrialSession[]
     return stored.map(session=>normaliseTrialSession(session.id,session))
@@ -283,8 +283,9 @@ export default function App(){
     },showConnectionState)
   },[user,demo,accountAccessReady,canSubmitExpenses,isAdmin,showConnectionState])
   useEffect(()=>{
+    localStorage.removeItem('f6refereeinvoices')
     if(demo||!database||!user||!isAdmin){setRefereeInvoices({});return}
-    return onValue(ref(database,'refereeInvoices'),snapshot=>{const value=snapshot.val() as RefereeInvoiceMap|null;const next=value&&typeof value==='object'?value:{};setRefereeInvoices(next);localStorage.setItem('f6refereeinvoices',JSON.stringify(next))},showConnectionState)
+    return onValue(ref(database,'refereeInvoices'),snapshot=>{const value=snapshot.val() as RefereeInvoiceMap|null;const next=value&&typeof value==='object'?value:{};setRefereeInvoices(next)},showConnectionState)
   },[user,demo,isAdmin,showConnectionState])
   useEffect(()=>{
     if(demo){setSeasonSettingsReady(true);return}

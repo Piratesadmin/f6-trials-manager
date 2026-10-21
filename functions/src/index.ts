@@ -38,6 +38,13 @@ const refereeRoleLabels: Record<(typeof refereeRoles)[number], string> = {'first
 const refereeInvoiceStatuses = new Set(['Submitted', 'Approved', 'Rejected', 'Paid'])
 const maximumRefereeInvoiceFileBytes = 2 * 1024 * 1024
 
+function refereeInvoiceNumber(team: string, opponent: string, fixtureDate: string, role: (typeof refereeRoles)[number]) {
+  const abbreviation = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().split(/[^A-Z0-9]+/).filter(word => word && !['THE', 'AND', 'CLUB', 'VOLLEYBALL'].includes(word)).map(word => word.slice(0, 3)).join('').slice(0, 6) || 'TEAM'
+  const dateCode = `${fixtureDate.slice(8, 10)}${fixtureDate.slice(5, 7)}${fixtureDate.slice(2, 4)}`
+  const roleCode = role === 'first-referee' ? '1R' : role === 'second-referee' ? '2R' : 'SC'
+  return `${abbreviation(team)}-${abbreviation(opponent)}-${dateCode}-${roleCode}`
+}
+
 type CaseStatus = 'new' | 'open' | 'closed'
 type StoredCase = {
   category: string
@@ -276,7 +283,8 @@ export const createRefereeInvoiceLinks = onCall({region}, async request => {
     updates[`refereeInvoiceInvites/${fixtureId}/${role}`] = {tokenHash, expiresAt, active: true, issuedAt: now, issuedBy: actor.email}
     updates[`refereeInvoices/${fixtureId}/${role}`] = {
       id: `${fixtureId}-${role}`, fixtureId, fixtureDate, fixtureTitle, team, opponent, venue, competition, role,
-      status: 'Link ready', invoiceNumber: '', refereeName: '', email: '', amount: 0, notes: '', inviteHash: tokenHash,
+      status: 'Link ready', invoiceNumber: refereeInvoiceNumber(team, opponent, fixtureDate, role), refereeName: '', email: '', feeAmount: 0, travelAmount: 0, amount: 0,
+      bankAccountName: '', bankSortCode: '', bankAccountNumber: '', notes: '', inviteHash: tokenHash,
       updatedAt: now, updatedBy: actor.displayName,
     }
     links[role] = token
@@ -293,6 +301,7 @@ export const getRefereeInvoiceInvite = onCall({region}, async request => {
     fixtureId: verified.fixtureId,
     fixtureDate: String(invoice.fixtureDate || ''),
     fixtureTitle: String(invoice.fixtureTitle || ''),
+    invoiceNumber: String(invoice.invoiceNumber || refereeInvoiceNumber(String(invoice.team || ''), String(invoice.opponent || ''), String(invoice.fixtureDate || ''), verified.role)),
     team: String(invoice.team || ''),
     venue: String(invoice.venue || ''),
     competition: String(invoice.competition || ''),
@@ -308,34 +317,44 @@ export const submitRefereeInvoice = onCall({region, timeoutSeconds: 60, memory: 
   if (verified.invoice.status !== 'Link ready' || Number(verified.invite.expiresAt) < Date.now()) throw new HttpsError('failed-precondition', 'This invoice link has already been used or has expired.')
   const refereeName = text(input.refereeName, 'Your name', 2, 120)
   const contactEmail = email(input.email, 'Email address')
-  const invoiceNumber = text(input.invoiceNumber, 'Invoice number', 1, 80)
-  const amount = Number(input.amount)
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 10000 || Math.round(amount * 100) !== amount * 100) throw new HttpsError('invalid-argument', 'Enter an invoice amount greater than £0 and no more than £10,000, to two decimal places.')
+  const invoiceNumber = String(verified.invoice.invoiceNumber || refereeInvoiceNumber(String(verified.invoice.team || ''), String(verified.invoice.opponent || ''), String(verified.invoice.fixtureDate || ''), verified.role))
+  const feeAmount = Number(input.feeAmount)
+  if (!Number.isFinite(feeAmount) || feeAmount <= 0 || feeAmount > 10000 || Math.round(feeAmount * 100) !== feeAmount * 100) throw new HttpsError('invalid-argument', 'Enter a match fee greater than £0 and no more than £10,000, to two decimal places.')
+  const travelAmount = input.travelAmount == null || input.travelAmount === '' ? 0 : Number(input.travelAmount)
+  if (!Number.isFinite(travelAmount) || travelAmount < 0 || travelAmount > 10000 || Math.round(travelAmount * 100) !== travelAmount * 100) throw new HttpsError('invalid-argument', 'Enter a valid travel amount to two decimal places.')
+  if (feeAmount + travelAmount > 10000) throw new HttpsError('invalid-argument', 'The total invoice must not exceed £10,000.')
+  const bankAccountName = text(input.bankAccountName, 'Account name', 2, 120)
+  const bankSortCode = String(input.bankSortCode || '').replace(/\D/g, '')
+  const bankAccountNumber = String(input.bankAccountNumber || '').replace(/\D/g, '')
+  if (!/^\d{6}$/.test(bankSortCode)) throw new HttpsError('invalid-argument', 'Enter a valid 6-digit UK sort code.')
+  if (!/^\d{8}$/.test(bankAccountNumber)) throw new HttpsError('invalid-argument', 'Enter a valid 8-digit UK account number.')
   const notes = optionalText(input.notes, 'Invoice details', 1200)
-  let attachmentPath = ''
-  let attachmentName = ''
-  const attachment = record(input.attachment)
-  if (Object.keys(attachment).length) {
+  async function saveTravelReceipt(value: unknown) {
+    const attachment = record(value)
+    if (!Object.keys(attachment).length) return {path: '', name: ''}
     const contentType = choice(attachment.contentType, 'attachment type', new Set(['application/pdf', 'image/jpeg', 'image/png']))
     const base64 = attachment.base64
-    if (typeof base64 !== 'string' || base64.length > Math.ceil(maximumRefereeInvoiceFileBytes * 4 / 3) + 8 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) throw new HttpsError('invalid-argument', 'The invoice file must be a PDF, JPEG or PNG no larger than 2 MB.')
+    if (typeof base64 !== 'string' || base64.length > Math.ceil(maximumRefereeInvoiceFileBytes * 4 / 3) + 8 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) throw new HttpsError('invalid-argument', 'The travel receipt must be a PDF, JPEG or PNG no larger than 2 MB.')
     const contents = Buffer.from(base64, 'base64')
-    if (!contents.length || contents.length > maximumRefereeInvoiceFileBytes) throw new HttpsError('invalid-argument', 'The invoice file must be a PDF, JPEG or PNG no larger than 2 MB.')
+    if (!contents.length || contents.length > maximumRefereeInvoiceFileBytes) throw new HttpsError('invalid-argument', 'The travel receipt must be a PDF, JPEG or PNG no larger than 2 MB.')
     const signatures: Record<string, boolean> = {'application/pdf': contents.subarray(0, 5).toString('ascii') === '%PDF-', 'image/jpeg': contents[0] === 0xff && contents[1] === 0xd8, 'image/png': contents.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))}
-    if (!signatures[contentType]) throw new HttpsError('invalid-argument', 'The uploaded file does not match its file type.')
-    attachmentName = optionalText(attachment.name, 'File name', 160).replace(/[\\/]/g, '_') || 'invoice'
+    if (!signatures[contentType]) throw new HttpsError('invalid-argument', 'The uploaded travel receipt does not match its file type.')
+    const name = optionalText(attachment.name, 'File name', 160).replace(/[\\/]/g, '_') || 'travel receipt'
     const extension = contentType === 'application/pdf' ? 'pdf' : contentType === 'image/jpeg' ? 'jpg' : 'png'
-    attachmentPath = `referee-invoices/${verified.fixtureId}/${verified.role}/${randomBytes(12).toString('hex')}.${extension}`
-    await getStorage().bucket().file(attachmentPath).save(contents, {metadata: {contentType, cacheControl: 'private, max-age=0, no-transform'}, resumable: false})
+    const path = `referee-invoices/${verified.fixtureId}/${verified.role}/travel-receipt-${randomBytes(12).toString('hex')}.${extension}`
+    await getStorage().bucket().file(path).save(contents, {metadata: {contentType, cacheControl: 'private, max-age=0, no-transform'}, resumable: false})
+    return {path, name}
   }
+  if (travelAmount > 0 && !Object.keys(record(input.travelReceipt)).length) throw new HttpsError('invalid-argument', 'Upload a receipt or other proof when claiming travel expenses.')
+  const travelReceipt = await saveTravelReceipt(input.travelReceipt)
   const now = Date.now()
   const result = await db.ref(`refereeInvoices/${verified.fixtureId}/${verified.role}`).transaction(currentValue => {
     const current = record(currentValue)
     if (current.status !== 'Link ready' || current.inviteHash !== verified.tokenHash) return
-    return {...current, status: 'Submitted', invoiceNumber, refereeName, email: contactEmail, amount, notes, submittedAt: now, updatedAt: now, updatedBy: refereeName, ...(attachmentPath ? {attachmentPath, attachmentName} : {})}
+    return {...current, status: 'Submitted', invoiceNumber, refereeName, email: contactEmail, feeAmount, travelAmount, amount: feeAmount + travelAmount, bankAccountName, bankSortCode, bankAccountNumber, notes, submittedAt: now, updatedAt: now, updatedBy: refereeName, ...(travelReceipt.path ? {travelReceiptPath: travelReceipt.path, travelReceiptName: travelReceipt.name} : {})}
   })
   if (!result.committed) {
-    if (attachmentPath) await getStorage().bucket().file(attachmentPath).delete({ignoreNotFound: true})
+    if (travelReceipt.path) await getStorage().bucket().file(travelReceipt.path).delete({ignoreNotFound: true})
     throw new HttpsError('failed-precondition', 'This invoice link has already been used. Please contact the club finance team if you need to make a change.')
   }
   await db.ref(`refereeInvoiceInvites/${verified.fixtureId}/${verified.role}/active`).set(false)
@@ -366,8 +385,10 @@ export const getRefereeInvoiceAttachmentUrl = onCall({region}, async request => 
   const fixtureId = validFixtureId(input.fixtureId)
   const role = choice(input.role, 'referee role', new Set<string>(refereeRoles)) as (typeof refereeRoles)[number]
   const invoice = record((await db.ref(`refereeInvoices/${fixtureId}/${role}`).get()).val())
-  if (typeof invoice.attachmentPath !== 'string' || !invoice.attachmentPath.startsWith(`referee-invoices/${fixtureId}/${role}/`)) throw new HttpsError('not-found', 'No invoice attachment is available.')
-  const [url] = await getStorage().bucket().file(invoice.attachmentPath).getSignedUrl({action: 'read', expires: Date.now() + 15 * 60 * 1000})
+  const kind = choice(input.kind || 'invoice', 'attachment kind', new Set(['invoice', 'travel-receipt']))
+  const path = kind === 'travel-receipt' ? invoice.travelReceiptPath : invoice.attachmentPath
+  if (typeof path !== 'string' || !path.startsWith(`referee-invoices/${fixtureId}/${role}/`)) throw new HttpsError('not-found', 'No matching invoice document is available.')
+  const [url] = await getStorage().bucket().file(path).getSignedUrl({action: 'read', expires: Date.now() + 15 * 60 * 1000})
   return {url}
 })
 

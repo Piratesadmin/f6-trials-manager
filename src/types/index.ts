@@ -392,13 +392,20 @@ export type RefereeInvoice = {
   invoiceNumber: string
   refereeName: string
   email: string
+  feeAmount: number
+  travelAmount: number
   amount: number
+  bankAccountName: string
+  bankSortCode: string
+  bankAccountNumber: string
   notes: string
   submittedAt?: number
   updatedAt: number
   updatedBy: string
   attachmentName?: string
   attachmentPath?: string
+  travelReceiptName?: string
+  travelReceiptPath?: string
 }
 export type RefereeInvoiceMap = Record<string, Partial<Record<RefereeRole, RefereeInvoice>>>
 
