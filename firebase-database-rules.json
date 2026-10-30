@@ -81,7 +81,7 @@
       ".write": false
     },
     "shopProducts": {
-      ".read": true,
+      ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       ".write": false
     },
     "shopOrders": {

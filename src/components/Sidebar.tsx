@@ -33,7 +33,7 @@ const navItems = [
   { key: 'signups' as const, label: 'Sign-ups', icon: UserPlus },
   { key: 'schedule' as const, label: 'Schedule', icon: CalendarDays },
   { key: 'match-centre' as const, label: 'F6 Match Centre', icon: Trophy },
-  { key: 'shop' as const, label: 'Club Shop', icon: ShoppingBag },
+  { key: 'shop' as const, label: 'Club Shop', icon: ShoppingBag, adminOnly: true },
   { key: 'incidents' as const, label: 'Incidents', icon: ShieldAlert, coachOnly: true },
   { key: 'players' as const, label: 'Players', icon: Users },
   { key: 'emails' as const, label: 'Emails', icon: Mail },

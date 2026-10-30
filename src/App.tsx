@@ -237,6 +237,7 @@ export default function App(){
   useEffect(()=>{if(accountAccessReady&&!canUseTimesheets&&page==='timesheets')navigate({page:'dashboard'},true)},[accountAccessReady,canUseTimesheets,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!canUseIncidents&&page==='incidents')navigate({page:'dashboard'},true)},[accountAccessReady,canUseIncidents,page,navigate])
   useEffect(()=>{if(accountAccessReady&&!canSubmitExpenses&&page==='expenses')navigate({page:'dashboard'},true)},[accountAccessReady,canSubmitExpenses,page,navigate])
+  useEffect(()=>{if(accountAccessReady&&!isAdmin&&page==='shop')navigate({page:'dashboard'},true)},[accountAccessReady,isAdmin,page,navigate])
 
   useEffect(()=>{if(!auth)return;return onAuthStateChanged(auth,u=>{setCoachProfile(null);setCoachProfiles([]);setPlayerStars({});setPlayerFinance({});setPlayerFinanceReady(false);setFinanceSettings(defaultFinanceSettings);setFinanceSettingsReady(false);setCoachHourlyRates({});setCoachTimesheetEntries({});setCoachInvoices({});setIncidentReports([]);setExpenseClaims([]);setUser(u);setAuthLoading(false)})},[])
   useEffect(()=>{
@@ -1192,11 +1193,11 @@ export default function App(){
 
   if(cleanSignupPath)return <SignupPage exit={()=>window.location.assign(window.location.pathname.replace(/signup\/?$/,'')||'/')}/>
   if(page==='referee-invoice')return <RefereeInvoicePage token={refereeToken}/>
-  if(page==='shop'&&!user&&!demo)return <ShopPage/>
   if(cleanWelfarePath||page==='welfare')return <WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>cleanWelfarePath?window.location.assign(appRootPath):navigate({page:'dashboard'})} user={user} accountRole={coachProfile?.role||null} accountLoading={authLoading||Boolean(user&&!coachProfile&&!sharedPinAdmin)}/>
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(page==='match-centre'&&!user&&!demo)return <main className="public-match-centre"><MatchCentrePage availableTeams={teams} canRefresh={false}/></main>
   if(!user&&!demo)return <Login onDemo={()=>setDemo(true)}/>
+  if(page==='shop'&&(!accountAccessReady||!isAdmin))return <div className="loading-page">Checking shop access…</div>
 
   return <div className="app">
     <Sidebar page={page} setPage={navigatePage} players={players} selectedTeam={selectedTeam} openTeam={openTeam} syncState={syncState} signedIn={Boolean(user)} accountEmail={user?.email || undefined} accountName={coachProfile?.displayName||undefined} sharedAccount={sharedPinAdmin} assignedTeams={editableTeams} isAdmin={isAdmin} accountRole={coachProfile?.role||null} currentSeason={seasonSettings.currentSeason} trialsMode={seasonSettings.trialsMode} onSignOut={()=>auth&&signOut(auth)} teamDivisions={teamDivisions} newSignupCount={clubSignups.filter(signup=>signup.status==='new').length} openIncidentCount={incidentReports.filter(report=>report.status!=='closed').length} canSubmitExpenses={canSubmitExpenses}/>
@@ -1252,7 +1253,7 @@ export default function App(){
         trialsMode={seasonSettings.trialsMode}
       />}
       {page==='match-centre'&&<MatchCentrePage availableTeams={isAdmin||isReadOnly?teams:editableTeams} canRefresh={Boolean(user)}/>}
-      {page==='shop'&&<ShopPage isAdmin={isAdmin} canManageOrders={isAdmin&&Boolean(user)&&!demo}/>}
+      {page==='shop'&&isAdmin&&<ShopPage isAdmin canManageOrders={Boolean(user)&&!demo}/>}
       {page==='incidents'&&canUseIncidents&&<IncidentsPage reports={incidentReports} players={players} sessions={trialSessions} assignedTeams={editableTeams} isAdmin={isAdmin} readOnly={isReadOnly} saveReport={saveIncidentReport}/>}
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} readOnly={isReadOnly} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions} readOnly={isReadOnly}/>}
