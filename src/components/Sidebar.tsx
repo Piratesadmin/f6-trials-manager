@@ -1,4 +1,4 @@
-import { Archive, BarChart3, CalendarDays, Clock3, Cloud, CloudOff, HeartHandshake, History, LogOut, Mail, ReceiptText, Settings, ShieldAlert, ShieldCheck, Trophy, UserPlus, Users, WalletCards } from 'lucide-react'
+import { Archive, BarChart3, CalendarDays, Clock3, Cloud, CloudOff, HeartHandshake, History, LogOut, Mail, ReceiptText, Settings, ShieldAlert, ShieldCheck, ShoppingBag, Trophy, UserPlus, Users, WalletCards } from 'lucide-react'
 import type { CoachRole, PageKey, Player, SyncState } from '../types'
 import { teams } from '../data/constants'
 import { ClubLogo } from './ClubLogo'
@@ -33,6 +33,7 @@ const navItems = [
   { key: 'signups' as const, label: 'Sign-ups', icon: UserPlus },
   { key: 'schedule' as const, label: 'Schedule', icon: CalendarDays },
   { key: 'match-centre' as const, label: 'F6 Match Centre', icon: Trophy },
+  { key: 'shop' as const, label: 'Club Shop', icon: ShoppingBag },
   { key: 'incidents' as const, label: 'Incidents', icon: ShieldAlert, coachOnly: true },
   { key: 'players' as const, label: 'Players', icon: Users },
   { key: 'emails' as const, label: 'Emails', icon: Mail },

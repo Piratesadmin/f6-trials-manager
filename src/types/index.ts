@@ -149,7 +149,7 @@ export type Player = {
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>
 export type PlayerDecisionSaveResult = 'saved' | 'conflict'
 
-export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'match-centre' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'expenses' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare' | 'referee-invoice'
+export type PageKey = 'dashboard' | 'signups' | 'schedule' | 'match-centre' | 'shop' | 'incidents' | 'players' | 'emails' | 'teams' | 'timesheets' | 'expenses' | 'finance' | 'activity' | 'archive' | 'settings' | 'welfare' | 'referee-invoice'
 export type PlayerTab = 'overview' | 'assessment' | 'decision'
 export type FinanceView = 'overview' | 'players' | 'expenses' | 'forecast' | 'payments' | 'referees'
 export type SyncState = 'live' | 'saving' | 'offline'
@@ -372,6 +372,9 @@ export type CoachInvoice = {
   submittedAt: number
   paidAt?: number
   paidBy?: string
+  lastEditedAt?: number
+  lastEditedBy?: string
+  lastEditNote?: string
 }
 
 export type CoachInvoiceMap = Record<string, Record<string, CoachInvoice>>
@@ -408,6 +411,24 @@ export type RefereeInvoice = {
   travelReceiptPath?: string
 }
 export type RefereeInvoiceMap = Record<string, Partial<Record<RefereeRole, RefereeInvoice>>>
+
+export type ShopOrderStatus = 'Awaiting payment' | 'Paid' | 'Preparing' | 'Ready for collection' | 'Dispatched' | 'Cancelled' | 'Payment setup failed' | 'Payment expired'
+export type ShopOrder = {
+  id: string
+  items: Array<{productId:string;name:string;size:string;quantity:number;unitAmount:number;totalAmount:number}>
+  customer: {name:string;email:string;phone:string}
+  fulfilment: 'collection'
+  totalAmount: number
+  currency: 'GBP'
+  status: ShopOrderStatus
+  paymentStatus: string
+  createdAt: number
+  updatedAt: number
+  paidAt?: number
+  stripeSessionId?: string
+  updatedBy?: string
+}
+export type ShopOrderMap = Record<string, ShopOrder>
 
 export type ExpenseCategory = 'Equipment' | 'Kit & clothing' | 'Training supplies' | 'Venue' | 'Travel' | 'Officials' | 'Events' | 'Rewards & awards' | 'Food & refreshments' | 'Medical & first aid' | 'Membership & affiliation' | 'League & registration' | 'Marketing & printing' | 'Technology & software' | 'Professional services' | 'Fundraising' | 'Storage' | 'Other'
 export type ExpenseStatus = 'Submitted' | 'Approved' | 'Rejected' | 'Paid'

@@ -12,7 +12,7 @@ export type AppRoute = {
   refereeToken?: string
 }
 
-const pages: PageKey[] = ['dashboard','signups','schedule','match-centre','incidents','players','emails','teams','timesheets','expenses','finance','activity','archive','settings','welfare','referee-invoice']
+const pages: PageKey[] = ['dashboard','signups','schedule','match-centre','shop','incidents','players','emails','teams','timesheets','expenses','finance','activity','archive','settings','welfare','referee-invoice']
 const playerTabs: PlayerTab[] = ['overview','assessment','decision']
 const financeViews: FinanceView[] = ['overview','players','expenses','referees','forecast','payments']
 

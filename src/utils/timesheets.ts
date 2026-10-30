@@ -67,6 +67,9 @@ export function normaliseCoachInvoice(coachUid:string,id:string,value:unknown):C
     submittedAt:incoming.submittedAt,
     ...(typeof incoming.paidAt==='number'?{paidAt:incoming.paidAt}:{}),
     ...(typeof incoming.paidBy==='string'?{paidBy:safeText(incoming.paidBy,120)}:{}),
+    ...(typeof incoming.lastEditedAt==='number'?{lastEditedAt:incoming.lastEditedAt}:{}),
+    ...(typeof incoming.lastEditedBy==='string'?{lastEditedBy:safeText(incoming.lastEditedBy,120)}:{}),
+    ...(typeof incoming.lastEditNote==='string'?{lastEditNote:safeText(incoming.lastEditNote,500)}:{}),
   }
 }
 

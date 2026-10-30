@@ -45,6 +45,8 @@ import { IncidentsPage } from './pages/IncidentsPage'
 import { ExpensesPage, type ExpenseDraft } from './pages/ExpensesPage'
 import { MatchCentrePage } from './pages/MatchCentrePage'
 import { RefereeInvoicePage } from './pages/RefereeInvoicePage'
+import { updateCoachInvoice as updateCoachInvoiceRemote } from './timesheets/api'
+import { ShopPage } from './pages/ShopPage'
 import { getMatchCentre } from './matchCentre/api'
 import { deleteClubSignup as deleteClubSignupRemote, updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
 import { normaliseClubSignup, type ClubSignup, type ClubSignupOutcome, type ClubSignupStatus } from './signup/types'
@@ -493,6 +495,16 @@ export default function App(){
     if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`coachInvoices/${invoice.coachUid}/${invoice.id}`),paid)}else localStorage.setItem('f6coachinvoices',JSON.stringify(next))
     setCoachInvoices(next)
     await recordActivity({category:'finance',action:'coach_invoice_paid',summary:`Marked ${invoice.invoiceNumber} as paid`,detail:`${invoice.coachName} · ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(invoice.totalAmount)}.`,team:'',entityType:'settings',entityId:invoice.id})
+  }
+  const editCoachInvoice=async(invoice:CoachInvoice,edit:{invoiceNumber:string;season:string;totalHours:number;totalAmount:number;note:string})=>{
+    if(!isAdmin)throw new Error('Finance administrator access is required.')
+    if(database&&user&&!demo){setSyncState('saving');await updateCoachInvoiceRemote(invoice,edit)}
+    const updatedAt=Date.now()
+    const updated:CoachInvoice={...invoice,invoiceNumber:edit.invoiceNumber,season:edit.season,totalHours:edit.totalHours,totalAmount:edit.totalAmount,lastEditedAt:updatedAt,lastEditedBy:user?.email||'Local demo',lastEditNote:edit.note}
+    const next={...coachInvoices,[invoice.coachUid]:{...coachInvoices[invoice.coachUid],[invoice.id]:updated}}
+    setCoachInvoices(next)
+    if(!database||!user||demo)localStorage.setItem('f6coachinvoices',JSON.stringify(next))
+    if(!database||!user||demo)await recordActivity({category:'finance',action:'coach_invoice_edited',summary:`Edited coach invoice ${edit.invoiceNumber}`,detail:`${invoice.coachName} · ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(invoice.totalAmount)} → ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(edit.totalAmount)} · ${edit.note}`,team:'',entityType:'settings',entityId:invoice.id})
   }
   const exportSystemBackup=async(prefix='f6-system-backup')=>{
     if(!isAdmin)throw new Error('Administrator access is required.')
@@ -1070,6 +1082,8 @@ export default function App(){
   }
   const rolloverSeason=async(nextSeasonName:string)=>{
     if(!isAdmin)throw new Error('Administrator access is required.')
+    // Club sign-ups live at `clubSignups`, separately from season player records;
+    // deliberately omit them from the archive snapshot and rollover updates.
     const archive=createSeasonArchive({seasonName:seasonSettings.currentSeason,nextSeasonName,archivedBy:activityActor.name,players,sessions:trialSessions,teamPlans,playerFinance,financeSettings,emailSettings,archivedPlayers})
     const nextSettings:SeasonSettings={currentSeason:nextSeasonName,trialsMode:true,updatedAt:Date.now(),updatedBy:activityActor.email||activityActor.name}
     const entry=createActivityEntry({category:'season',action:'season_rollover',summary:`Archived ${seasonSettings.currentSeason} and started ${nextSeasonName}`,detail:`${players.length} players and ${trialSessions.length} events archived.`,team:'',entityType:'season',entityId:archive.id},activityActor,nextSeasonName)
@@ -1178,6 +1192,7 @@ export default function App(){
 
   if(cleanSignupPath)return <SignupPage exit={()=>window.location.assign(window.location.pathname.replace(/signup\/?$/,'')||'/')}/>
   if(page==='referee-invoice')return <RefereeInvoicePage token={refereeToken}/>
+  if(page==='shop'&&!user&&!demo)return <ShopPage/>
   if(cleanWelfarePath||page==='welfare')return <WelfarePage view={welfareView} navigate={navigateWelfare} exit={()=>cleanWelfarePath?window.location.assign(appRootPath):navigate({page:'dashboard'})} user={user} accountRole={coachProfile?.role||null} accountLoading={authLoading||Boolean(user&&!coachProfile&&!sharedPinAdmin)}/>
   if(authLoading)return <div className="loading-page">Loading F6 Club Manager…</div>
   if(page==='match-centre'&&!user&&!demo)return <main className="public-match-centre"><MatchCentrePage availableTeams={teams} canRefresh={false}/></main>
@@ -1237,15 +1252,16 @@ export default function App(){
         trialsMode={seasonSettings.trialsMode}
       />}
       {page==='match-centre'&&<MatchCentrePage availableTeams={isAdmin||isReadOnly?teams:editableTeams} canRefresh={Boolean(user)}/>}
+      {page==='shop'&&<ShopPage isAdmin={isAdmin} canManageOrders={isAdmin&&Boolean(user)&&!demo}/>}
       {page==='incidents'&&canUseIncidents&&<IncidentsPage reports={incidentReports} players={players} sessions={trialSessions} assignedTeams={editableTeams} isAdmin={isAdmin} readOnly={isReadOnly} saveReport={saveIncidentReport}/>}
       {page==='players'&&<PlayersPage players={players} sessions={trialSessions} selectedId={selectedId} openPlayer={openPlayer} query={query} setQuery={setQuery} assignedTeams={editableTeams} teamDivisions={teamDivisions} save={save} saveDecision={savePlayerDecision} saveAssessment={saveAssessment} onImport={()=>setImportOpen(true)} activeTab={playerTab} setActiveTab={selectPlayerTab} playerStars={playerStars} currentCoachId={currentCoachId} toggleStar={togglePlayerStar} selectedPhoto={playerPhotos[selectedId]||''} uploadPhoto={uploadPlayerPhoto} removePhoto={removePlayerPhoto} deletePlayer={permanentlyDeletePlayer} isAdmin={isAdmin} readOnly={isReadOnly} trialsMode={seasonSettings.trialsMode}/>}
       {page==='emails'&&<EmailsPage players={players} playerPhotos={playerPhotos} playersReady={playersReady} teamAccessReady={demo||isAdmin||Boolean(coachProfile)} assignedTeams={editableTeams} sessions={trialSessions} settings={activeEmailSettings} teamPlans={teamPlans} save={save} markSent={markEmailSent} selectedId={selectedId} setSelectedId={selectEmailPlayer} onOpen={id=>openPlayer(id,'decision')} teamDivisions={teamDivisions} readOnly={isReadOnly}/>}
       {page==='teams'&&<TeamsPage players={players} playerPhotos={playerPhotos} sessions={trialSessions} teamPlans={teamPlans} savePlayer={save} saveTarget={saveTeamTarget} selectedTeam={selectedTeam} setSelectedTeam={selectTeam} onOpenPlayer={id=>openPlayer(id,'assessment')} onOpenSchedule={openSchedule} canEditTeam={team=>editableTeams.includes(team)} editableTeams={editableTeams} isAdmin={isAdmin} finances={playerFinance} financeSettings={financeSettings} trialsMode={seasonSettings.trialsMode} teamDivisions={teamDivisions} onImportReturningPlayers={setReturningImportTeam}/>}
-      {page==='timesheets'&&canUseTimesheets&&<TimesheetsPage isAdmin={isAdmin} currentUid={currentCoachId} currentEmail={user?.email||''} currentProfile={coachProfile} currentSeason={seasonSettings.currentSeason} coachProfiles={coachProfiles} hourlyRates={coachHourlyRates} entries={coachTimesheetEntries} invoices={coachInvoices} saveHourlyRate={saveCoachHourlyRate} saveEntry={saveCoachTimesheetEntry} deleteEntry={deleteCoachTimesheetEntry} submitInvoice={submitCoachInvoice} markInvoicePaid={markCoachInvoicePaid}/>}
+      {page==='timesheets'&&canUseTimesheets&&<TimesheetsPage isAdmin={isAdmin} currentUid={currentCoachId} currentEmail={user?.email||''} currentProfile={coachProfile} currentSeason={seasonSettings.currentSeason} coachProfiles={coachProfiles} hourlyRates={coachHourlyRates} entries={coachTimesheetEntries} invoices={coachInvoices} saveHourlyRate={saveCoachHourlyRate} saveEntry={saveCoachTimesheetEntry} deleteEntry={deleteCoachTimesheetEntry} submitInvoice={submitCoachInvoice} markInvoicePaid={markCoachInvoicePaid} editInvoice={editCoachInvoice}/>}
       {page==='expenses'&&canSubmitExpenses&&<ExpensesPage claims={expenseClaims.filter(claim=>claim.claimantUid===currentCoachId)} availableTeams={editableTeams} submitClaim={submitExpenseClaim}/>}
       {page==='finance'&&isAdmin&&<FinancePage players={players} playerPhotos={playerPhotos} finances={playerFinance} financeSettings={financeSettings} coachProfiles={coachProfiles} coachInvoices={coachInvoices} timesheetEntries={coachTimesheetEntries} currentSeason={seasonSettings.currentSeason} saveFinance={savePlayerFinance} saveForecast={saveFinanceForecast} onOpenPlayer={id=>openPlayer(id,'overview')} clubName={activeEmailSettings.clubName} view={financeView} setView={selectFinanceView} onOpenTimesheets={()=>navigatePage('timesheets')} expenseClaims={expenseClaims} updateExpenseStatus={updateExpenseStatus} refereeInvoices={refereeInvoices} refereeSessions={trialSessions} canManageRefereeInvoices={Boolean(database&&user&&!demo)}/>}
       {page==='activity'&&isAdmin&&<ActivityPage entries={activityLog} players={players} sessions={trialSessions} openPlayer={id=>openPlayer(id,'overview')} openSession={openSchedule}/>} 
-      {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
+      {page==='archive'&&isAdmin&&<ArchivePage seasonSettings={seasonSettings} players={players} sessions={trialSessions} archives={seasonArchives} archivedPlayers={Object.values(archivedPlayers).sort((a,b)=>b.archivedAt-a.archivedAt)} signupCount={clubSignups.length} rollover={rolloverSeason} cleanupTrialists={cleanupTrialists} restoreArchivedPlayer={restoreArchivedPlayer}/>} 
       {page==='settings'&&isAdmin&&<SettingsPage
         settings={emailSettings}
         save={saveEmailSettings}

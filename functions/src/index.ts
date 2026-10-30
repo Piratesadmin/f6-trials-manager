@@ -2,9 +2,12 @@ import {createHash, randomBytes, randomInt, scryptSync, timingSafeEqual} from 'n
 import {initializeApp} from 'firebase-admin/app'
 import {getDatabase, type DataSnapshot} from 'firebase-admin/database'
 import {getStorage} from 'firebase-admin/storage'
-import {HttpsError, onCall, type CallableRequest} from 'firebase-functions/v2/https'
+import Stripe from 'stripe'
+import {HttpsError, onCall, onRequest, type CallableRequest} from 'firebase-functions/v2/https'
+import {defineSecret} from 'firebase-functions/params'
 import {onSchedule} from 'firebase-functions/v2/scheduler'
 import {loadMatchCentre, type MatchCentreData} from './matchCentre.js'
+import {storeProductMap, type StoreProduct} from './shopCatalog.js'
 
 initializeApp()
 const db = getDatabase()
@@ -37,6 +40,9 @@ const refereeRoles = ['first-referee', 'second-referee', 'scorer'] as const
 const refereeRoleLabels: Record<(typeof refereeRoles)[number], string> = {'first-referee': 'First referee', 'second-referee': 'Second referee', scorer: 'Scorer'}
 const refereeInvoiceStatuses = new Set(['Submitted', 'Approved', 'Rejected', 'Paid'])
 const maximumRefereeInvoiceFileBytes = 2 * 1024 * 1024
+const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY')
+const stripePublishableKey = defineSecret('STRIPE_PUBLISHABLE_KEY')
+const stripeWebhookSecret = defineSecret('STRIPE_WEBHOOK_SECRET')
 
 function refereeInvoiceNumber(team: string, opponent: string, fixtureDate: string, role: (typeof refereeRoles)[number]) {
   const abbreviation = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().split(/[^A-Z0-9]+/).filter(word => word && !['THE', 'AND', 'CLUB', 'VOLLEYBALL'].includes(word)).map(word => word.slice(0, 3)).join('').slice(0, 6) || 'TEAM'
@@ -255,6 +261,226 @@ export const getMatchCentre = onCall({region, timeoutSeconds: 60, memory: '512Mi
     if (cached) return {...cached, stale: true}
     throw new HttpsError('unavailable', 'The NVL and LVA feeds could not be reached. Please try again shortly.')
   }
+})
+
+export const createShopCheckoutSession = onCall({region, timeoutSeconds: 60, secrets: [stripeSecretKey, stripePublishableKey]}, async request => {
+  if (!stripeSecretKey.value() || !stripePublishableKey.value()) throw new HttpsError('failed-precondition', 'Online shop checkout is not configured yet. Please contact the club.')
+  const input = record(request.data)
+  const name = text(input.name, 'Name', 2, 120)
+  const contactEmail = email(input.email)
+  const phone = optionalText(input.phone, 'Phone number', 40)
+  const fulfilment = choice(input.fulfilment, 'collection method', new Set(['collection']))
+  if (!Array.isArray(input.items) || !input.items.length || input.items.length > 30) throw new HttpsError('invalid-argument', 'Your basket is empty or contains too many items.')
+  const catalogSnapshot = await db.ref('shopProducts').get()
+  const catalog = catalogSnapshot.exists() ? record(catalogSnapshot.val()) as Record<string, StoreProduct> : storeProductMap()
+  const orderItems = input.items.map((value: unknown) => {
+    const item = record(value)
+    const productId = text(item.productId, 'Product', 1, 80)
+    const product = catalog[productId]
+    if (!product || !product.available) throw new HttpsError('failed-precondition', 'One of the items in your basket is no longer available.')
+    const quantity = Number(item.quantity)
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) throw new HttpsError('invalid-argument', 'Each product quantity must be between 1 and 10.')
+    const size = product.sizes?.length ? choice(item.size, 'size', new Set(product.sizes)) : ''
+    return {productId, name: product.name, size, quantity, unitAmount: product.unitAmount, totalAmount: product.unitAmount * quantity}
+  })
+  const totalAmount = orderItems.reduce((total: number, item: {totalAmount: number}) => total + item.totalAmount, 0)
+  if (totalAmount < 100 || totalAmount > 200000) throw new HttpsError('invalid-argument', 'Basket total must be between £1 and £2,000.')
+  const suppliedUrl = text(input.returnUrl, 'Return URL', 8, 500)
+  let returnUrl: URL
+  try { returnUrl = new URL(suppliedUrl) } catch { throw new HttpsError('invalid-argument', 'Checkout return address is invalid.') }
+  if (returnUrl.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(returnUrl.hostname)) throw new HttpsError('invalid-argument', 'Checkout must use a secure Club Manager address.')
+  if (!['club.flamingsix.com', 'localhost', '127.0.0.1'].includes(returnUrl.hostname)) throw new HttpsError('invalid-argument', 'Checkout return address is not recognised.')
+  const orderRef = db.ref('shopOrders').push()
+  const now = Date.now()
+  const order = {id: orderRef.key, items: orderItems, customer: {name, email: contactEmail, phone}, fulfilment, totalAmount, currency: 'GBP', status: 'Awaiting payment', paymentStatus: 'Pending', createdAt: now, updatedAt: now, stripeSessionId: ''}
+  await orderRef.set(order)
+  try {
+    const stripe = new Stripe(stripeSecretKey.value())
+    const session = await stripe.checkout.sessions.create({
+      ui_mode: 'embedded_page',
+      mode: 'payment',
+      return_url: `${returnUrl.origin}${returnUrl.pathname}${returnUrl.search}#/shop?session_id={CHECKOUT_SESSION_ID}`,
+      customer_email: contactEmail,
+      client_reference_id: orderRef.key!,
+      metadata: {orderId: orderRef.key!},
+      submit_type: 'pay',
+      line_items: orderItems.map((item: {name: string;size: string;quantity: number;unitAmount: number}) => ({price_data: {currency: 'gbp', product_data: {name: item.name, ...(item.size ? {description: `Size: ${item.size}`} : {})}, unit_amount: item.unitAmount}, quantity: item.quantity})),
+    })
+    await orderRef.update({stripeSessionId: session.id, updatedAt: Date.now()})
+    if (!session.client_secret) throw new Error('Stripe did not return an embedded checkout client secret.')
+    return {orderId: orderRef.key, clientSecret: session.client_secret, publishableKey: stripePublishableKey.value(), totalAmount}
+  } catch (error) {
+    await orderRef.update({status: 'Payment setup failed', paymentStatus: 'Failed', updatedAt: Date.now()})
+    console.error('Shop checkout session creation failed', error)
+    if (error instanceof HttpsError) throw error
+    throw new HttpsError('unavailable', 'Secure checkout could not start. Your basket has not been charged; please try again.')
+  }
+})
+
+export const saveShopProduct = onCall({region}, async request => {
+  const actor = await requireFinanceAdmin(request)
+  const input = record(request.data)
+  const id = text(input.id, 'Product ID', 2, 64).toLowerCase()
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new HttpsError('invalid-argument', 'Product ID must use lowercase letters, numbers and hyphens.')
+  const name = text(input.name, 'Product name', 2, 100)
+  const category = choice(input.category, 'category', new Set(['Apparel', 'Accessories', 'Volleyball gear', 'Gifts'])) as StoreProduct['category']
+  const description = text(input.description, 'Description', 2, 500)
+  const unitAmount = Number(input.unitAmount)
+  if (!Number.isInteger(unitAmount) || unitAmount < 100 || unitAmount > 200000) throw new HttpsError('invalid-argument', 'Price must be between £1 and £2,000.')
+  const tone = choice(input.tone, 'colour style', new Set(['orange', 'gold', 'ink', 'cream'])) as StoreProduct['tone']
+  const mark = text(input.mark, 'Product label', 1, 32)
+  const tag = optionalText(input.tag, 'Product badge', 40)
+  const available = input.available === true
+  const sizesInput = input.sizes
+  if (sizesInput !== undefined && (!Array.isArray(sizesInput) || sizesInput.length > 30 || sizesInput.some(size => typeof size !== 'string' || size.trim().length > 24))) throw new HttpsError('invalid-argument', 'Product sizes must be a list of up to 30 short options.')
+  const sizes = Array.isArray(sizesInput) ? [...new Set((sizesInput as string[]).map(size => size.trim()).filter(Boolean))] : []
+  const previousAmount = input.previousAmount === undefined || input.previousAmount === null || input.previousAmount === '' ? undefined : Number(input.previousAmount)
+  if (previousAmount !== undefined && (!Number.isInteger(previousAmount) || previousAmount <= unitAmount || previousAmount > 200000)) throw new HttpsError('invalid-argument', 'Previous price must be greater than the current price and no more than £2,000.')
+  const product: StoreProduct = {id,name,category,description,unitAmount,...(sizes.length ? {sizes} : {}),available,mark,tone,...(tag ? {tag} : {}),...(previousAmount ? {previousAmount} : {}),...(input.priceFrom === true ? {priceFrom:true} : {}),updatedAt:Date.now(),updatedBy:actor.displayName}
+  const catalogReference = db.ref('shopProducts')
+  const catalog = await catalogReference.get()
+  if (!catalog.exists()) await catalogReference.set(storeProductMap())
+  const reference = db.ref(`shopProducts/${id}`)
+  const existing = await reference.get()
+  if (!existing.exists() && (await catalogReference.get()).numChildren() >= 200) throw new HttpsError('resource-exhausted', 'The shop has reached its 200 product limit.')
+  const previous = record(existing.val())
+  if (typeof previous.imageUrl === 'string') product.imageUrl = previous.imageUrl
+  if (typeof previous.imagePath === 'string') product.imagePath = previous.imagePath
+  await reference.set(product)
+  return {product}
+})
+
+export const uploadShopProductImage = onCall({region,timeoutSeconds:60,memory:'512MiB'}, async request => {
+  await requireFinanceAdmin(request)
+  const input = record(request.data)
+  const id = text(input.id, 'Product ID', 2, 64)
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new HttpsError('invalid-argument', 'Product ID is invalid.')
+  const reference = db.ref(`shopProducts/${id}`)
+  const snapshot = await reference.get()
+  if (!snapshot.exists()) throw new HttpsError('not-found', 'Save the product before uploading its picture.')
+  const dataUrl = text(input.dataUrl, 'Product picture', 64, 3_000_000)
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl)
+  if (!match) throw new HttpsError('invalid-argument', 'Choose a JPEG, PNG or WebP image.')
+  const contentType = match[1]
+  const bytes = Buffer.from(match[2], 'base64')
+  if (bytes.length < 1 || bytes.length > 2 * 1024 * 1024) throw new HttpsError('invalid-argument', 'Product pictures must be no larger than 2 MB after compression.')
+  const validSignature = contentType === 'image/jpeg' ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[bytes.length - 2] === 0xff && bytes[bytes.length - 1] === 0xd9 : contentType === 'image/png' ? bytes.subarray(0,8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])) : bytes.subarray(0,4).toString() === 'RIFF' && bytes.subarray(8,12).toString() === 'WEBP'
+  if (!validSignature) throw new HttpsError('invalid-argument', 'The selected file is not a valid image.')
+  const token = randomBytes(24).toString('hex')
+  const suffix = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg'
+  const path = `shop-products/${id}/${randomBytes(16).toString('hex')}.${suffix}`
+  const bucket = getStorage().bucket()
+  const file = bucket.file(path)
+  await file.save(bytes,{resumable:false,metadata:{contentType,cacheControl:'public,max-age=31536000,immutable',metadata:{firebaseStorageDownloadTokens:token}}})
+  const imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`
+  const oldPath = record(snapshot.val()).imagePath
+  await reference.update({imageUrl,imagePath:path,updatedAt:Date.now()})
+  if (typeof oldPath === 'string' && oldPath !== path) await bucket.file(oldPath).delete({ignoreNotFound:true}).catch(error=>console.warn('Could not remove previous shop product picture',error))
+  return {imageUrl,imagePath:path}
+})
+
+export const removeShopProductImage = onCall({region}, async request => {
+  await requireFinanceAdmin(request)
+  const id = text(record(request.data).id, 'Product ID', 2, 64)
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new HttpsError('invalid-argument', 'Product ID is invalid.')
+  const reference = db.ref(`shopProducts/${id}`)
+  const snapshot = await reference.get()
+  if (!snapshot.exists()) throw new HttpsError('not-found', 'That product no longer exists.')
+  const imagePath = record(snapshot.val()).imagePath
+  await reference.update({imageUrl:null,imagePath:null,updatedAt:Date.now()})
+  if (typeof imagePath === 'string' && imagePath.startsWith(`shop-products/${id}/`)) await getStorage().bucket().file(imagePath).delete({ignoreNotFound:true}).catch(error=>console.warn('Could not delete shop product picture',error))
+  return {ok:true}
+})
+
+export const archiveShopProduct = onCall({region}, async request => {
+  const actor = await requireFinanceAdmin(request)
+  const id = text(record(request.data).id, 'Product ID', 2, 64)
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) throw new HttpsError('invalid-argument', 'Product ID is invalid.')
+  const reference = db.ref(`shopProducts/${id}`)
+  if (!(await reference.get()).exists()) throw new HttpsError('not-found', 'That product no longer exists.')
+  await reference.update({available:false,updatedAt:Date.now(),updatedBy:actor.displayName})
+  return {ok:true}
+})
+
+export const getShopCheckoutStatus = onCall({region, secrets: [stripeSecretKey]}, async request => {
+  if (!stripeSecretKey.value()) throw new HttpsError('failed-precondition', 'Shop payment status is not configured.')
+  const sessionId = text(record(request.data).sessionId, 'Checkout session', 12, 200)
+  if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) throw new HttpsError('not-found', 'That checkout could not be found.')
+  const session = await new Stripe(stripeSecretKey.value()).checkout.sessions.retrieve(sessionId)
+  const orderId = String(session.metadata?.orderId || '')
+  if (!orderId || session.client_reference_id !== orderId) throw new HttpsError('not-found', 'That checkout could not be found.')
+  const orderRef = db.ref(`shopOrders/${orderId}`)
+  const order = record((await orderRef.get()).val())
+  if (order.stripeSessionId !== sessionId) throw new HttpsError('not-found', 'That checkout could not be found.')
+  if (session.payment_status === 'paid') await orderRef.update({status: order.status === 'Awaiting payment' ? 'Paid' : order.status, paymentStatus: 'Paid', paidAt: Number(order.paidAt || Date.now()), updatedAt: Date.now()})
+  return {status: session.status, paymentStatus: session.payment_status, orderId}
+})
+
+export const stripeShopWebhook = onRequest({region, secrets: [stripeSecretKey, stripeWebhookSecret]}, async (request, response) => {
+  if (request.method !== 'POST') { response.status(405).send('Method not allowed'); return }
+  const signature = request.header('stripe-signature')
+  if (!signature || !stripeWebhookSecret.value()) { response.status(400).send('Webhook signature is missing'); return }
+  let event: Stripe.Event
+  try { event = new Stripe(stripeSecretKey.value()).webhooks.constructEvent(request.rawBody, signature, stripeWebhookSecret.value()) }
+  catch (error) { console.error('Stripe shop webhook signature verification failed', error); response.status(400).send('Invalid signature'); return }
+  const checkoutEvents = new Set(['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed', 'checkout.session.expired'])
+  if (checkoutEvents.has(event.type)) {
+    const session = event.data.object as Stripe.Checkout.Session
+    const orderId = String(session.metadata?.orderId || '')
+    if (orderId && /^[-A-Za-z0-9_]{8,40}$/.test(orderId)) {
+      const reference = db.ref(`shopOrders/${orderId}`)
+      const order = record((await reference.get()).val())
+      if (order.stripeSessionId === session.id) {
+        if (session.payment_status === 'paid') await reference.update({paymentStatus: 'Paid', status: order.status === 'Awaiting payment' ? 'Paid' : order.status, paidAt: Number(order.paidAt || Date.now()), updatedAt: Date.now()})
+        else if (event.type === 'checkout.session.async_payment_failed') await reference.update({paymentStatus: 'Failed', updatedAt: Date.now()})
+        else if (event.type === 'checkout.session.expired') await reference.update({paymentStatus: 'Expired', status: 'Payment expired', updatedAt: Date.now()})
+      }
+    }
+  }
+  response.status(200).json({received: true})
+})
+
+export const updateShopOrderStatus = onCall({region}, async request => {
+  const actor = await requireFinanceAdmin(request)
+  const input = record(request.data)
+  const orderId = text(input.orderId, 'Order ID', 8, 40)
+  if (!/^[-A-Za-z0-9_]{8,40}$/.test(orderId)) throw new HttpsError('invalid-argument', 'Order ID is invalid.')
+  const status = choice(input.status, 'order status', new Set(['Preparing', 'Ready for collection', 'Dispatched', 'Cancelled']))
+  const reference = db.ref(`shopOrders/${orderId}`)
+  const snapshot = await reference.get()
+  const current = record(snapshot.val())
+  if (!snapshot.exists() || current.paymentStatus !== 'Paid') throw new HttpsError('failed-precondition', 'Only paid shop orders can be updated for fulfilment.')
+  await reference.update({status, updatedAt: Date.now(), updatedBy: actor.displayName})
+  return {updatedAt: Date.now()}
+})
+
+export const updateCoachInvoice = onCall({region}, async request => {
+  const actor = await requireFinanceAdmin(request)
+  const input = record(request.data)
+  const coachUid = text(input.coachUid, 'Coach account', 1, 128)
+  const invoiceId = text(input.invoiceId, 'Invoice ID', 1, 100)
+  const invoiceNumber = text(input.invoiceNumber, 'Invoice number', 2, 80)
+  const season = text(input.season, 'Season', 1, 60)
+  const note = text(input.note, 'Edit reason', 3, 500)
+  const totalHours = Number(input.totalHours)
+  const totalAmount = Number(input.totalAmount)
+  if (!Number.isFinite(totalHours) || totalHours <= 0 || totalHours > 10000) throw new HttpsError('invalid-argument', 'Invoice hours must be greater than 0 and no more than 10,000.')
+  if (!Number.isFinite(totalAmount) || totalAmount < 0 || totalAmount > 1000000) throw new HttpsError('invalid-argument', 'Invoice amount must be between £0 and £1,000,000.')
+  const reference = db.ref(`coachInvoices/${coachUid}/${invoiceId}`)
+  const snapshot = await reference.get()
+  if (!snapshot.exists()) throw new HttpsError('not-found', 'That coach invoice no longer exists.')
+  const current = record(snapshot.val())
+  if (current.coachUid !== coachUid || current.id !== invoiceId) throw new HttpsError('failed-precondition', 'The invoice record is inconsistent and cannot be edited.')
+  const before = {invoiceNumber:current.invoiceNumber,totalHours:current.totalHours,totalAmount:current.totalAmount,season:current.season}
+  const after = {invoiceNumber,totalHours:Math.round(totalHours*100)/100,totalAmount:Math.round(totalAmount*100)/100,season}
+  const editedAt = Date.now()
+  const auditId = randomBytes(16).toString('hex')
+  const audit = {id:auditId,timestamp:editedAt,actorUid:actor.uid,actorName:actor.displayName,actorEmail:actor.email,category:'finance',action:'coach_invoice_edited',summary:`Edited coach invoice ${invoiceNumber}`,detail:`${String(current.coachName||current.coachEmail||coachUid)} · ${JSON.stringify(before)} → ${JSON.stringify(after)} · Reason: ${note}`,team:'',entityType:'settings',entityId:invoiceId,season:String(current.season||season)}
+  const updates:Record<string,unknown>={}
+  Object.entries({...after,lastEditedAt:editedAt,lastEditedBy:actor.displayName,lastEditNote:note}).forEach(([key,value])=>{updates[`coachInvoices/${coachUid}/${invoiceId}/${key}`]=value})
+  updates[`auditLog/${auditId}`]=audit
+  await db.ref().update(updates)
+  return {updatedAt:editedAt}
 })
 
 export const createRefereeInvoiceLinks = onCall({region}, async request => {

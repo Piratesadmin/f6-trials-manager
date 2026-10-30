@@ -305,6 +305,10 @@ The rules use `trials@flamingsix.co.uk` as the shared administrator email. If yo
 
 Publishing the v0.15 rules is required before assigning Team administrators. The rules also prevent Coach and Team administrator accounts from reading or writing season fee records and standard fees.
 
+## Shop product pictures
+
+Product picture uploads require Cloud Storage to be enabled for the Firebase project. Publish `storage.rules` in **Databases & Storage → Storage → Rules**. Shop images are publicly readable product assets; uploads and removals are performed by admin-checked Cloud Functions, and direct client writes are denied.
+
 ## 3. Register the web app
 
 1. Open **Project settings**.

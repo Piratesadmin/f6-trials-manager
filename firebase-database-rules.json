@@ -80,6 +80,14 @@
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       ".write": false
     },
+    "shopProducts": {
+      ".read": true,
+      ".write": false
+    },
+    "shopOrders": {
+      ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
+      ".write": false
+    },
     "expenseClaims": {
       ".read": "auth != null && (auth.token.email == 'trials@flamingsix.co.uk' || root.child('coachProfiles').child(auth.uid).child('role').val() == 'admin')",
       "$claimantUid": {
