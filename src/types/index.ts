@@ -144,6 +144,7 @@ export type Player = {
   returningPlayer?: boolean
   updatedAt?: number
   updatedBy?: string
+  eventAttendance?: Record<string, string[]>
 }
 
 export type PlayerDecisionDraft = Pick<Player, 'decision' | 'recommendation' | 'suitableTeams' | 'offers' | 'offeredTeam' | 'offeredPosition' | 'rejectionReason' | 'teamConsideration' | 'emailReviewStatus'>

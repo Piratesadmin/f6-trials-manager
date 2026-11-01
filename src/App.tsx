@@ -702,7 +702,7 @@ export default function App(){
     navigate({page:'schedule',sessionId})
     await recordActivity({category:'import',action:existingSession?'trial_workbook_updated':'trial_workbook_imported',summary:`${existingSession?'Updated':'Imported'} ${prepared.length} players ${existingSession?'in':'into'} ${sessionRecord.title}`,detail:`${trialDateLabel(sessionRecord.date)} · ${existingSession?'Existing event updated':'Trial event created from workbook'}`,team:'',entityType:'session',entityId:sessionRecord.id})
   }
-  const importSpondEvent=async(session:Omit<TrialSession,'id'>,attendance:Record<string,SessionAttendanceStatus>,existingSessionId?:string)=>{
+  const importSpondEvent=async(session:Omit<TrialSession,'id'>,attendance:Record<string,SessionAttendanceStatus>,existingSessionId?:string,newPlayers:Player[]=[] )=>{
     if(isReadOnly)throw new Error('Welfare accounts have read-only access.')
     const existingSession=existingSessionId?trialSessions.find(item=>item.id===existingSessionId):undefined
     if(existingSessionId&&!existingSession)throw new Error('The matching event no longer exists. Close the import and try again.')
@@ -711,6 +711,10 @@ export default function App(){
     const sessionId=existingSession?.id||crypto.randomUUID()
     const now=Date.now()
     const actor=user?.email||'Local demo'
+    const preparedPlayers=newPlayers.map(player=>{
+      const playerTeams=isAdmin?eventTeams:eventTeams.filter(team=>editableTeams.includes(team))
+      return normalisePlayer({...player,suitableTeams:playerTeams,teamConsideration:Object.fromEntries(playerTeams.map(team=>[team,'Spond attendee'])),updatedAt:now,updatedBy:actor,eventAttendance:{[sessionId]:playerTeams}})
+    })
     const sessionRecord:TrialSession=normaliseTrialSession(sessionId,{
       ...existingSession,
       ...session,
@@ -731,15 +735,20 @@ export default function App(){
     if(database&&user&&!demo){
       setSyncState('saving')
       const{id,...data}=sessionRecord
-      await set(ref(database,`trialSessions/${id}`),data)
+      const updates:Record<string,unknown>={[`trialSessions/${id}`]:data}
+      preparedPlayers.forEach(player=>{const{ id:playerId,...playerData}=player;updates[`players/${playerId}`]=playerData})
+      await update(ref(database),updates)
     }else{
       const next=existingSession?trialSessions.map(item=>item.id===sessionId?sessionRecord:item):[...trialSessions,sessionRecord]
+      const nextPlayers=[...players,...preparedPlayers]
+      setPlayers(nextPlayers)
       setTrialSessions(next)
+      localStorage.setItem('f6players',JSON.stringify(nextPlayers))
       localStorage.setItem('f6trialsessions',JSON.stringify(next))
     }
     navigate({page:'schedule',sessionId})
     const markCount=Object.keys(attendance).length
-    await recordActivity({category:'import',action:existingSession?'spond_event_updated':'spond_event_imported',summary:`${existingSession?'Updated':'Imported'} ${sessionRecord.title} from Spond`,detail:`${trialDateLabel(sessionRecord.date)} · ${markCount} attendance mark${markCount===1?'':'s'} applied`,team:eventTeams.join(', '),entityType:'session',entityId:sessionRecord.id})
+    await recordActivity({category:'import',action:existingSession?'spond_event_updated':'spond_event_imported',summary:`${existingSession?'Updated':'Imported'} ${sessionRecord.title} from Spond`,detail:`${trialDateLabel(sessionRecord.date)} · ${markCount} attendance mark${markCount===1?'':'s'} applied · ${preparedPlayers.length} new player${preparedPlayers.length===1?'':'s'} added`,team:eventTeams.join(', '),entityType:'session',entityId:sessionRecord.id})
   }
   const importReturningPlayers=async(team:string,importedPlayers:Omit<Player,'id'>[])=>{
     if(!editableTeams.includes(team))throw new Error(`You do not have permission to import players into ${team}.`)

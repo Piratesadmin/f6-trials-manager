@@ -9,21 +9,21 @@ type Props={
   existingSessions:TrialSession[]
   availableTeams:string[]
   onClose:()=>void
-  onImport:(session:Omit<TrialSession,'id'>,attendance:Record<string,SessionAttendanceStatus>,existingSessionId?:string)=>Promise<void>
+  onImport:(session:Omit<TrialSession,'id'>,attendance:Record<string,SessionAttendanceStatus>,existingSessionId?:string,newPlayers?:Player[])=>Promise<void>
 }
 
-type MatchedAttendance=SpondAttendanceRow&{player?:Player;ambiguous?:boolean}
+type MatchedAttendance=SpondAttendanceRow&{player?:Player;ambiguous?:boolean;rowKey:string}
 const normalise=(value:string)=>value.toLowerCase().replace(/\s+/g,' ').trim()
 
 function matchAttendance(rows:SpondAttendanceRow[],players:Player[]):MatchedAttendance[]{
   const byEmail=new Map(players.filter(player=>player.email).map(player=>[normalise(player.email),player]))
   const byName=new Map<string,Player[]>()
   players.forEach(player=>{const key=normalise(player.name);byName.set(key,[...(byName.get(key)||[]),player])})
-  return rows.map(row=>{
+  return rows.map((row,index)=>{
     const emailMatch=row.email?byEmail.get(normalise(row.email)):undefined
-    if(emailMatch)return{...row,player:emailMatch}
+    if(emailMatch)return{...row,player:emailMatch,rowKey:`${normalise(row.email||row.name)}-${index}`}
     const nameMatches=byName.get(normalise(row.name))||[]
-    return{...row,player:nameMatches.length===1?nameMatches[0]:undefined,ambiguous:nameMatches.length>1}
+    return{...row,player:nameMatches.length===1?nameMatches[0]:undefined,ambiguous:nameMatches.length>1,rowKey:`${normalise(row.email||row.name)}-${index}`}
   })
 }
 
@@ -35,6 +35,7 @@ export function SpondScheduleImportModal({existingPlayers,existingSessions,avail
   const[createSeparate,setCreateSeparate]=useState(false)
   const[busy,setBusy]=useState(false)
   const[error,setError]=useState('')
+  const[unmatchedChoices,setUnmatchedChoices]=useState<Record<string,'add'|'spectator'|'skip'>>({})
   const matchingSession=session?findSpondMatchingSession(existingSessions,session):undefined
   const matchedRows=useMemo(()=>matchAttendance(parsed?.attendance||[],existingPlayers),[parsed,existingPlayers])
   const recordedRows=matchedRows.filter(row=>row.player&&row.status)
@@ -42,13 +43,13 @@ export function SpondScheduleImportModal({existingPlayers,existingSessions,avail
   const unrecordedRows=matchedRows.filter(row=>row.player&&!row.status)
   const attendance=Object.fromEntries(recordedRows.map(row=>[row.player!.id,row.status])) as Record<string,SessionAttendanceStatus>
 
-  const reset=()=>{setFileName('');setParsed(null);setSession(null);setCreateSeparate(false);setError('');if(inputRef.current)inputRef.current.value=''}
+  const reset=()=>{setFileName('');setParsed(null);setSession(null);setCreateSeparate(false);setUnmatchedChoices({});setError('');if(inputRef.current)inputRef.current.value=''}
   const readFile=async(file?:File)=>{
     if(!file)return
     setError('')
     if(file.size>10*1024*1024){setError('Choose a file smaller than 10 MB.');return}
     if(!file.name.toLowerCase().endsWith('.xlsx')){setError('Choose the .xlsx participant list exported by Spond.');return}
-    try{const result=await parseSpondEventWorkbook(file);setFileName(file.name);setParsed(result);setSession(result.session);setCreateSeparate(false)}
+    try{const result=await parseSpondEventWorkbook(file);setFileName(file.name);setParsed(result);setSession(result.session);setCreateSeparate(false);setUnmatchedChoices({})}
     catch(caught){setError(caught instanceof Error?caught.message:'Unable to read this Spond workbook.')}
   }
   const toggleTeam=(team:string)=>{if(!session)return;setSession({...session,teams:session.teams.includes(team)?session.teams.filter(item=>item!==team):[...session.teams,team]})}
@@ -59,7 +60,14 @@ export function SpondScheduleImportModal({existingPlayers,existingSessions,avail
     if(!session.title.trim()||!session.date||!session.startTime){setError('Check the event name, date and start time before continuing.');return}
     if(!updating&&!teams.length){setError('Select the team or teams for this event.');return}
     setBusy(true);setError('')
-    try{await onImport({...session,teams},attendance,updating?matchingSession?.id:undefined);onClose()}
+    const addedRows=unmatchedRows.filter(row=>unmatchedChoices[row.rowKey]==='add')
+    if(addedRows.length&&!teams.length){setError('Select the team for the new attendees first.');setBusy(false);return}
+    const newPlayers=addedRows.map(row=>{
+      const id=crypto.randomUUID()
+      if(row.status)attendance[id]=row.status
+      return{id,name:row.name.trim(),email:row.email.trim(),dateOfBirth:'',interestedDivisions:'',position:'All-rounder',secondaryPosition:'',playingExperience:'',highestLevelPlayed:'',photoUrl:'',trialDate:'Not assigned',trialSessionId:'',trialResponseStatus:'',paid:false,attended:false,trialRegistrations:{},decision:'Awaiting decision',offeredTeam:'',offeredPosition:'',confirmedTeams:{},offers:[],notes:`Added from Spond event: ${session.title}`,assessment:{serving:0,passing:0,setting:0,attacking:0,blocking:0,defence:0,movement:0,communication:0,attitude:0,overallLevel:0},recommendation:'',strengths:'',developmentAreas:'',suitableTeams:[...teams],bibNumber:'',teamConsideration:Object.fromEntries(teams.map(team=>[team,'Spond attendee'])),emailReviewStatus:'draft',emailDraft:{responseDeadline:'',coachName:'',personalMessage:''},communicationHistory:{},eventAttendance:{[updating?matchingSession!.id:'pending']:teams}} as Player
+    })
+    try{await onImport({...session,teams},attendance,updating?matchingSession?.id:undefined,newPlayers);onClose()}
     catch(caught){setError(caught instanceof Error?caught.message:'The Spond event could not be imported.')}
     finally{setBusy(false)}
   }
@@ -87,7 +95,7 @@ export function SpondScheduleImportModal({existingPlayers,existingSessions,avail
         {parsed.warnings.map(warning=><div className="import-alert warning" key={warning}><AlertTriangle/>{warning}</div>)}
         <div className="import-results spond-import-results"><div className="result-good"><UserCheck/><b>{recordedRows.length}</b><span>Attendance ready</span></div><div><Users/><b>{unrecordedRows.length}</b><span>Matched, no attendance</span></div><div><AlertTriangle/><b>{unmatchedRows.length}</b><span>Players not matched</span></div></div>
         <div className="excel-import-note"><CalendarDays/><p><b>Going, attended and late</b> become Present. <b>Can’t go and not attended</b> become Absent, <b>Valid absence</b> becomes Excused, and <b>Not answered</b> remains unmarked.</p></div>
-        <div className="preview-table-wrap"><table className="preview-table"><thead><tr><th>Spond player</th><th>Email</th><th>Spond value</th><th>Club Manager player</th><th>Import result</th></tr></thead><tbody>{matchedRows.slice(0,12).map((row,index)=><tr key={`${row.email}-${row.name}-${index}`}><td>{row.name||'—'}</td><td>{row.email||'—'}</td><td>{row.sourceStatus||'Not recorded'}</td><td>{row.player?.name||'—'}</td><td><span className={`row-status ${!row.player?'invalid':row.status?'ready':'duplicate'}`}>{!row.player?(row.ambiguous?'Ambiguous name':'Not matched'):row.status?row.status[0].toUpperCase()+row.status.slice(1):'Unmarked'}</span></td></tr>)}</tbody></table>{matchedRows.length>12&&<p className="preview-more">Showing 12 of {matchedRows.length} players</p>}</div>
+        <div className="preview-table-wrap"><table className="preview-table"><thead><tr><th>Spond player</th><th>Email</th><th>Spond value</th><th>Club Manager player</th><th>Import result</th></tr></thead><tbody>{matchedRows.map(row=><tr key={row.rowKey}><td>{row.name||'—'}</td><td>{row.email||'—'}</td><td>{row.sourceStatus||'Not recorded'}</td><td>{row.player?.name||'—'}</td><td>{row.player?<span className={`row-status ${row.status?'ready':'duplicate'}`}>{row.status?row.status[0].toUpperCase()+row.status.slice(1):'Unmarked'}</span>:<select aria-label={`Choose how to handle ${row.name||'unmatched attendee'}`} value={unmatchedChoices[row.rowKey]||''} onChange={event=>setUnmatchedChoices({...unmatchedChoices,[row.rowKey]:event.target.value as 'add'|'spectator'|'skip'})}><option value="">Choose action</option><option value="add" disabled={!((matchingSession&&!createSeparate?matchingSession.teams:session.teams).length)}>Add to event team</option><option value="spectator">Dismiss as spectator</option><option value="skip">Skip for now</option></select>}</td></tr>)}</tbody></table></div>
         {error&&<div className="import-alert error"><AlertTriangle/>{error}</div>}
         <div className="modal-actions"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy} onClick={submit}><Upload/>{busy?'Saving…':matchingSession&&!createSeparate?`Update event and ${recordedRows.length} attendance marks`:`Import event and ${recordedRows.length} attendance marks`}</button></div>
       </>}
