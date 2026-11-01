@@ -3,7 +3,7 @@
 .invoice-main>div{min-width:0}
 .invoice-main .invoice-total span{max-width:360px;line-height:1.5;overflow-wrap:anywhere}
 .invoice-main .invoice-admin-actions{grid-column:auto}
-.panel.coach-invoice-edit-modal{width:min(880px,calc(100vw - 30px));outline:none}
+.panel.coach-invoice-edit-modal{width:min(880px,calc(100vw - 30px));min-height:0;max-height:calc(100vh - 36px);max-height:calc(100dvh - 36px);overflow-x:hidden;overflow-y:auto;overscroll-behavior-y:contain;outline:none}
 .coach-invoice-edit-modal>header{padding:0;border:0;background:transparent}
 .coach-invoice-edit-modal>header p{margin:6px 0 0;color:#667085;font-size:13px}
 .coach-invoice-edit-fields{min-width:0;margin:0;padding:0;border:0}
