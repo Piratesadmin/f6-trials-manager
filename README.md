@@ -16,6 +16,8 @@ Version 0.26 turns trialist cleanup into a recoverable archive, creating a searc
 
 ## Timesheets and coach invoices
 
+Administrators can use **Timesheets → Submitted invoices → Edit** to correct dates, teams, activities, time worked, notes, and hourly rates, add or remove entries, and apply an additional fee or discount. Totals recalculate from the entries. A correction reason is required. Saving uses the existing administrator-only Realtime Database permissions and atomically updates the invoice, its time logs, and a finance audit record with before/after details; it does not depend on the `updateCoachInvoice` Cloud Function. Paid invoices keep their payment status and date. Corrections use per-entry rate snapshots, and finance forecasts include any fee adjustment across the invoice's teams in proportion to hours worked.
+
 Coach and assistant-coach accounts can record dated hours against their assigned teams and submit draft entries as an invoice. Administrators act as the treasurer: they set each eligible coach's hourly rate for each assigned team, review the submitted entry breakdown, and mark invoices as paid. Multi-team invoices calculate each entry using its team's snapshotted rate. Submitted invoices automatically appear in the finance payment history and are reconciled against each team's planned coaching budget in the forecast; paid invoices retain their payment date and status. Rates, entries, and invoices are private to the coach and administrators and are included in full system backups.
 
 ## Confidential Welfare channel

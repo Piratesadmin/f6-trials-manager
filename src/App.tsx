@@ -46,6 +46,8 @@ import { ExpensesPage, type ExpenseDraft } from './pages/ExpensesPage'
 import { MatchCentrePage } from './pages/MatchCentrePage'
 import { RefereeInvoicePage } from './pages/RefereeInvoicePage'
 import { updateCoachInvoice as updateCoachInvoiceRemote } from './timesheets/api'
+import type { CoachInvoiceEdit } from './types'
+import { prepareInvoiceEdit } from './utils/invoiceEditing'
 import { ShopPage } from './pages/ShopPage'
 import { getMatchCentre } from './matchCentre/api'
 import { deleteClubSignup as deleteClubSignupRemote, updateClubSignupStatus as updateClubSignupStatusRemote } from './signup/api'
@@ -493,19 +495,28 @@ export default function App(){
     if(!isAdmin)return
     const paid={...invoice,status:'Paid' as const,paidAt:Date.now(),paidBy:user?.email||'Local demo'}
     const next={...coachInvoices,[invoice.coachUid]:{...coachInvoices[invoice.coachUid],[invoice.id]:paid}}
-    if(database&&user&&!demo){setSyncState('saving');await set(ref(database,`coachInvoices/${invoice.coachUid}/${invoice.id}`),paid)}else localStorage.setItem('f6coachinvoices',JSON.stringify(next))
-    setCoachInvoices(next)
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      try{await update(ref(database,`coachInvoices/${invoice.coachUid}/${invoice.id}`),{status:paid.status,paidAt:paid.paidAt,paidBy:paid.paidBy})}finally{showConnectionState()}
+    }else{localStorage.setItem('f6coachinvoices',JSON.stringify(next));setCoachInvoices(next)}
     await recordActivity({category:'finance',action:'coach_invoice_paid',summary:`Marked ${invoice.invoiceNumber} as paid`,detail:`${invoice.coachName} · ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(invoice.totalAmount)}.`,team:'',entityType:'settings',entityId:invoice.id})
   }
-  const editCoachInvoice=async(invoice:CoachInvoice,edit:{invoiceNumber:string;season:string;totalHours:number;totalAmount:number;note:string})=>{
+  const editCoachInvoice=async(invoice:CoachInvoice,edit:CoachInvoiceEdit)=>{
     if(!isAdmin)throw new Error('Finance administrator access is required.')
-    if(database&&user&&!demo){setSyncState('saving');await updateCoachInvoiceRemote(invoice,edit)}
-    const updatedAt=Date.now()
-    const updated:CoachInvoice={...invoice,invoiceNumber:edit.invoiceNumber,season:edit.season,totalHours:edit.totalHours,totalAmount:edit.totalAmount,lastEditedAt:updatedAt,lastEditedBy:user?.email||'Local demo',lastEditNote:edit.note}
-    const next={...coachInvoices,[invoice.coachUid]:{...coachInvoices[invoice.coachUid],[invoice.id]:updated}}
-    setCoachInvoices(next)
-    if(!database||!user||demo)localStorage.setItem('f6coachinvoices',JSON.stringify(next))
-    if(!database||!user||demo)await recordActivity({category:'finance',action:'coach_invoice_edited',summary:`Edited coach invoice ${edit.invoiceNumber}`,detail:`${invoice.coachName} · ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(invoice.totalAmount)} → ${new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP'}).format(edit.totalAmount)} · ${edit.note}`,team:'',entityType:'settings',entityId:invoice.id})
+    if(database&&user&&!demo){
+      setSyncState('saving')
+      try{await updateCoachInvoiceRemote(invoice,edit)}finally{showConnectionState()}
+      return
+    }
+    const result=prepareInvoiceEdit(invoice,coachTimesheetEntries[invoice.coachUid]||{},edit,user?.email||'Local demo')
+    const next={...coachInvoices,[invoice.coachUid]:{...coachInvoices[invoice.coachUid],[invoice.id]:result.invoice}}
+    const group={...coachTimesheetEntries[invoice.coachUid]}
+    result.removedIds.forEach(id=>{delete group[id]})
+    result.entries.forEach(entry=>{group[entry.id]=entry})
+    const nextEntries={...coachTimesheetEntries,[invoice.coachUid]:group}
+    localStorage.setItem('f6coachinvoices',JSON.stringify(next));localStorage.setItem('f6coachtimesheetentries',JSON.stringify(nextEntries))
+    setCoachInvoices(next);setCoachTimesheetEntries(nextEntries)
+    await recordActivity({category:'finance',action:'coach_invoice_edited',summary:`Edited coach invoice ${edit.invoiceNumber}`,detail:`${invoice.coachName} · £${invoice.totalAmount.toFixed(2)} → £${result.invoice.totalAmount.toFixed(2)} · ${edit.note}`.slice(0,500),team:'',entityType:'settings',entityId:invoice.id})
   }
   const exportSystemBackup=async(prefix='f6-system-backup')=>{
     if(!isAdmin)throw new Error('Administrator access is required.')

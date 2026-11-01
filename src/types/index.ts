@@ -367,6 +367,9 @@ export type CoachInvoice = {
   totalHours: number
   hourlyRate: number
   rateBreakdown: Record<string, number>
+  entryRates?: Record<string, number>
+  feeAdjustment?: number
+  feeNote?: string
   totalAmount: number
   season: string
   status: CoachInvoiceStatus
@@ -379,6 +382,17 @@ export type CoachInvoice = {
 }
 
 export type CoachInvoiceMap = Record<string, Record<string, CoachInvoice>>
+
+export type CoachInvoiceEntryEdit = Pick<CoachTimesheetEntry, 'id' | 'date' | 'team' | 'activity' | 'hours' | 'notes' | 'updatedAt'> & {hourlyRate: number}
+export type CoachInvoiceEdit = {
+  invoiceNumber: string
+  season: string
+  entries: CoachInvoiceEntryEdit[]
+  entryVersions: Record<string, number>
+  feeAdjustment: number
+  feeNote: string
+  note: string
+}
 
 export type RefereeRole = 'first-referee' | 'second-referee' | 'scorer'
 export type RefereeInvoiceStatus = 'Link ready' | 'Submitted' | 'Approved' | 'Rejected' | 'Paid'

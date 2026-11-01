@@ -1,1 +1,34 @@
 .invoice-admin-actions{display:flex;justify-content:flex-end;align-items:center;gap:7px}.invoice-admin-actions>button{min-height:36px;padding:0 10px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.invoice-admin-actions>button svg{width:14px}.invoice-edit-indicator{color:#0f766e!important;font-weight:750}.coach-invoice-edit-backdrop{z-index:90}.coach-invoice-edit-modal{width:min(560px,calc(100vw - 30px));max-height:calc(100vh - 36px);padding:22px;border-radius:16px;overflow-y:auto}.coach-invoice-edit-modal>header{margin-bottom:15px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.coach-invoice-edit-modal>header h2{margin:4px 0 0;font-size:21px}.coach-invoice-edit-close{width:32px;height:32px;border:1px solid #dfe5e8;border-radius:8px;display:grid;place-items:center;color:#475467;background:#fff;cursor:pointer}.coach-invoice-edit-close svg{width:16px}.coach-invoice-edit-warning,.coach-invoice-paid-warning{margin:0 0 13px;padding:10px 12px;border:1px solid #bae6fd;border-radius:9px;color:#075985;background:#f0f9ff;font-size:11px;line-height:1.5}.coach-invoice-paid-warning{border-color:#fed7aa;color:#9a3412;background:#fff7ed}.coach-invoice-edit-modal>label,.coach-invoice-edit-numbers label{margin:10px 0;display:grid;gap:5px;color:#344054;font-size:11px;font-weight:850}.coach-invoice-edit-modal input,.coach-invoice-edit-modal textarea{width:100%;min-height:39px;padding:9px 10px;border:1px solid #cfd6dc;border-radius:8px;font:inherit;font-size:12px}.coach-invoice-edit-modal textarea{resize:vertical}.coach-invoice-edit-numbers{display:grid;grid-template-columns:1fr 1fr;gap:12px}.coach-invoice-edit-modal>footer{margin-top:16px;padding-top:13px;border-top:1px solid #e8ecef;display:flex;justify-content:flex-end;gap:8px}.coach-invoice-edit-modal>footer button{min-height:38px}.coach-invoice-edit-modal>footer .primary{padding:0 13px}@media(max-width:980px){.invoice-admin-actions{grid-column:2/4;justify-self:end}.invoice-admin-actions .invoice-paid-date{grid-column:auto}.invoice-admin-actions>button{grid-column:auto;justify-self:auto}}@media(max-width:680px){.invoice-admin-actions{grid-column:1/-1;width:100%;justify-content:stretch}.invoice-admin-actions>button{flex:1;justify-content:center}.invoice-admin-actions .invoice-paid-date{flex:1;justify-content:flex-end}.coach-invoice-edit-numbers{grid-template-columns:1fr}}
+.treasurer-invoice-list .invoice-main{grid-template-columns:max-content minmax(160px,1fr) minmax(160px,auto) max-content}
+.invoice-main>div{min-width:0}
+.invoice-main .invoice-total span{max-width:360px;line-height:1.5;overflow-wrap:anywhere}
+.invoice-main .invoice-admin-actions{grid-column:auto}
+.panel.coach-invoice-edit-modal{width:min(880px,calc(100vw - 30px));outline:none}
+.coach-invoice-edit-modal>header{padding:0;border:0;background:transparent}
+.coach-invoice-edit-modal>header p{margin:6px 0 0;color:#667085;font-size:13px}
+.coach-invoice-edit-fields{min-width:0;margin:0;padding:0;border:0}
+.coach-invoice-edit-fields label,.coach-invoice-edit-log>label{margin:10px 0;display:grid;gap:5px;color:#344054;font-size:12px;font-weight:750}
+.coach-invoice-edit-fields small{color:#667085;font-size:11px;font-weight:400}
+.coach-invoice-edit-modal select{width:100%;min-height:39px;padding:9px 10px;border:1px solid #cfd6dc;border-radius:8px;background:#fff;font:inherit;font-size:12px}
+.coach-invoice-logs-heading{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.coach-invoice-logs-heading h3{margin:0;font-size:16px}
+.coach-invoice-logs-heading button,.coach-invoice-remove-entry{display:inline-flex;align-items:center;gap:5px;min-height:34px}
+.coach-invoice-logs-heading svg,.coach-invoice-remove-entry svg{width:14px;height:14px}
+.coach-invoice-edit-log{min-width:0;margin:12px 0;padding:8px 14px 12px;border:1px solid #dce4e7;border-radius:12px;background:#f8fafc}
+.coach-invoice-edit-log legend{padding:0 6px;color:#475467;font-size:12px;font-weight:850}
+.coach-invoice-log-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 14px}
+.coach-invoice-log-fields label{min-width:0}
+.coach-invoice-log-duration{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.coach-invoice-log-amount{display:flex;flex-direction:column;justify-content:center;gap:8px;color:#475467;font-size:12px}
+.coach-invoice-log-amount strong{color:#18202b;font-size:18px}
+.coach-invoice-remove-entry{padding:4px 8px;border:1px solid #fecaca;border-radius:7px;color:#b91c1c;background:#fff;font-size:11px;cursor:pointer}
+.coach-invoice-edit-summary{margin:14px 0;padding:16px;border:1px solid #d5e9e4;border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:16px;background:#f0fdfa}
+.coach-invoice-edit-summary span,.coach-invoice-edit-summary b,.coach-invoice-edit-summary strong{display:block}
+.coach-invoice-edit-summary span{margin-bottom:5px;color:#475467;font-size:12px}
+.coach-invoice-edit-summary b{font-size:15px}
+.coach-invoice-edit-summary strong{color:#0f766e;font-size:22px}
+.coach-invoice-edit-modal .timesheet-error{margin:12px 0 0}
+.invoice-entries>div>.invoice-fee-adjustment{grid-template-columns:1fr auto;background:#f8fafc}
+@media(max-width:1100px){.treasurer-invoice-list .invoice-main{grid-template-columns:max-content minmax(0,1fr) minmax(130px,auto)}.invoice-main .invoice-admin-actions{grid-column:2/4;justify-self:end}.invoice-main .invoice-total span{max-width:270px}}
+@media(max-width:680px){.treasurer-invoice-list .invoice-main{grid-template-columns:max-content minmax(0,1fr)}.invoice-main .invoice-total{grid-column:1/-1;text-align:left}.invoice-main .invoice-total span{max-width:none}.invoice-main .invoice-admin-actions{grid-column:1/-1;justify-self:stretch}.coach-invoice-edit-modal .coach-invoice-edit-numbers{grid-template-columns:1fr;gap:0}.coach-invoice-log-fields{grid-template-columns:1fr 1fr;gap:0 10px}.panel.coach-invoice-edit-modal{padding:16px}.coach-invoice-edit-modal>header h2{font-size:18px;overflow-wrap:anywhere}.coach-invoice-edit-summary{gap:10px;flex-wrap:wrap}.coach-invoice-edit-summary strong{font-size:19px}}
+@media(max-width:400px){.coach-invoice-log-fields{grid-template-columns:1fr}.coach-invoice-log-amount{padding-bottom:10px}}

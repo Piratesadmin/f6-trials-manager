@@ -61,6 +61,9 @@ export function normaliseCoachInvoice(coachUid:string,id:string,value:unknown):C
     totalHours:safeDuration(incoming.totalHours,10000),
     hourlyRate:safeNumber(incoming.hourlyRate,1000),
     rateBreakdown:normaliseTeamRates(incoming.rateBreakdown),
+    ...(incoming.entryRates?{entryRates:Object.fromEntries(Object.entries(recordValue(incoming.entryRates)).map(([entryId,rate])=>[entryId,safeNumber(rate,1000)]))}:{}),
+    ...(typeof incoming.feeAdjustment==='number'&&Number.isFinite(incoming.feeAdjustment)?{feeAdjustment:Math.round(incoming.feeAdjustment*100)/100}:{}),
+    ...(typeof incoming.feeNote==='string'?{feeNote:safeText(incoming.feeNote,200)}:{}),
     totalAmount:safeNumber(incoming.totalAmount,1000000),
     season:safeText(incoming.season,60),
     status:incoming.status==='Paid'?'Paid':'Submitted',
@@ -93,6 +96,10 @@ export function timesheetAmount(hours:number,hourlyRate:number){
   return Math.round(hours*hourlyRate*100)/100
 }
 
+export function invoiceEntryRate(invoice:CoachInvoice,entry:CoachTimesheetEntry){
+  return invoice.entryRates?.[entry.id]??invoice.rateBreakdown[entry.team]??invoice.hourlyRate
+}
+
 export function timesheetAmountForEntries(entries:CoachTimesheetEntry[],rate:CoachHourlyRate|undefined){
   return Math.round(entries.reduce((total,entry)=>total+entry.hours*hourlyRateForTeam(rate,entry.team),0)*100)/100
 }
@@ -115,9 +122,15 @@ export function coachInvoiceFinanceSummary(invoices:CoachInvoiceMap,entries:Coac
       if(byTeam[team]){byTeam[team].hours+=invoice.totalHours;byTeam[team].invoiced+=invoice.totalAmount;byTeam[team][invoice.status==='Paid'?'paid':'submitted']+=invoice.totalAmount}
       return
     }
+    const invoiceHours=totalTimesheetHours(rows)
+    let allocatedFee=0,elapsedHours=0
     rows.forEach(entry=>{
       if(!byTeam[entry.team])return
-      const amount=entry.hours*(invoice.rateBreakdown[entry.team]??invoice.hourlyRate)
+      elapsedHours+=entry.hours
+      const cumulativeFee=invoiceHours?Math.round((invoice.feeAdjustment||0)*elapsedHours/invoiceHours*100)/100:0
+      const baseAmount=invoice.entryRates?timesheetAmount(entry.hours,invoiceEntryRate(invoice,entry)):entry.hours*invoiceEntryRate(invoice,entry)
+      const amount=baseAmount+cumulativeFee-allocatedFee
+      allocatedFee=cumulativeFee
       byTeam[entry.team].hours+=entry.hours
       byTeam[entry.team].invoiced+=amount
       byTeam[entry.team][invoice.status==='Paid'?'paid':'submitted']+=amount
